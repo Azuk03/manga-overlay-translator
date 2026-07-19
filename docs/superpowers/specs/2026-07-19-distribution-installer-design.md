@@ -1,4 +1,4 @@
-# Thiết kế: Đóng gói & phân phối cho người dùng khác (setup.bat)
+ # Thiết kế: Đóng gói & phân phối cho người dùng khác (setup.bat)
 
 > Ngày: 2026-07-19. Trạng thái: đã thống nhất với người dùng qua brainstorming, sẵn sàng chuyển sang viết implementation plan.
 
