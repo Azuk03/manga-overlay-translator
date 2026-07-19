@@ -4,6 +4,7 @@ Add-Type -AssemblyName System.Drawing
 function Show-ApiKeyPrompt {
     param([string]$ExistingKey = "")
 
+    $currentValue = $ExistingKey
     while ($true) {
         $form = New-Object System.Windows.Forms.Form
         $form.Text = "Manga Overlay Translator - Cau hinh API Key"
@@ -19,7 +20,7 @@ function Show-ApiKeyPrompt {
         $form.Controls.Add($label)
 
         $textbox = New-Object System.Windows.Forms.TextBox
-        $textbox.Text = $ExistingKey
+        $textbox.Text = $currentValue
         $textbox.Location = New-Object System.Drawing.Point(10, 40)
         $textbox.Width = 380
         $form.Controls.Add($textbox)
@@ -44,6 +45,7 @@ function Show-ApiKeyPrompt {
         }
 
         $key = $textbox.Text.Trim()
+        $currentValue = $textbox.Text
         if (Test-ApiKeyFormat -Key $key) {
             return $key
         }
