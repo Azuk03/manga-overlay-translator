@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## Progress Log
+
+- **2026-07-19 21:15-23:17:** Tasks 1-5 implemented and committed on branch `worktree-feature+setup-installer` (worktree at `.claude/worktrees/feature+setup-installer`), commits `c7036ea`..`f42bde0`: `lib/SetupHelpers.ps1`, `lib/EnvFile.ps1`, `lib/ImageHash.ps1` (+ `.gitignore` updated), `lib/Shortcut.ps1`, `lib/ApiKeyDialog.ps1`, all with tests, plus 2 bugfix commits found during manual verification. Checkboxes above retroactively marked `[x]` to match.
+- **2026-07-19 (later session):** A different session briefly lost track of this worktree (checked only the `main` checkout, saw nothing, concluded 0/10 done) and created a redundant empty worktree — that mistake was found and cleaned up (empty worktree + its branch deleted). This worktree/branch is the real one to keep using. **Next action: Task 6** (wire GPU/CPU branching into `run-backend.ps1`), then Tasks 7-10.
+
 **Goal:** Let a few trusted, non-technical Windows users clone/download this repo, double-click `setup.bat`, and end up with a working local backend + installed userscript, without hand-editing any file.
 
 **Architecture:** A set of small, independently-testable PowerShell helper functions under `lib/` (Docker/GPU detection, `.env` read/write, Docker-image rebuild-hash detection, desktop shortcut creation, a WinForms API-key dialog), composed by one orchestrator script `setup.ps1` (invoked via `setup.bat`) that implements the 6-step flow from the design spec. `run-backend.ps1` is modified to reuse the same GPU-detection/arg-building helpers so day-to-day startup gets the same CPU-fallback behavior as first-time setup.
@@ -33,12 +38,12 @@
   - `Test-ApiKeyFormat -Key [string]` — returns `[bool]`
   - `Build-DockerRunArgs -EnvVars [hashtable] -HasGpu [bool] -ContainerName [string] -ResultDir [string]` — returns `[string[]]` array of docker CLI args (same shape as the array currently built inline in `run-backend.ps1`)
 
-- [ ] **Step 1: Confirm Pester v5 is available**
+- [x] **Step 1: Confirm Pester v5 is available**
 
 Run: `Get-Module -ListAvailable Pester | Select-Object Name, Version`
 Expected: at least one entry with `Version` 5.x or higher. If none, run `Install-Module -Name Pester -Force -SkipPublisherCheck -MinimumVersion 5.0` first.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `lib/SetupHelpers.Tests.ps1`:
 
@@ -122,12 +127,12 @@ Describe "Build-DockerRunArgs" {
 }
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `Invoke-Pester -Path lib/SetupHelpers.Tests.ps1 -Output Detailed`
 Expected: FAIL — `SetupHelpers.ps1` does not exist yet / functions not defined.
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 Create `lib/SetupHelpers.ps1`:
 
@@ -197,12 +202,12 @@ function Build-DockerRunArgs {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `Invoke-Pester -Path lib/SetupHelpers.Tests.ps1 -Output Detailed`
 Expected: PASS — all `Describe` blocks green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/SetupHelpers.ps1 lib/SetupHelpers.Tests.ps1
@@ -223,7 +228,7 @@ git commit -m "Add Docker/GPU detection and docker-arg-building helpers"
   - `Get-EnvApiKey -EnvPath [string]` — returns `[string]` or `$null` if file missing / key missing / key empty
   - `Set-EnvApiKey -EnvPath [string] -EnvExamplePath [string] -ApiKey [string]` — creates `.env` from `.env.example` if missing, writes/updates the `OPENAI_API_KEY` line, no return value
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `lib/EnvFile.Tests.ps1`:
 
@@ -282,12 +287,12 @@ Describe "Set-EnvApiKey" {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `Invoke-Pester -Path lib/EnvFile.Tests.ps1 -Output Detailed`
 Expected: FAIL — `EnvFile.ps1` does not exist yet.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `lib/EnvFile.ps1`:
 
@@ -336,12 +341,12 @@ function Set-EnvApiKey {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `Invoke-Pester -Path lib/EnvFile.Tests.ps1 -Output Detailed`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/EnvFile.ps1 lib/EnvFile.Tests.ps1
@@ -364,7 +369,7 @@ git commit -m "Add .env read/write helpers for API key configuration"
   - `Test-NeedsRebuild -CurrentHash [string] -MarkerPath [string]` — returns `[bool]`
   - `Set-ImageHashMarker -Hash [string] -MarkerPath [string]` — writes the hash to the marker file, no return value
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `lib/ImageHash.Tests.ps1`:
 
@@ -425,12 +430,12 @@ Describe "Set-ImageHashMarker" {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `Invoke-Pester -Path lib/ImageHash.Tests.ps1 -Output Detailed`
 Expected: FAIL — `ImageHash.ps1` does not exist yet.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `lib/ImageHash.ps1`:
 
@@ -476,18 +481,18 @@ function Set-ImageHashMarker {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `Invoke-Pester -Path lib/ImageHash.Tests.ps1 -Output Detailed`
 Expected: PASS.
 
-- [ ] **Step 5: Exclude the hash marker file from git**
+- [x] **Step 5: Exclude the hash marker file from git**
 
 The marker file (`.docker-image-hash`, created at the repo root by `setup.ps1` in Task 7) is per-machine build state, not source — it must never be committed. Add it to `.gitignore`.
 
 Read the current `.gitignore` and append `.docker-image-hash` as a new line at the end (after the existing `*.webp` line added earlier in this project).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/ImageHash.ps1 lib/ImageHash.Tests.ps1 .gitignore
@@ -507,7 +512,7 @@ git commit -m "Add Docker image rebuild-hash detection helpers"
 - Produces:
   - `New-DesktopShortcut -ShortcutPath [string] -TargetPath [string] -Arguments [string] -WorkingDirectory [string]` — returns `[bool]` (`$true` if a new shortcut was created, `$false` if one already existed at that path)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `lib/Shortcut.Tests.ps1`:
 
@@ -533,12 +538,12 @@ Describe "New-DesktopShortcut" {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `Invoke-Pester -Path lib/Shortcut.Tests.ps1 -Output Detailed`
 Expected: FAIL — `Shortcut.ps1` does not exist yet.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `lib/Shortcut.ps1`:
 
@@ -564,12 +569,12 @@ function New-DesktopShortcut {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `Invoke-Pester -Path lib/Shortcut.Tests.ps1 -Output Detailed`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/Shortcut.ps1 lib/Shortcut.Tests.ps1
@@ -590,7 +595,7 @@ git commit -m "Add desktop shortcut creation helper"
 
 This is a GUI component with no automated test (WinForms `ShowDialog()` blocks waiting for real user input and cannot run headless in Pester). It is verified manually in Step 2.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 Create `lib/ApiKeyDialog.ps1`:
 
@@ -655,7 +660,7 @@ function Show-ApiKeyPrompt {
 }
 ```
 
-- [ ] **Step 2: Manually verify the dialog**
+- [x] **Step 2: Manually verify the dialog**
 
 Run this ad-hoc from a PowerShell prompt in the `manga/` directory:
 
@@ -671,7 +676,7 @@ Expected behavior to confirm by hand:
 3. Typing `sk-test123` and clicking OK closes the dialog; the command returns `sk-test123`.
 4. Re-running and clicking "Huy" (Cancel) returns `$null` (prints nothing / `$null` in the console).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/ApiKeyDialog.ps1
