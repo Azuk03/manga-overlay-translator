@@ -1,11 +1,19 @@
 function Test-DockerReady {
-    docker version *> $null
-    return ($LASTEXITCODE -eq 0)
+    try {
+        docker version *> $null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
 }
 
 function Test-NvidiaGpu {
-    nvidia-smi *> $null
-    return ($LASTEXITCODE -eq 0)
+    try {
+        nvidia-smi *> $null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
 }
 
 function Test-ApiKeyFormat {

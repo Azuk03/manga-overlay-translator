@@ -29,6 +29,11 @@ Describe "Test-DockerReady" {
         Mock -CommandName docker -MockWith { $global:LASTEXITCODE = 1 }
         Test-DockerReady | Should -BeFalse
     }
+    It "returns false instead of throwing when docker is not found" {
+        Mock -CommandName docker -MockWith { throw [System.Management.Automation.CommandNotFoundException]::new("docker") }
+        { Test-DockerReady } | Should -Not -Throw
+        Test-DockerReady | Should -BeFalse
+    }
 }
 
 Describe "Test-NvidiaGpu" {
@@ -38,6 +43,11 @@ Describe "Test-NvidiaGpu" {
     }
     It "returns false when nvidia-smi exits with a non-zero code" {
         Mock -CommandName nvidia-smi -MockWith { $global:LASTEXITCODE = 1 }
+        Test-NvidiaGpu | Should -BeFalse
+    }
+    It "returns false instead of throwing when nvidia-smi is not found" {
+        Mock -CommandName nvidia-smi -MockWith { throw [System.Management.Automation.CommandNotFoundException]::new("nvidia-smi") }
+        { Test-NvidiaGpu } | Should -Not -Throw
         Test-NvidiaGpu | Should -BeFalse
     }
 }
