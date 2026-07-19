@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Test C3 - nhieu anh manga that + lazy load</title>
+<style>
+  body { margin: 0; background: #222; font-family: monospace; }
+  .page { display: flex; justify-content: center; padding: 40px 0; }
+  .page img { display: block; width: 500px; max-width: 90%; }
+  .label { color: #0f0; text-align: center; padding: 12px; font-size: 14px; }
+  .spacer { height: 400px; } /* de phai cuon that su moi toi anh tiep theo */
+</style>
+</head>
+<body>
+  <div class="label">Trang 4.webp (co san tu dau)</div>
+  <div class="page"><img src="4.webp" alt="p4"></div>
+  <div class="spacer"></div>
+
+  <div class="label">Trang 5.webp (co san tu dau)</div>
+  <div class="page"><img src="5.webp" alt="p5"></div>
+  <div class="spacer"></div>
+
+  <div class="label" id="lazy-note">Trang 6.webp + 8.webp se duoc CHEN VAO SAU 2 GIAY (gia lap lazy-load) — dung de kiem tra MutationObserver</div>
+  <div id="lazy-container"></div>
+
+  <script>
+    setTimeout(() => {
+      document.getElementById('lazy-note').textContent = 'Da chen xong trang 6.webp + 8.webp (lazy-load)';
+      const files = ['6.webp', '8.webp'];
+      const container = document.getElementById('lazy-container');
+      files.forEach((file) => {
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = `Trang ${file} (chen dong luc, lazy-load)`;
+        container.appendChild(label);
+
+        const pageDiv = document.createElement('div');
+        pageDiv.className = 'page';
+        const img = document.createElement('img');
+        img.src = file;
+        pageDiv.appendChild(img);
+        container.appendChild(pageDiv);
+
+        const spacer = document.createElement('div');
+        spacer.className = 'spacer';
+        container.appendChild(spacer);
+      });
+    }, 2000);
+  </script>
+</body>
+</html>

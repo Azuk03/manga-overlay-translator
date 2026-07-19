@@ -1,0 +1,343 @@
+{
+  "translations": [
+    {
+      "minX": 459,
+      "minY": 44,
+      "maxX": 474,
+      "maxY": 306,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9562692486995921,
+      "text_color": {
+        "fg": [
+          4,
+          5,
+          3
+        ],
+        "bg": [
+          4,
+          5,
+          3
+        ]
+      },
+      "text": {
+        "src": "現代では「古事記」を「こじき」と読むのか",
+        "dst": "Ngày nay, \"Cổ Sự Ký\" được đọc là \"こじき\" sao?"
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA8AAAEGCAIAAAA1zFhhAAACIElEQVRoBY3BAQEAAAABIP6PzgVV5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5DZC8hAiL86NFQAAAABJRU5ErkJggg=="
+    },
+    {
+      "minX": 260,
+      "minY": 43,
+      "maxX": 364,
+      "maxY": 297,
+      "is_bulleted_list": true,
+      "angle": 0.0,
+      "prob": 0.8717014886432781,
+      "text_color": {
+        "fg": [
+          5,
+          5,
+          3
+        ],
+        "bg": [
+          5,
+          5,
+          3
+        ]
+      },
+      "text": {
+        "src": "日本には民族の言語として「やまとことは」かありました。漢字の輸入により「やまとことは」に漢字の音をあてる「あて字表記」も使われましたし「音よみ」も使われるようになりました。",
+        "dst": "Tại Nhật Bản đã có \"やまとことは\" như một ngôn ngữ dân tộc. Việc nhập khẩu chữ Hán đã dẫn đến việc sử dụng \"chữ Hán âm\" cho \"やまとことは\" và cũng đã có việc sử dụng \"âm đọc\"."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGgAAAD+CAIAAABZQdeoAAACsUlEQVR4Ae3BMQEAAAwCIO0fmmXwHxR5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nZF3q7I2xV5uyJvV+Ttirxdkbcr8nYHO2z4I2wiobEAAAAASUVORK5CYII="
+    },
+    {
+      "minX": 62,
+      "minY": 43,
+      "maxX": 131,
+      "maxY": 326,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.878600542901766,
+      "text_color": {
+        "fg": [
+          5,
+          5,
+          3
+        ],
+        "bg": [
+          5,
+          5,
+          3
+        ]
+      },
+      "text": {
+        "src": "古事記に登場する固有名詞かみな「やまとことは」で読まれるのにタイトルたけが外来語発音というのはどうにも納得がいかなかった……からです。",
+        "dst": "Mặc dù các danh từ riêng xuất hiện trong Cổ Sự Ký được đọc bằng \"やまとことは\", nhưng việc tiêu đề lại phát âm như từ ngoại lai thì thật khó để chấp nhận..."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEUAAAEbCAIAAAADHN5NAAAClklEQVR4Ad3BAREAMBACIF3/yn+sh1BkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYb07t57WVFkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYYUGVJkSJEhRYZ88a5O+Do/Ic0AAAAASUVORK5CYII="
+    },
+    {
+      "minX": 423,
+      "minY": 44,
+      "maxX": 437,
+      "maxY": 383,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9529822354088062,
+      "text_color": {
+        "fg": [
+          7,
+          6,
+          3
+        ],
+        "bg": [
+          7,
+          6,
+          3
+        ]
+      },
+      "text": {
+        "src": "「ふることふみ」と読んでいただきたいと思いました",
+        "dst": "Tôi muốn bạn đọc là \"ふることふみ\"."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAFTCAIAAACGTaobAAACuklEQVRoBY3BAQEAAAABIP6PzgVV5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+Qzbdz2iLY5MxYAAAAASUVORK5CYII="
+    },
+    {
+      "minX": 208,
+      "minY": 102,
+      "maxX": 222,
+      "maxY": 363,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9798158760866833,
+      "text_color": {
+        "fg": [
+          14,
+          14,
+          10
+        ],
+        "bg": [
+          14,
+          14,
+          10
+        ]
+      },
+      "text": {
+        "src": "しかし……古代より伝えられた「神話」は",
+        "dst": "Tuy nhiên... \"huyền thoại\" được truyền lại từ thời cổ đại"
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAEFCAIAAABcmkHxAAACHklEQVRoBY3BAQEAAAABIP6PzgVV5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+QzM60NJCMMQz8AAAAASUVORK5CYII="
+    },
+    {
+      "minX": 454,
+      "minY": 555,
+      "maxX": 469,
+      "maxY": 657,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9990929902318401,
+      "text_color": {
+        "fg": [
+          4,
+          3,
+          1
+        ],
+        "bg": [
+          4,
+          3,
+          1
+        ]
+      },
+      "text": {
+        "src": "江戸時代の学者",
+        "dst": "đã được các học giả thời Edo"
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA8AAABmCAIAAACbT1yPAAAA4ElEQVRYCY3BAQEAAAABIP6PzgVV5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuRW5FbkVuQ2qEYxRIY56NYAAAAASUVORK5CYII="
+    },
+    {
+      "minX": 359,
+      "minY": 554,
+      "maxX": 376,
+      "maxY": 651,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9999652317379941,
+      "text_color": {
+        "fg": [
+          10,
+          10,
+          7
+        ],
+        "bg": [
+          10,
+          10,
+          7
+        ]
+      },
+      "text": {
+        "src": "まとめました。",
+        "dst": "tổng hợp lại."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABEAAABhCAIAAAC/Ld1sAAAA1klEQVRYCZXBAQEAAAABIP6PzgZV5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5FTkVORU5DRKOyJOZhlfYwAAAABJRU5ErkJggg=="
+    },
+    {
+      "minX": 181,
+      "minY": 574,
+      "maxX": 193,
+      "maxY": 636,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9962599528979585,
+      "text_color": {
+        "fg": [
+          1,
+          0,
+          0
+        ],
+        "bg": [
+          1,
+          0,
+          0
+        ]
+      },
+      "text": {
+        "src": "忘れないよ。",
+        "dst": "Tôi không quên đâu."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAA+CAIAAACQpW0WAAAAiUlEQVRIDYXBAQEAAAABIP6PzgRV5CnyFHmKPEWeIk+Rp8hT5CnyFHmKPEWeIk+Rp8hT5CnyFHmKPEWeIk+Rp8hT5CnyFHmKPEWeIk+Rp8hT5CnyFHmKPEWeIk+Rp8hT5CnyFHmKPEWeIk+Rp8hT5CnyFHmKPEWeIk+Rp8hT5CnyFHmKPEWeIs8AYkW5hbInrMsAAAAASUVORK5CYII="
+    },
+    {
+      "minX": 154,
+      "minY": 575,
+      "maxX": 165,
+      "maxY": 653,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9823902878386066,
+      "text_color": {
+        "fg": [
+          9,
+          12,
+          7
+        ],
+        "bg": [
+          9,
+          12,
+          7
+        ]
+      },
+      "text": {
+        "src": "この羽織は私が",
+        "dst": "Chiếc áo khoác này là tôi"
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAsAAABOCAIAAAB5W3uuAAAAp0lEQVRIDX3BAQEAAAABIP6PzgNV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuIleRq8hV5CpyFbmKXEWuItcA42bpZXc8po8AAAAASUVORK5CYII="
+    },
+    {
+      "minX": 397,
+      "minY": 555,
+      "maxX": 411,
+      "maxY": 715,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9902612050641086,
+      "text_color": {
+        "fg": [
+          6,
+          7,
+          4
+        ],
+        "bg": [
+          6,
+          7,
+          4
+        ]
+      },
+      "text": {
+        "src": "「古事記」の注釈書である",
+        "dst": "là sách chú giải của \"Cổ Sự Ký\"."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAACgCAIAAACzPMoYAAABVElEQVRYCY3BAQEAAAABIP6PzgVV5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5FPkU+RT5DNC6d7QTFwopwAAAABJRU5ErkJggg=="
+    },
+    {
+      "minX": 272,
+      "minY": 574,
+      "maxX": 310,
+      "maxY": 694,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9641756875339157,
+      "text_color": {
+        "fg": [
+          4,
+          4,
+          1
+        ],
+        "bg": [
+          4,
+          4,
+          1
+        ]
+      },
+      "text": {
+        "src": "とても忙しかったのだか学問にもうちこんだのだ",
+        "dst": "Tôi đã rất bận rộn nhưng đã cống hiến cho học vấn."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACYAAAB4CAIAAAAR2xd+AAADkUlEQVRoBb3BwUpUfRzG8ef5nzPH05Q5FNomiQxBGFfC3EAEzcKN0DKQFhkRBNEmEKFFBa60CHHtTlxEXkFXULls4Q1Y4EQOOZzxfN+X7uH8Ph8DimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFMqBYBhTLgGIZUCwDimVAsQwolgHFcl3XthXIdV3bViAPh8N2u61APj097XQ6CuSLiwv/oyiu6xpIKSmKq6rK81yBPBqNWq2WbUUxUNd1SklRPBwOy7JMKSmKj46OFhcXU0qK4r29vYcPH9pWFD99+vTDhw95niuK7927d3Bw0Ol0FMXz8/OHh4cLCwuK4tu3b+/s7PT7fUXx0tLSkydP1tbWFMXLy8u9Xm99fT3LMkmAbcC2muHNzc2jo6Pt7e3r16/bHo/HrVZrPB7nea5m+NOnT7u7u+/fv5+fnz8/Py/LUpL/UTP89evXZ8+ebW1t9Xq9P3/+TE1NnZ+fl2Wpxvj4+PjRo0evXr3q9/uj0agoiouLizzPbasZ/vnz5+PHj/v9/traGlBVVVEUQEpJzfDv379fvHgxOzv78uXLdrv99+/fy5cvS7KtZvj09PTt27eS1tfXO51OVVW2syyzrWa4qqo3b958+/bt8+fPVVWllLIsq6qq1WqpGR6Px/v7+69fv/7+/bukoijyPK/rOqWkZvjg4ODmzZvPnz/f2NhYXl6WNBqNyrJUY3z37t0HDx4cHh7eunVrZ2fH9nA4vHLlihrj//V6vTzPB4PBly9frl69mud5lmVqjNvtdqvVWlhYOD4+/vjx4/3799vtdlEUaoynp6cHg8H09PTJycnq6uq7d+9mZmbquk4pqRm+du1aXdfj8fjs7Kzb7e7v73e73bquU0pqhsuyLIoiz/Ozs7O5ubmNjY2VlZVLly6pMU4pTU5OVlU1MTFx586dbre7u7s7MTFhW81wlmU3btz49evX5OTk3NzcYDD48eNHVVVFUagZ/wFXEvcgF8gb6AAAAABJRU5ErkJggg=="
+    },
+    {
+      "minX": 18,
+      "minY": 639,
+      "maxX": 50,
+      "maxY": 686,
+      "is_bulleted_list": false,
+      "angle": 0.0,
+      "prob": 0.9974486158575369,
+      "text_color": {
+        "fg": [
+          22,
+          20,
+          20
+        ],
+        "bg": [
+          22,
+          20,
+          20
+        ]
+      },
+      "text": {
+        "src": "ははーっ先生",
+        "dst": "Vâng thưa thầy."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAvCAIAAAANTl92AAAAeElEQVRYCbXBAQEAAAABIP6PzgpV5KnIU5GnIk9Fnoo8FXkq8lTkqchTkaciT0WeijwVeSryVOSpyFORpyJPRZ6KPBV5KvJU5KnIU5GnIk9Fnoo8FXkq8lTkqchTkaciT0WeijwVeSryVOSpyFORpyJPRZ6KPBV5GiT7jKP03zdeAAAAAElFTkSuQmCC"
+    },
+    {
+      "minX": 201,
+      "minY": 754,
+      "maxX": 259,
+      "maxY": 772,
+      "is_bulleted_list": false,
+      "angle": 3.5763344416009204,
+      "prob": 0.9999117402963964,
+      "text_color": {
+        "fg": [
+          3,
+          5,
+          3
+        ],
+        "bg": [
+          3,
+          5,
+          3
+        ]
+      },
+      "text": {
+        "src": "本居宣長",
+        "dst": "Motonori Norinaga."
+      },
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADoAAAASCAIAAACFJlokAAAAPUlEQVRIDdXBAQEAAAABIP6Pzg5V5EeRH0V+FPlR5EeRH0V+FPlR5EeRH0V+FPlR5EeRH0V+FPlR5EeRHwN6YzXdJqMKuwAAAABJRU5ErkJggg=="
+    }
+  ],
+  "debug_folder": "1784194128807-41242c07-2048-VIN-chatgpt"
+}

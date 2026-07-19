@@ -1,0 +1,9 @@
+.env
+result/
+models/
+# request-test.json chua anh test base64 (co the co ban quyen) - khong commit.
+# openapi.json + response-that.json LA deliverable bat buoc theo spec - PHAI commit.
+fixtures/request-test.json
+test-image.png
+test-image.b64
+*.webp
