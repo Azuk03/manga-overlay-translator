@@ -7,3 +7,4 @@ fixtures/request-test.json
 test-image.png
 test-image.b64
 *.webp
+.docker-image-hash
