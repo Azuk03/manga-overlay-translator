@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Manga Overlay Translator (local)
 // @namespace    local
-// @version      0.39
+// @version      0.40
 // @match        *://*/*
 // @match        http://localhost/*
 // @grant        GM_xmlhttpRequest
@@ -13,6 +13,8 @@
 // @connect      127.0.0.1
 // @connect      *
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/Azuk03/manga-overlay-translator/main/manga-overlay-translator.user.js
+// @downloadURL  https://raw.githubusercontent.com/Azuk03/manga-overlay-translator/main/manga-overlay-translator.user.js
 // ==/UserScript==
 
 // C1 (dich 1 anh, log JSON) + C2 (ve chu de len anh bang CSS) + C3 (auto +
@@ -241,6 +243,7 @@
 // nhi phan, nen KHONG lam) - phan biet "dang cho backend xu ly" (chua co
 // byte) voi "backend xong, dang truyen response lon ve" (da co byte).
 
+// v0.40: them @updateURL/@downloadURL de Tampermonkey tu bao ban cap nhat moi.
 (function () {
   'use strict';
 
