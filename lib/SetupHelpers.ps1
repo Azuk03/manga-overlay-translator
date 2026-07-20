@@ -16,6 +16,16 @@ function Test-NvidiaGpu {
     }
 }
 
+function Test-DockerImageExists {
+    param([string]$ImageName)
+    try {
+        docker image inspect $ImageName *> $null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
+}
+
 function Test-ApiKeyFormat {
     param([string]$Key)
     if ([string]::IsNullOrWhiteSpace($Key)) { return $false }

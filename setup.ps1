@@ -51,12 +51,13 @@ Write-Host "`n[4/6] Kiem tra Docker image..."
 $dockerfilePath = Join-Path $root "Dockerfile"
 $patchesDir = Join-Path $root "patches"
 $hashMarkerPath = Join-Path $root ".docker-image-hash"
+$dockerImageName = "manga-translator-patched:local"
 $currentHash = Get-DockerImageHash -DockerfilePath $dockerfilePath -PatchesDir $patchesDir
-if (Test-NeedsRebuild -CurrentHash $currentHash -MarkerPath $hashMarkerPath) {
-    Write-Host "Can build lai image (lan dau hoac co thay doi patches/Dockerfile)."
+if ((Test-NeedsRebuild -CurrentHash $currentHash -MarkerPath $hashMarkerPath) -or (-not (Test-DockerImageExists -ImageName $dockerImageName))) {
+    Write-Host "Can build lai image (lan dau, co thay doi patches/Dockerfile, hoac image bi mat)."
     Write-Host "Dang build - lan dau co the mat 10-30 phut (tai model AI)..." -ForegroundColor Yellow
     Push-Location $root
-    docker build -t manga-translator-patched:local .
+    docker build -t $dockerImageName .
     $buildExitCode = $LASTEXITCODE
     Pop-Location
     if ($buildExitCode -ne 0) {

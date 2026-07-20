@@ -52,6 +52,22 @@ Describe "Test-NvidiaGpu" {
     }
 }
 
+Describe "Test-DockerImageExists" {
+    It "returns true when docker image inspect exits with code 0" {
+        Mock -CommandName docker -MockWith { $global:LASTEXITCODE = 0 }
+        Test-DockerImageExists -ImageName "manga-translator-patched:local" | Should -BeTrue
+    }
+    It "returns false when docker image inspect exits with a non-zero code" {
+        Mock -CommandName docker -MockWith { $global:LASTEXITCODE = 1 }
+        Test-DockerImageExists -ImageName "manga-translator-patched:local" | Should -BeFalse
+    }
+    It "returns false instead of throwing when docker is not found" {
+        Mock -CommandName docker -MockWith { throw [System.Management.Automation.CommandNotFoundException]::new("docker") }
+        { Test-DockerImageExists -ImageName "manga-translator-patched:local" } | Should -Not -Throw
+        Test-DockerImageExists -ImageName "manga-translator-patched:local" | Should -BeFalse
+    }
+}
+
 Describe "Build-DockerRunArgs" {
     BeforeEach {
         $script:envVars = @{ OPENAI_API_KEY = "sk-test" }
