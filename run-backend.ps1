@@ -4,9 +4,11 @@
 # se bi Docker set thanh chuoi rong trong container thay vi "khong set" -> co the ghi de default cua app.
 # Script nay chi truyen -e cho bien nao THAT SU co gia tri.
 
+. (Join-Path $PSScriptRoot "lib/SetupHelpers.ps1")
+
 $envFile = Join-Path $PSScriptRoot ".env"
 if (-not (Test-Path $envFile)) {
-    Write-Error ".env khong ton tai. Copy tu .env.example va dien OPENAI_API_KEY truoc."
+    Write-Error ".env khong ton tai. Copy tu .env.example va dien OPENAI_API_KEY truoc (hoac chay setup.bat)."
     exit 1
 }
 
@@ -22,55 +24,24 @@ Get-Content $envFile | ForEach-Object {
 }
 
 if (-not $vars.ContainsKey("OPENAI_API_KEY")) {
-    Write-Error "OPENAI_API_KEY dang trong trong .env. Dien key that vao truoc khi chay."
+    Write-Error "OPENAI_API_KEY dang trong trong .env. Dien key that vao truoc khi chay (hoac chay setup.bat)."
     exit 1
 }
 
 $containerName = if ($vars.ContainsKey("CONTAINER_NAME")) { $vars["CONTAINER_NAME"] } else { "manga_translator" }
 
-$dockerArgs = @(
-    "run", "--rm",
-    "--name", $containerName,
-    "-p", "5003:5003",
-    "-p", "8000:8000",
-    "-p", "8001:8001",
-    "--ipc=host",
-    "--gpus", "all",
-    "--entrypoint", "python",
-    "-v", "$PSScriptRoot/result:/app/result",
-    # KHONG mount fonts/ -> mount thu muc rong se de len font co san trong image
-    # (vd Arial-Unicode-Regular.ttf can cho render VIN), gay loi "No such file or directory".
-    # San pham cuoi khong dung font backend (xem spec A.1) nen khong can mount o day.
-    "-e", "OPENAI_API_KEY=$($vars['OPENAI_API_KEY'])"
-)
-
-if ($vars.ContainsKey("OPENAI_MODEL")) {
-    $dockerArgs += "-e"; $dockerArgs += "OPENAI_MODEL=$($vars['OPENAI_MODEL'])"
-}
-if ($vars.ContainsKey("OPENAI_API_BASE")) {
-    $dockerArgs += "-e"; $dockerArgs += "OPENAI_API_BASE=$($vars['OPENAI_API_BASE'])"
+$hasGpu = Test-NvidiaGpu
+if (-not $hasGpu) {
+    Write-Host ""
+    Write-Host "=============================================================" -ForegroundColor Yellow
+    Write-Host " KHONG PHAT HIEN GPU NVIDIA - dang chay CHE DO CPU" -ForegroundColor Yellow
+    Write-Host " (cham hon nhieu, moi anh co the mat 1-2 phut thay vi vai giay)" -ForegroundColor Yellow
+    Write-Host "=============================================================" -ForegroundColor Yellow
+    Write-Host ""
 }
 
-$dockerArgs += @(
-    # Dung image da va bug to_json.py (xem Dockerfile + patches/to_json.py).
-    # Neu can rebuild: docker build -t manga-translator-patched:local .
-    "manga-translator-patched:local",
-    # KHONG dung --verbose: xac nhan trong source (manga_translator.py) moi
-    # anh debug (input.png, bboxes.png, mask_final.png, inpaint_input.png,
-    # final.png, thu muc ocrs/*.png) chi duoc ghi khi self.verbose=True (tu
-    # cung dung --verbose nay). Do that: 1 lan dich (25 vung sau khi GPT
-    # retry/split) ghi ra ~69MB PNG (bboxes.png/input.png/inpainted.png...
-    # moi file 9-12MB) vao result/ - thu muc nay mount tu Windows qua WSL2
-    # (Docker Desktop), noi tieng CHAM cho I/O nhieu file/file lon. Do
-    # thuc te: khoang trong "vo hinh" 11-48 giay giua log buoc cuoi
-    # ("Running rendering") va luc response THAT SU gui xong khop chinh
-    # xac voi gia thuyet nay. Log tien do (Loading models/Running text
-    # detection/.../GPT Prompt-Response) la logger.info() rieng, KHONG bi
-    # --verbose gate - van hien day du sau khi bo co nay, chi mat phan ghi
-    # anh debug (khong dung boi userscript, chi de debug backend luc dau).
-    "server/main.py", "--start-instance", "--host=0.0.0.0", "--port=5003",
-    "--use-gpu", "--models-ttl", "0", "--nonce", "None"
-)
+$resultDir = Join-Path $PSScriptRoot "result"
+$dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu $hasGpu -ContainerName $containerName -ResultDir $resultDir
 
 Write-Host "Chay: docker $($dockerArgs -replace $vars['OPENAI_API_KEY'], '***REDACTED***')"
 docker @dockerArgs
