@@ -2,7 +2,11 @@
 
 Backend tự host `manga-image-translator`, đã dò schema thật + vá 1 bug, sẵn sàng cho Giai đoạn C (viết userscript).
 
-## Chạy backend
+## Cài đặt & chạy
+
+**Người dùng cuối:** xem hướng dẫn từng bước tại [`INSTALL.md`](INSTALL.md) — bấm đúp `setup.bat` là đủ.
+
+**Chạy thủ công (cho dev, không qua `setup.bat`):**
 
 1. Copy `.env.example` → `.env`, điền `OPENAI_API_KEY`
 2. Build image đã vá (chỉ cần 1 lần, hoặc khi cần rebuild):
