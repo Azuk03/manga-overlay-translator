@@ -6,6 +6,7 @@
 
 - **2026-07-19 21:15-23:17:** Tasks 1-5 implemented and committed on branch `worktree-feature+setup-installer` (worktree at `.claude/worktrees/feature+setup-installer`), commits `c7036ea`..`f42bde0`: `lib/SetupHelpers.ps1`, `lib/EnvFile.ps1`, `lib/ImageHash.ps1` (+ `.gitignore` updated), `lib/Shortcut.ps1`, `lib/ApiKeyDialog.ps1`, all with tests, plus 2 bugfix commits found during manual verification. Checkboxes above retroactively marked `[x]` to match.
 - **2026-07-19 (later session):** A different session briefly lost track of this worktree (checked only the `main` checkout, saw nothing, concluded 0/10 done) and created a redundant empty worktree — that mistake was found and cleaned up (empty worktree + its branch deleted). This worktree/branch is the real one to keep using. **Next action: Task 6** (wire GPU/CPU branching into `run-backend.ps1`), then Tasks 7-10.
+- **2026-07-20:** Tasks 6-10 implemented and committed (commits `9f6c275`..`d4d619f`): `run-backend.ps1` GPU/CPU branching, `setup.ps1` orchestrator, `setup.bat` entry point, userscript `@updateURL`/`@downloadURL` + version 0.40, `INSTALL.md` + README pointer. Full suite: 34/34 passing. Final whole-branch review (opus): no Critical, 1 Important (rebuild-marker didn't check actual Docker image presence, only the source hash — could leave a user with a "successful" setup that fails at first run if the image was ever deleted separately from the marker), several Minor (documented in `.superpowers/sdd/minor-findings.md`, left as-is by human decision). Important finding fixed in commit `3ea7089` (added `Test-DockerImageExists`, TDD, 37/37 passing after fix), re-reviewed and approved. Branch pushed to `origin/worktree-feature+setup-installer`. Real-hardware verification still pending for a human with actual Docker + NVIDIA GPU + display: `run-backend.ps1` GPU/CPU docker-run paths, `setup.ps1` end-to-end fresh-install + idempotent re-run, `setup.bat` double-click. **All 10 tasks complete — remaining work is human verification + opening a PR, not further implementation.**
 
 **Goal:** Let a few trusted, non-technical Windows users clone/download this repo, double-click `setup.bat`, and end up with a working local backend + installed userscript, without hand-editing any file.
 
@@ -755,12 +756,12 @@ Write-Host "Chay: docker $($dockerArgs -replace $vars['OPENAI_API_KEY'], '***RED
 docker @dockerArgs
 ```
 
-- [ ] **Step 1: Confirm current behavior before changing it**
+- [x] **Step 1: Confirm current behavior before changing it**
 
 Run: `Get-Content run-backend.ps1 | Select-String "gpus"`
 Expected: one line containing `--ipc=host, --gpus, all` — confirms the file matches the reference above before editing.
 
-- [ ] **Step 2: Replace the file content**
+- [x] **Step 2: Replace the file content**
 
 Replace the entire content of `run-backend.ps1` with:
 
@@ -814,12 +815,12 @@ Write-Host "Chay: docker $($dockerArgs -replace $vars['OPENAI_API_KEY'], '***RED
 docker @dockerArgs
 ```
 
-- [ ] **Step 3: Manually verify the GPU path (real machine, has NVIDIA GPU)**
+- [x] **Step 3: Manually verify the GPU path (real machine, has NVIDIA GPU)**
 
 Run: `.\run-backend.ps1`
 Expected: no CPU warning banner printed; the `Chay: docker ...` line includes `--gpus all` and `--use-gpu`; container starts exactly as before this change (compare against the previous `docker ps` behavior you already know from prior sessions).
 
-- [ ] **Step 4: Manually verify the CPU fallback path (session-scoped, non-destructive)**
+- [x] **Step 4: Manually verify the CPU fallback path (session-scoped, non-destructive)**
 
 Temporarily hide `nvidia-smi` from PATH for this PowerShell session only (does not affect the system or other terminals):
 
@@ -830,7 +831,7 @@ $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'NVIDIA' }) -joi
 
 Expected: the yellow "KHONG PHAT HIEN GPU NVIDIA" banner prints before the `Chay: docker ...` line; that line does NOT contain `--gpus` or `--use-gpu`. Press Ctrl+C to stop the container, then open a fresh terminal (or start a new PowerShell session) so the modified `$env:PATH` doesn't linger.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add run-backend.ps1
@@ -848,7 +849,7 @@ git commit -m "Branch run-backend.ps1 on GPU/CPU via SetupHelpers, warn when no 
 - Consumes: everything produced by Tasks 1-5 (`Test-DockerReady`, `Test-NvidiaGpu`, `Get-EnvApiKey`, `Set-EnvApiKey`, `Get-DockerImageHash`, `Test-NeedsRebuild`, `Set-ImageHashMarker`, `New-DesktopShortcut`, `Show-ApiKeyPrompt`).
 - Produces: nothing consumed by later tasks except `setup.bat` (Task 8), which just invokes this file by path.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 Create `setup.ps1`:
 
@@ -944,7 +945,7 @@ Write-Host "Bam 'Install' trong tab Tampermonkey vua mo (neu chua cai truoc do).
 Write-Host "Lan sau muon dung: bam dup shortcut 'Bat Manga Translator' ngoai Desktop, roi vao trang truyen bam Alt+D."
 ```
 
-- [ ] **Step 2: Manually verify a fresh-install run (real machine)**
+- [x] **Step 2: Manually verify a fresh-install run (real machine)**
 
 Temporarily rename `.env` and delete the hash marker to simulate a first-time machine:
 
@@ -956,7 +957,7 @@ Remove-Item .docker-image-hash -ErrorAction SilentlyContinue
 
 Expected: steps `[1/6]` through `[3/6]` print `OK`, the API key dialog from Task 5 appears (enter a real key or a throwaway `sk-test` if you only want to check the flow, not actually build), step `[4/6]` starts a Docker build, step `[5/6]` reports a new shortcut was created (check the Desktop), step `[6/6]` opens the browser to the raw userscript URL, and the final summary prints.
 
-- [ ] **Step 3: Manually verify idempotency (re-run without changes)**
+- [x] **Step 3: Manually verify idempotency (re-run without changes)**
 
 ```powershell
 .\setup.ps1
@@ -964,14 +965,14 @@ Expected: steps `[1/6]` through `[3/6]` print `OK`, the API key dialog from Task
 
 Expected: `[3/6]` reports "Da co API key" (no dialog shown), `[4/6]` reports "bo qua build" (no rebuild), `[5/6]` reports "Shortcut da co san" — confirms re-running does nothing destructive or redundant.
 
-- [ ] **Step 4: Restore your real `.env` if you renamed it in Step 2**
+- [x] **Step 4: Restore your real `.env` if you renamed it in Step 2**
 
 ```powershell
 Remove-Item .env -ErrorAction SilentlyContinue
 Rename-Item .env.bak .env -ErrorAction SilentlyContinue
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add setup.ps1
@@ -988,7 +989,7 @@ git commit -m "Add setup.ps1 orchestrator for first-time install and updates"
 **Interfaces:**
 - Consumes: `setup.ps1` (Task 7), by relative path only.
 
-- [ ] **Step 1: Write the implementation**
+- [x] **Step 1: Write the implementation**
 
 Create `setup.bat`:
 
@@ -998,12 +999,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup.ps1"
 pause
 ```
 
-- [ ] **Step 2: Manually verify**
+- [x] **Step 2: Manually verify**
 
 Double-click `setup.bat` in Windows Explorer (or run `.\setup.bat` from `cmd.exe`).
 Expected: a console window opens, runs the same flow verified in Task 7, and stays open (`pause`) after finishing so any error message is readable instead of the window closing immediately.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add setup.bat
@@ -1021,12 +1022,12 @@ git commit -m "Add setup.bat double-click entry point"
 
 **Interfaces:** none — this task only adds metadata comments, no functions.
 
-- [ ] **Step 1: Confirm the anchor line before editing**
+- [x] **Step 1: Confirm the anchor line before editing**
 
 Run: `Select-String -Path manga-overlay-translator.user.js -Pattern "^\(function \(\) \{"`
 Expected: one match at line 244. If the line number differs (file has changed since this plan was written), use whatever line number this command reports as the insertion point in Step 3 instead of 244.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `manga-overlay-translator.Header.Tests.ps1` at the repo root:
 
@@ -1050,12 +1051,12 @@ Describe "Userscript header metadata" {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `Invoke-Pester -Path manga-overlay-translator.Header.Tests.ps1 -Output Detailed`
 Expected: FAIL — current header has `@version 0.39` and no `@updateURL`/`@downloadURL` lines.
 
-- [ ] **Step 4: Edit the header block**
+- [x] **Step 4: Edit the header block**
 
 Replace lines 1-16 of `manga-overlay-translator.user.js` (currently):
 
@@ -1101,7 +1102,7 @@ with:
 // ==/UserScript==
 ```
 
-- [ ] **Step 5: Append a changelog line**
+- [x] **Step 5: Append a changelog line**
 
 Immediately before the anchor line found in Step 1 (`(function () {`), insert this comment line:
 
@@ -1109,12 +1110,12 @@ Immediately before the anchor line found in Step 1 (`(function () {`), insert th
 // v0.40: them @updateURL/@downloadURL de Tampermonkey tu bao ban cap nhat moi.
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `Invoke-Pester -Path manga-overlay-translator.Header.Tests.ps1 -Output Detailed`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add manga-overlay-translator.user.js manga-overlay-translator.Header.Tests.ps1
@@ -1131,7 +1132,7 @@ git commit -m "Add @updateURL/@downloadURL so Tampermonkey auto-detects updates"
 
 **Interfaces:** none — documentation only.
 
-- [ ] **Step 1: Write `INSTALL.md`**
+- [x] **Step 1: Write `INSTALL.md`**
 
 Create `INSTALL.md`:
 
@@ -1177,7 +1178,7 @@ Hướng dẫn này dành cho người dùng cuối — không cần biết lậ
 - Các giới hạn/vấn đề khác đã biết: xem mục "Giới hạn đã biết" trong `docs.md`.
 ```
 
-- [ ] **Step 2: Replace the "Chạy backend" section in `README.md`**
+- [x] **Step 2: Replace the "Chạy backend" section in `README.md`**
 
 Find this section in `README.md`:
 
@@ -1211,7 +1212,7 @@ Replace it with:
 4. Kiểm tra: `http://127.0.0.1:5003/docs`
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add INSTALL.md README.md
@@ -1222,5 +1223,5 @@ git commit -m "Add INSTALL.md end-user guide, point README to it"
 
 ## Final integration check (after all 10 tasks)
 
-- [ ] Run the full test suite once: `Invoke-Pester -Path . -Output Detailed` from the `manga/` directory — expect every `Describe` block across `lib/*.Tests.ps1` and `manga-overlay-translator.Header.Tests.ps1` to pass.
-- [ ] Push everything: `git push`
+- [x] Run the full test suite once: `Invoke-Pester -Path . -Output Detailed` from the `manga/` directory — expect every `Describe` block across `lib/*.Tests.ps1` and `manga-overlay-translator.Header.Tests.ps1` to pass.
+- [x] Push everything: `git push`
