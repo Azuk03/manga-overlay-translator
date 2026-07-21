@@ -146,3 +146,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+chrome.action.onClicked.addListener((tab) => {
+  if (!tab.id) return;
+  chrome.tabs.sendMessage(tab.id, { type: 'TRIGGER_TRANSLATE' }, () => {
+    if (chrome.runtime.lastError) {
+      console.log('[MOT-BG] Khong gui duoc TRIGGER_TRANSLATE (content-script chua nap?):', chrome.runtime.lastError.message);
+    }
+  });
+});
