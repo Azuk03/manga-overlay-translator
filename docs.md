@@ -6,6 +6,25 @@
 
 ---
 
+## Cài đặt (khuyến nghị: Extension)
+
+1. Mở `chrome://extensions/` (hoặc `edge://extensions/`), bật **Developer mode**.
+2. Bấm **Load unpacked**, chọn thư mục `extension/` trong repo này.
+3. Bấm icon extension trên toolbar (hoặc Alt+D) để bắt đầu dịch trang đang xem, Alt+T để bật/tắt so sánh gốc/dịch.
+
+**Nếu trước đây đã cài `manga-overlay-translator.user.js` qua Tampermonkey: tắt hoặc gỡ script đó đi** trước khi dùng extension — để cả 2 cùng bật trên 1 trang sẽ khiến cả userscript lẫn extension tự tìm ảnh và dịch song song, tạo ra 2 lớp overlay chồng nhau/dịch trùng.
+
+### Cài đặt cũ qua Tampermonkey (không còn khuyến nghị, giữ lại tham khảo)
+
+File `manga-overlay-translator.user.js` vẫn khả dụng để tham khảo, nhưng **không còn được khuyến nghị**. Để sử dụng nó (không khuyến khích):
+1. Cài đặt extension [Tampermonkey](https://www.tampermonkey.net/)
+2. Tạo script mới, dán nội dung của `manga-overlay-translator.user.js`
+3. Lưu và kích hoạt
+
+Ưu điểm userscript cũ: không cần developer mode. Nhược điểm: không còn được bảo trì, extension mới là phiên bản chính thức.
+
+---
+
 ## 1. Dự án này làm gì
 
 **Mục tiêu:** đọc truyện tranh raw (tiếng Nhật/Hàn/Trung) trên bất kỳ website nào, tự động dịch sang tiếng Việt và **vẽ đè bản dịch lên đúng vị trí bóng thoại**, ngay trong lúc cuộn trang đọc — không cần tải ảnh về, không cần dùng công cụ dịch riêng.
