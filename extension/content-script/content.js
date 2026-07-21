@@ -234,4 +234,140 @@
   }
 
   console.log('[MOT] CFG/ImageFinder/Cache/helpers da nap xong (Task 6).');
+
+  // Boc chrome.runtime.sendMessage (callback-style) thanh Promise, kiem tra
+  // chrome.runtime.lastError - tranh loi im lang khi service worker bi tat
+  // giua chung (xem docs/superpowers/specs/2026-07-21-browser-extension-port-design.md muc 8).
+  function sendMessageAsync(message) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  // ===== ApiAdapter — NOI DUY NHAT BIET SCHEMA BACKEND =====
+  const ApiAdapter = {
+    async downloadImageBlob(img) {
+      const src = img.currentSrc || img.src;
+      if (src.startsWith('blob:') || src.startsWith('data:')) {
+        // Khong doi: van doc pixel truc tiep tu <img> da hien thi, khong
+        // relay qua background duoc vi du lieu chi ton tai tam thoi phia
+        // trinh duyet (xem spec muc 5a diem 1).
+        return await imageElementToBlob(img);
+      }
+
+      const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url: src });
+      if (!res || !res.ok) {
+        throw new Error((res && res.error) || 'Khong tai duoc anh goc: ' + src);
+      }
+      const rawBlob = new Blob([res.arrayBuffer], { type: res.contentType });
+      return await reencodeToPng(rawBlob);
+    },
+
+    blobToDataURL(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    },
+
+    async translateImage(blob) {
+      const dataUrl = await this.blobToDataURL(blob);
+      const body = JSON.stringify({
+        image: dataUrl,
+        config: {
+          translator: {
+            translator: CFG.TRANSLATOR,
+            target_lang: CFG.TARGET_LANG,
+            gpt_config: CFG.GPT_CONFIG_PATH,
+          },
+          render: { renderer: 'none' },
+          inpainter: { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE },
+        },
+      });
+
+      const res = await sendMessageAsync({ type: 'TRANSLATE', body });
+      if (!res || !res.ok) {
+        throw new Error((res && res.error) || 'Loi khong xac dinh khi goi backend');
+      }
+      return { regions: res.regions };
+    },
+
+    async translateImageTiled(blob, naturalW, naturalH) {
+      const tiles = await sliceImageIntoTiles(blob, naturalW, naturalH);
+      log(
+        'Webtoon dai (' + naturalH + 'px > TILE_MAX_H ' + CFG.TILE_MAX_H + 'px) - cat thanh',
+        tiles.length,
+        'lat, chong lan',
+        CFG.TILE_OVERLAP,
+        'px.'
+      );
+      const allRegions = [];
+      for (const tile of tiles) {
+        const result = await this.translateImage(tile.blob);
+        for (const r of result.regions) {
+          allRegions.push({ ...r, y: r.y + tile.yOffset });
+        }
+      }
+      return { regions: dedupeRegions(allRegions) };
+    },
+  };
+
+  // Copy tu manga-overlay-translator.user.js dong 726-772
+  async function sliceImageIntoTiles(blob, naturalW, naturalH) {
+    const bitmap = await createImageBitmap(blob);
+    const tiles = [];
+    const step = CFG.TILE_MAX_H - CFG.TILE_OVERLAP;
+    for (let y = 0; y < naturalH; y += step) {
+      const h = Math.min(CFG.TILE_MAX_H, naturalH - y);
+      const canvas = document.createElement('canvas');
+      canvas.width = naturalW;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, y, naturalW, h, 0, 0, naturalW, h);
+      const tileBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      tiles.push({ blob: tileBlob, yOffset: y, height: h });
+      if (y + h >= naturalH) break; // da toi day anh (lat cuoi thap hon TILE_MAX_H)
+    }
+    bitmap.close?.();
+    return tiles;
+  }
+
+  // Ty le giao/hop (Intersection over Union) giua 2 bbox {x,y,w,h}.
+  function iou(a, b) {
+    const x1 = Math.max(a.x, b.x);
+    const y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.w, b.x + b.w);
+    const y2 = Math.min(a.y + a.h, b.y + b.h);
+    const interW = Math.max(0, x2 - x1);
+    const interH = Math.max(0, y2 - y1);
+    const interArea = interW * interH;
+    if (interArea === 0) return 0;
+    const unionArea = a.w * a.h + b.w * b.h - interArea;
+    return interArea / unionArea;
+  }
+
+  // Loai bong thoai bi dich 2 lan o vung chong lan giua 2 lat ke nhau -
+  // IoU > 0.5 coi la trung, giu bbox LON HON (spec 5.7 muc 4).
+  function dedupeRegions(regions) {
+    const kept = [];
+    for (const r of regions) {
+      const dupIdx = kept.findIndex((k) => iou(k, r) > 0.5);
+      if (dupIdx === -1) {
+        kept.push(r);
+      } else if (r.w * r.h > kept[dupIdx].w * kept[dupIdx].h) {
+        kept[dupIdx] = r;
+      }
+    }
+    return kept;
+  }
+
+  console.log('[MOT] ApiAdapter + tile helpers da nap xong (Task 7).');
 })();
