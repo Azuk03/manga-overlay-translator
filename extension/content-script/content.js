@@ -823,6 +823,70 @@
     log('Auto mode (C3) da bat dau. Dang theo doi anh moi + cuon trang...');
   }
 
-  console.log('[MOT] Queue/detection da nap xong (Task 9). Goi watchImages() de test.');
-  watchImages();
+  let autoStarted = false;
+
+  // Gop thong diep loi than thien theo nguyen nhan (backend tat, timeout...
+  // da phan loai san trong ApiAdapter.translateImage), hien qua alert() vi
+  // day la userscript don gian, khong co UI panel rieng.
+  function showErrorSummary() {
+    const lines = errorLog.map((e) => `- ${e.src}\n  ${e.message}`);
+    alert(
+      `Dịch xong nhưng có ${errorLog.length} ảnh lỗi:\n\n${lines.join('\n')}`
+    );
+  }
+
+  // Kich hoat dich (goi tu menu Tampermonkey HOAC hotkey Alt+D - xem
+  // installTriggers()). DA BO nut noi trong trang (v0.15-v0.21): du thu
+  // z-index toi da, Popover API/top layer, dinh ky gianh lai vi tri, chan
+  // click o capture phase... van khong the dam bao 100% mot phan tu SONG
+  // TRONG DOM cua trang se khong bi chinh trang do can thiep (ads co the
+  // hijack theo vo van cach, trang co toan quyen voi DOM/JS cua no). Menu
+  // Tampermonkey + hotkey la co che DUY NHAT nam NGOAI DOM cua trang,
+  // trang web khong co cach nao voi toi de che/chan/hijack.
+  function onTriggerTranslate() {
+    if (autoStarted) {
+      // Da chay roi - bam lai chi co y nghia khi dang bao loi (xem lai chi
+      // tiet). He thong da tu dong theo doi ca trang, khong can kich hoat
+      // lai nhu C1/C2 (moi lan dich 1 anh).
+      if (errorLog.length > 0) showErrorSummary();
+      else log('Da o che do tu dong roi (tong', state.total, ', xong', state.done, ', loi', state.errors, ').');
+      return;
+    }
+    autoStarted = true;
+    startAutoMode();
+    log('Bat dau dich tu dong ca trang (Alt+T de bat/tat overlay so sanh goc/dich).');
+  }
+
+  // Alt+T: bat/tat toan bo overlay tren trang (so sanh nhanh goc/dich).
+  // Alt+D: kich hoat dich (tuong duong bam menu Tampermonkey).
+  function onKeyDown(e) {
+    if (!e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key === 't') {
+      e.preventDefault();
+      document.querySelectorAll('.mot-layer').forEach((layer) => {
+        layer.style.display = layer.style.display === 'none' ? '' : 'none';
+      });
+    } else if (key === 'd') {
+      e.preventDefault();
+      onTriggerTranslate();
+    }
+  }
+
+  function init() {
+    document.addEventListener('keydown', onKeyDown);
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'TRIGGER_TRANSLATE') {
+        onTriggerTranslate();
+      }
+    });
+    watchImages();
+    log('San sang. Bam icon extension hoac Alt+D de dich, Alt+T de bat/tat overlay.');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
