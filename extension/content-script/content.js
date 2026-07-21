@@ -656,4 +656,173 @@
   document.head.appendChild(styleEl);
 
   console.log('[MOT] OverlayRenderer/CSS da nap xong (Task 8).');
+
+  // ===== Job — tai + dich + ve overlay cho 1 anh (dung chung cho Queue) =====
+  const state = { total: 0, done: 0, errors: 0 };
+  // Luu loi chi tiet de nguoi dung bam nut xem lai (C4: "Loi - click xem"
+  // - spec goc nghi cho 1 anh, o day gop thanh danh sach vi co nhieu anh).
+  const errorLog = [];
+
+  async function translateAndRenderImage(img) {
+    if (imgLayers.has(img)) return;
+    const tStart = performance.now();
+    try {
+      const blob = await ApiAdapter.downloadImageBlob(img);
+      const hash = await Cache.hashBlob(blob);
+      let result = await Cache.get(hash); // THEM await - Cache gio la async (Task 6)
+      if (result) {
+        log('Cache HIT:', hash, img.currentSrc || img.src);
+      } else {
+        log('Cache MISS, goi backend:', hash, img.currentSrc || img.src);
+        result =
+          img.naturalHeight > CFG.TILE_MAX_H
+            ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight)
+            : await ApiAdapter.translateImage(blob);
+        await Cache.set(hash, result); // THEM await - Cache gio la async (Task 6)
+      }
+      const busyFlags = await computeRegionComplexity(result.regions);
+      result.regions.forEach((r, i) => {
+        r.busy = busyFlags[i];
+      });
+      await OverlayRenderer.render(img, result.regions);
+      log('Da ve overlay:', result.regions.length, 'vung chu, tong', (performance.now() - tStart).toFixed(0), 'ms');
+      state.done++;
+    } catch (err) {
+      console.error('[MOT] Loi dich anh:', img.currentSrc || img.src, err);
+      state.errors++;
+      errorLog.push({ src: img.currentSrc || img.src, message: err.message });
+    }
+  }
+
+  // ===== Queue — gioi han CONCURRENCY, uu tien anh dang gan khung nhin =====
+  const Queue = {
+    _pending: [], // danh sach <img> dang cho, FIFO (IntersectionObserver da
+    // uu tien theo khoang cach toi khung nhin qua PREFETCH_MARGIN)
+    _active: 0,
+    _queued: new Set(), // tranh enqueue trung 1 anh 2 lan
+
+    enqueue(img) {
+      if (this._queued.has(img)) return;
+      if (imgLayers.has(img)) return; // da dich xong
+      this._queued.add(img);
+      this._pending.push(img);
+      // v0.39: do thoi gian TAM THOI - danh dau luc anh vao hang doi de
+      // tinh THOI GIAN CHO THAT SU (xem _drain()) truoc khi bat dau xu ly.
+      // Voi CONCURRENCY:1, neu nhieu anh duoc prefetch dồn cùng lúc (cuon
+      // nhanh qua nhieu anh), anh sau phai doi HET anh truoc xu ly xong
+      // (~7-8s/anh that, xem log Docker da doi chieu) - day la 1 nguon do
+      // tre THAT co the cai thien (vd tang PREFETCH_MARGIN de bat dau som
+      // hon, hoac giam so anh dong thoi bi kich hoat), khac voi thoi gian
+      // xu ly AI thuan tuy (khong sua duoc bang code).
+      img.__motEnqueuedAt = performance.now();
+      this._drain();
+    },
+
+    // Huy job CHUA BAT DAU (anh cuon qua xa truoc khi kip xu ly). Job DANG
+    // CHAY (da goi backend) KHONG bi huy giua chung - tranh phi cong da lam
+    // va tranh phuc tap huy request dang bay.
+    cancel(img) {
+      const idx = this._pending.indexOf(img);
+      if (idx === -1) return; // khong trong hang doi (co the dang active roi) -> bo qua
+      this._pending.splice(idx, 1);
+      this._queued.delete(img);
+      log('Huy job (cuon qua xa, chua kip dich):', img.currentSrc || img.src);
+    },
+
+    async _drain() {
+      if (this._active >= CFG.CONCURRENCY) return;
+      const img = this._pending.shift();
+      if (!img) return;
+      this._active++;
+      // v0.39: log THOI GIAN CHO trong hang doi (khac thoi gian XU LY that
+      // trong translateAndRenderImage) + so anh KHAC con dang cho phia sau -
+      // giup phan biet "cham vi phai xep hang sau anh khac" (co the cai
+      // thien: tang PREFETCH_MARGIN, danh dau anh som hon) voi "cham vi
+      // chinh no dang xu ly AI that" (khong sua duoc, xem log timing trong
+      // translateAndRenderImage).
+      const queueWaitMs = img.__motEnqueuedAt ? performance.now() - img.__motEnqueuedAt : 0;
+      log(
+        `DEBUG queue: cho ${queueWaitMs.toFixed(0)}ms truoc khi bat dau xu ly, con ${this._pending.length} anh khac dang xep hang phia sau`,
+        img.currentSrc || img.src
+      );
+      try {
+        await translateAndRenderImage(img);
+      } finally {
+        this._queued.delete(img);
+        this._active--;
+        this._drain(); // xu ly tiep job ke tiep trong hang doi (neu co)
+      }
+    },
+  };
+
+  // ===== Tu dong phat hien anh (MutationObserver cho lazy-load) + prefetch
+  // (IntersectionObserver) — day chinh la phan "auto + cuon" cua C3 =====
+  // Set (khong phai WeakSet) vi C4 can duyet lai toan bo khi nguoi dung bam
+  // nut (retroactive observe cho anh tim thay TRUOC khi bam).
+  const registeredImages = new Set();
+  let intersectionObserver = null;
+
+  function registerImage(img) {
+    if (registeredImages.has(img)) return;
+    const tryRegister = () => {
+      if (registeredImages.has(img)) return;
+      if (!ImageFinder.isCandidate(img)) return;
+      registeredImages.add(img);
+      state.total++;
+      // Neu auto mode da chay roi (da kich hoat dich roi, anh nay moi xuat
+      // hien sau, vd lazy-load) thi theo doi ngay; neu chua kich hoat thi
+      // chi dang ky, se duoc observe hang loat luc kich hoat (xem startAutoMode()).
+      if (intersectionObserver) intersectionObserver.observe(img);
+    };
+    tryRegister(); // thu ngay - co the anh da tai xong that su tu dau
+    // 'load' bat MOI LAN src doi va tai xong xong, KHONG CHI lan dau
+    // ({ once: true } cu se bo lo lan site thay placeholder bang URL
+    // that). isCandidate() da loai data: URI (xem ImageFinder), nen lan
+    // dau thuong bi tu choi boi placeholder, phai doi 'load' lan tiep
+    // theo (khi site gan src that vao) moi dang ky duoc.
+    img.addEventListener('load', tryRegister);
+  }
+
+  // Luon chay tu init(), doc lap voi viec da kich hoat dich hay chua - de
+  // luon biet duoc co anh moi xuat hien tren trang khong (lazy-load).
+  function watchImages() {
+    document.querySelectorAll('img').forEach(registerImage);
+
+    // Bat anh moi them vao DOM sau nay (lazy-load khi cuon, infinite scroll...).
+    const mo = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType !== 1) continue; // chi quan tam Element node
+          if (node.tagName === 'IMG') registerImage(node);
+          node.querySelectorAll?.('img').forEach(registerImage);
+        }
+      }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function startAutoMode() {
+    intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            Queue.enqueue(entry.target);
+          } else {
+            Queue.cancel(entry.target);
+          }
+        }
+      },
+      { rootMargin: CFG.PREFETCH_MARGIN }
+    );
+
+    // Cac anh da tim thay TRUOC khi bam nut (tu watchImages()) - observe
+    // hang loat ngay bay gio. Anh tim thay SAU se tu observe trong
+    // registerImage() (vi luc do intersectionObserver da ton tai).
+    registeredImages.forEach((img) => intersectionObserver.observe(img));
+
+    log('Auto mode (C3) da bat dau. Dang theo doi anh moi + cuon trang...');
+  }
+
+  console.log('[MOT] Queue/detection da nap xong (Task 9). Goi watchImages() de test.');
+  watchImages();
 })();
