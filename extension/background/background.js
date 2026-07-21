@@ -2,13 +2,30 @@ console.log('[MOT-BG] Service worker da khoi dong.');
 
 const BACKEND_API = 'http://127.0.0.1:5003';
 
+// Chuyen ArrayBuffer sang chuoi base64, chia nho theo chunk de tranh tran
+// call stack cua String.fromCharCode.apply() tren anh lon (anh manga co the
+// vai tram KB den vai MB).
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000; // 32KB moi chunk - tranh "Maximum call stack size exceeded" tren anh lon
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 // Ham dung chung: doc arrayBuffer + content-type tu 1 Response, dong goi
-// thanh dang truyen qua chrome.runtime message duoc (arrayBuffer serialize
-// duoc qua structured clone, khong can chuyen base64 tay).
+// thanh dang truyen qua chrome.runtime message duoc. QUAN TRONG: ArrayBuffer
+// KHONG duoc bao toan dang tin cay qua chrome.runtime.sendMessage/sendResponse
+// trong Manifest V3 (khac window.postMessage dung structured clone day du) -
+// da xac nhan bang test that (xem docs/superpowers/sdd/task-10-fix-report.md).
+// Vi vay phai chuyen sang chuoi base64 truoc khi gui qua message channel.
 async function responseToPayload(res) {
   const contentType = res.headers.get('content-type') || '';
   const arrayBuffer = await res.arrayBuffer();
-  return { contentType, arrayBuffer };
+  const base64 = arrayBufferToBase64(arrayBuffer);
+  return { contentType, base64 };
 }
 
 // v0.35 (userscript cu) da xac nhan: CDN chan hotlink tra ve HTML loi thay
@@ -134,7 +151,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'DOWNLOAD_IMAGE') {
     const refererUrl = sender.tab ? sender.tab.url : '';
     downloadImage(message.url, refererUrl)
-      .then((payload) => sendResponse({ ok: true, contentType: payload.contentType, arrayBuffer: payload.arrayBuffer }))
+      .then((payload) => sendResponse({ ok: true, contentType: payload.contentType, base64: payload.base64 }))
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true; // giu message channel mo cho sendResponse bat dong bo
   }

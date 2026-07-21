@@ -235,6 +235,21 @@
 
   console.log('[MOT] CFG/ImageFinder/Cache/helpers da nap xong (Task 6).');
 
+  // Giai ma chuoi base64 (nhan tu background.js qua chrome.runtime message)
+  // thanh Blob that. Dung base64 thay vi ArrayBuffer vi ArrayBuffer KHONG
+  // duoc bao toan dang tin cay qua chrome.runtime.sendMessage/sendResponse
+  // trong Manifest V3 - da xac nhan bang test that (res.arrayBuffer den noi
+  // nay chi con la {} rong, Blob ket qua chi co 15 byte cua chuoi
+  // "[object Object]" bi stringify nham thay vi du lieu nhi phan that).
+  function base64ToBlob(base64, contentType) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: contentType });
+  }
+
   // Boc chrome.runtime.sendMessage (callback-style) thanh Promise, kiem tra
   // chrome.runtime.lastError - tranh loi im lang khi service worker bi tat
   // giua chung (xem docs/superpowers/specs/2026-07-21-browser-extension-port-design.md muc 8).
@@ -265,7 +280,7 @@
       if (!res || !res.ok) {
         throw new Error((res && res.error) || 'Khong tai duoc anh goc: ' + src);
       }
-      const rawBlob = new Blob([res.arrayBuffer], { type: res.contentType });
+      const rawBlob = base64ToBlob(res.base64, res.contentType);
       return await reencodeToPng(rawBlob);
     },
 
