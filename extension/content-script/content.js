@@ -67,7 +67,7 @@
   };
 
   function log(...args) {
-    if (CFG.DEBUG) console.log('[MOT]', ...args);
+    console.log('[MOT]', ...args);
   }
 
   // ===== ImageFinder =====
@@ -481,7 +481,7 @@
       const size = this._fitFontSize(text, boxW, boxH);
       const textEl = textbox.querySelector('.mot-text');
       textEl.style.fontSize = size + 'px';
-      if (size <= CFG.FONT_MIN && CFG.DEBUG) {
+      if (size <= CFG.FONT_MIN) {
         const h = this._measureWrappedHeight(this._measureCanvas.getContext('2d'), text, size, boxW);
         textEl.classList.toggle('mot-overflow', h > boxH);
       }
