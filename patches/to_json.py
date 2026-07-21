@@ -85,7 +85,7 @@ class TranslationResponse(BaseModel):
         return struct.pack('i', len(items)) + b''.join(items)
 
 def to_translation(ctx: Context) -> TranslationResponse:
-    text_regions:list[TextBlock] = ctx.text_regions
+    text_regions:list[TextBlock] = ctx.text_regions or []
     inpaint = ctx.img_inpainted
     translations = ctx.get("translations") or {}
     results = []
