@@ -369,5 +369,291 @@
     return kept;
   }
 
-  console.log('[MOT] ApiAdapter + tile helpers da nap xong (Task 7).');
+  // anh -> lop overlay tuong ung. Dung Map (khong phai WeakMap) vi
+  // window resize listener ben duoi can DUYET LAI toan bo de tinh lai vi
+  // tri hang loat.
+  const imgLayers = new Map();
+
+  // Tinh lai vi tri/kich thuoc layer theo dung <img> dang hien thi tren
+  // trang. getBoundingClientRect() tra toa do theo VIEWPORT - cong them
+  // window.scrollX/scrollY de quy ve toa do TRANG (layer dung
+  // position:absolute, KHONG PHAI position:fixed, nen se tu cuon theo
+  // trang nhu binh thuong, khong can nghe su kien scroll rieng).
+  function positionLayer(img, layer) {
+    const rect = img.getBoundingClientRect();
+    // v0.36: FIX BUG THAT (test that tren hitomi.la) - site dang "reader"
+    // (Prev/Next/Page N) giu <img> cua NHIEU trang trong DOM cung luc,
+    // chi AN (display:none/kich thuoc 0) cac trang khong phai trang dang
+    // xem thay vi xoa hang khoi DOM. Khi 1 <img> nhu vay bi an SAU KHI da
+    // dich xong (overlay da gan vao <body>), moi lan positionLayer() chay
+    // lai (window resize listener, hoac ResizeObserver rieng cua chinh
+    // <img> do khi no tu co ve 0x0) se tinh rect = {0,0,0,0} -> layer bi
+    // dat vao dung goc (0,0) cua trang - nhieu trang cu don lai CHONG LEN
+    // NHAU dung 1 diem, hien ra nhu chu dich "nhay" vao goc trai man hinh
+    // (loi thuc te da gap, xem anh chup). Sua: rect suy bien (w=0 hoac
+    // h=0) -> day layer ra HAN NGOAI man hinh (khong dung
+    // layer.style.display - thuoc tinh nay da danh rieng cho Alt+T bat/tat
+    // so sanh goc/dich, doi o day se ghi de nham trang thai nguoi dung da
+    // chon). Anh hien lai binh thuong (nguoi doc quay lai dung trang do)
+    // se co rect that, tu dong quay ve vi tri dung.
+    if (rect.width === 0 || rect.height === 0) {
+      layer.style.left = '-99999px';
+      layer.style.top = '-99999px';
+      return;
+    }
+    layer.style.left = rect.left + window.scrollX + 'px';
+    layer.style.top = rect.top + window.scrollY + 'px';
+    layer.style.width = rect.width + 'px';
+    layer.style.height = rect.height + 'px';
+  }
+
+  // Zoom/resize cua so co the doi kich thuoc/vi tri hien thi cua MOI anh
+  // dang co overlay cung luc - tinh lai toan bo bang 1 listener chung,
+  // nhe hon nhieu ResizeObserver rieng cho tung anh (van giu ResizeObserver
+  // rieng trong render() de bat truong hop CHI 1 anh doi kich thuoc).
+  window.addEventListener('resize', () => {
+    imgLayers.forEach((layer, img) => positionLayer(img, layer));
+  });
+
+  // ===== OverlayRenderer — ve chu dich de len anh bang CSS (C2) =====
+  const OverlayRenderer = {
+    // Do do cao van ban khi ngat dong o khoang trang (word-break: keep-all),
+    // dung CanvasRenderingContext2D.measureText de tranh layout thrashing.
+    _measureWrappedHeight(ctx, text, fontSizePx, maxWidthPx) {
+      ctx.font = `${fontSizePx}px ${CFG.FONT}`;
+      const words = text.split(' ');
+      let lines = 1;
+      let lineWidth = 0;
+      for (const word of words) {
+        const wWidth = ctx.measureText(word + ' ').width;
+        if (lineWidth > 0 && lineWidth + wWidth > maxWidthPx) {
+          lines++;
+          lineWidth = wWidth;
+        } else {
+          lineWidth += wWidth;
+        }
+      }
+      return lines * fontSizePx * 1.25;
+    },
+
+    // Binary search font-size trong [FONT_MIN, FONT_DEFAULT] (KHONG phai mot
+    // FONT_MAX lon - xem ghi chu CFG.FONT_DEFAULT). Tran -> thu nho hon. Lay
+    // size lon nhat ma van vua, nhung khong bao gio vuot FONT_DEFAULT -> moi
+    // vung chu dong nhat cung 1 co chu tru khi qua chat phai giam.
+    _fitFontSize(text, maxWidthPx, maxHeightPx) {
+      if (!this._measureCanvas) this._measureCanvas = document.createElement('canvas');
+      const ctx = this._measureCanvas.getContext('2d');
+      let lo = CFG.FONT_MIN;
+      let hi = CFG.FONT_DEFAULT;
+      let best = CFG.FONT_MIN;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        const h = this._measureWrappedHeight(ctx, text, mid, maxWidthPx);
+        if (h <= maxHeightPx) {
+          best = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      return best;
+    },
+
+    _fitTextboxFont(textbox, text) {
+      const boxW = textbox.clientWidth * CFG.FIT_SAFETY;
+      const boxH = textbox.clientHeight * CFG.FIT_SAFETY;
+      if (boxW <= 0 || boxH <= 0) return;
+      const size = this._fitFontSize(text, boxW, boxH);
+      const textEl = textbox.querySelector('.mot-text');
+      textEl.style.fontSize = size + 'px';
+      if (size <= CFG.FONT_MIN && CFG.DEBUG) {
+        const h = this._measureWrappedHeight(this._measureCanvas.getContext('2d'), text, size, boxW);
+        textEl.classList.toggle('mot-overflow', h > boxH);
+      }
+    },
+
+    // Chu Nhat goc thuong la cot doc HEP (vd rong 14px, cao 339px). Chu dich
+    // tieng Viet luon ve NGANG (khong co field "vertical" trong API - xem
+    // README.md), neu giu nguyen ti le hep-cao nay thi chu Viet bi nhoi vao
+    // cot hep ~1 ky tu/dong, khong doc noi. Fix: "dinh hinh lai" thanh khung
+    // rong hon CHI DE DAT CHU (khung nay TRONG SUOT, khong dung de che chu
+    // goc - viec che chu la cua anh inpaint, xem render()). Han che do
+    // "phinh ngang" (TARGET_ASPECT thap + gioi han max width) de giam
+    // chong lan sang cot ben canh khi trang qua day dac.
+    _reshapeForHorizontalText(r) {
+      const centerX = r.x + r.w / 2;
+      const centerY = r.y + r.h / 2;
+      let w = r.w;
+      let h = r.h;
+      if (h > w * 1.3) {
+        const area = w * h;
+        const TARGET_ASPECT = 1.3;
+        w = Math.min(Math.sqrt(area * TARGET_ASPECT), r.w * 3.5);
+        h = area / w;
+      }
+      return { x: centerX - w / 2, y: centerY - h / 2, w, h };
+    },
+
+    async render(img, regions) {
+      if (imgLayers.has(img)) {
+        log('Anh nay da co overlay, bo qua ve lai.');
+        return;
+      }
+
+      const naturalW = img.naturalWidth;
+      const naturalH = img.naturalHeight;
+
+      // Gan lop overlay THANG vao <body>, KHONG boc <img> bang <span> nua.
+      // Ly do: mot so site dung viewer JS phuc tap (React/Webpack, vd
+      // mangaz.com) tu quan ly cay DOM/layout rat chat che; them 1 <span>
+      // cha moi quanh <img> co the vo tinh kich hoat resize/mutation
+      // listener NOI BO cua viewer do, gay loi that su o chinh site (da
+      // gap thuc te: viewer tu huy animation chuyen trang cua no vi tuong
+      // nham kich thuoc/khung nhin thay doi). Gan vao body + tu tinh toa
+      // do bang getBoundingClientRect() (xem positionLayer()) khong dung
+      // gi den DOM cua <img> goc - an toan tuyet doi voi moi site, doi lai
+      // phai tu cap nhat lai vi tri khi resize/zoom (xem window resize
+      // listener + ResizeObserver ben duoi).
+      const layer = document.createElement('div');
+      layer.className = 'mot-layer';
+      document.body.appendChild(layer);
+      positionLayer(img, layer);
+      imgLayers.set(img, layer);
+
+      // QUAN TRONG: ve HET lop nen (LOP 1) truoc, roi moi ve HET lop chu
+      // (LOP 2) sau, thanh 2 pass rieng - KHONG xen ke tung vung mot.
+      // Phan tu ve SAU trong DOM luon nam TREN phan tu ve TRUOC. Neu xen
+      // ke (nen vung1, chu vung1, nen vung2, chu vung2...), nen cua 1 vung
+      // O DUOI co the de len chu cua 1 vung O TREN da ve truoc do (trang
+      // nhieu cot sat nhau nhu anh test rat de gap) - loi thuc te da gap.
+
+      // PASS 1 — LOP NEN: khit dung bbox backend tra ve (khong con noi
+      // rong/keo gian - xem ghi chu CFG ve BG_PAD da bo). Bo qua han vung
+      // "busy" (nhieu mau/chi tiet, xem computeRegionComplexity) - AI
+      // inpaint tren vung nay thuong mo/nhoe ro ret, HIEN THI RA CON XAU
+      // HON la khong hien gi ca; nhung vung do chi dua vao chu vien trang
+      // (PASS 2) de doc duoc tren anh goc.
+      regions.forEach((r) => {
+        if (r.busy) return;
+
+        const bg = document.createElement('div');
+        bg.className = 'mot-bg';
+        bg.style.left = (r.x / naturalW) * 100 + '%';
+        bg.style.top = (r.y / naturalH) * 100 + '%';
+        bg.style.width = (r.w / naturalW) * 100 + '%';
+        bg.style.height = (r.h / naturalH) * 100 + '%';
+        if (r.background) {
+          bg.style.backgroundImage = `url(${r.background})`;
+        }
+        layer.appendChild(bg);
+      });
+
+      // PASS 2 — LOP CHU: rong hon (da dinh hinh lai) de chu Viet doc
+      // duoc. Vung co nen inpaint sach (khong busy) thi TRONG SUOT (khong
+      // ve nen gi them - vi phan mo rong nay co the tran ra ngoai vung da
+      // inpaint, them 1 lop nen o day se de len chinh nen inpaint, thua
+      // va co the lech mep). Vung "busy" (da bo han nen inpaint o PASS 1,
+      // xem tren) thi CO nen trang mo + do bong (class .mot-busy) de chu
+      // dich noi bat ro rang tren tranh goc nhieu mau/chi tiet, thay vi
+      // chi dua vao vien trang (da du doc nhung khong "sach" bang).
+      const textboxes = [];
+      regions.forEach((r) => {
+        const eff = this._reshapeForHorizontalText(r);
+        const padW = eff.w * CFG.TEXTBOX_PAD;
+        const padH = eff.h * CFG.TEXTBOX_PAD;
+        const tx = Math.max(0, eff.x - padW / 2);
+        const ty = Math.max(0, eff.y - padH / 2);
+        const tw = Math.min(naturalW - tx, eff.w + padW);
+        const th = Math.min(naturalH - ty, eff.h + padH);
+
+        const textbox = document.createElement('div');
+        textbox.className = 'mot-textbox' + (r.busy ? ' mot-busy' : '');
+        textbox.style.left = (tx / naturalW) * 100 + '%';
+        textbox.style.top = (ty / naturalH) * 100 + '%';
+        textbox.style.width = (tw / naturalW) * 100 + '%';
+        textbox.style.height = (th / naturalH) * 100 + '%';
+
+        const text = document.createElement('span');
+        text.className = 'mot-text';
+        text.textContent = r.dst;
+        textbox.appendChild(text);
+
+        // C4: bam vao 1 khung chu de xem chu goc (vd doi chieu ban dich) -
+        // bam lai de tro ve ban dich. Chi bat khi co chu goc that su.
+        if (r.src) {
+          textbox.title = 'Bấm để xem chữ gốc';
+          let showingSrc = false;
+          textbox.addEventListener('click', () => {
+            showingSrc = !showingSrc;
+            text.textContent = showingSrc ? r.src : r.dst;
+            textbox.title = showingSrc ? 'Bấm để xem bản dịch' : 'Bấm để xem chữ gốc';
+            this._fitTextboxFont(textbox, text.textContent);
+          });
+        }
+
+        layer.appendChild(textbox);
+        textboxes.push(textbox);
+      });
+
+      // Fit font sau khi da noi vao DOM (can kich thuoc px thuc te).
+      requestAnimationFrame(() => {
+        textboxes.forEach((box, i) => this._fitTextboxFont(box, regions[i].dst));
+      });
+
+      // Anh doi kich thuoc hien thi (zoom/resize/site tu doi layout) - vua
+      // phai tinh lai VI TRI/KICH THUOC layer (khong con tu dong bam theo
+      // <img> nhu cach boc <span> cu, vi layer gio o ngoai body), vua phai
+      // fit lai FONT (do dai dong chu thay doi theo kich thuoc px moi).
+      const ro = new ResizeObserver(() => {
+        positionLayer(img, layer);
+        textboxes.forEach((box, i) => this._fitTextboxFont(box, regions[i].dst));
+      });
+      ro.observe(img);
+
+      log('Da ve overlay:', regions.length, 'vung chu (inpaint that)');
+    },
+  };
+
+  // Thay GM_addStyle (khong ton tai trong extension) bang chen truc tiep
+  // 1 the <style> vao <head> - content-script co toan quyen DOM cua
+  // trang nen khong can ham tien ich rieng nhu Tampermonkey.
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    .mot-layer { position: absolute; pointer-events: none; }
+
+    .mot-bg {
+      position: absolute;
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
+      pointer-events: none;
+    }
+
+    .mot-textbox {
+      position: absolute;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: auto;
+      box-sizing: border-box;
+    }
+    .mot-textbox.mot-busy {
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 6px;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+    }
+    .mot-text {
+      width: 100%;
+      color: #111;
+      font-family: ${CFG.FONT};
+      line-height: 1.25;
+      text-align: center;
+      word-break: keep-all;
+      overflow-wrap: normal;
+      hyphens: none;
+      -webkit-text-stroke: 4px #fff;
+      paint-order: stroke fill;
+    }
+    .mot-overflow { outline: 2px solid red; }
+  `;
+  document.head.appendChild(styleEl);
+
+  console.log('[MOT] OverlayRenderer/CSS da nap xong (Task 8).');
 })();
