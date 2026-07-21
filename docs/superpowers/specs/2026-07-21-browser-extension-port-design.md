@@ -24,6 +24,8 @@ Người dùng tìm thấy 1 dự án tham khảo cùng ý tưởng (`github.com
 
 **Kết luận:** Manifest V3 (extension chuẩn, không phải Tampermonkey) không có cách nào giả `Referer` tùy ý — đây là giới hạn nền tảng của trình duyệt, khớp với tài liệu Chromium (Referer bị coi là header nhạy cảm, không cho `declarativeNetRequest` sửa đáng tin cậy). Cách khắc phục: xem mục 5 (backend tự tải ảnh hộ).
 
+**Đã kiểm chứng riêng: CORS khi background gọi backend cục bộ.** Giả định nền tảng của toàn bộ kiến trúc (mục 3) là background service worker, nhờ `host_permissions`, gọi được thẳng `http://127.0.0.1:5003` mà không bị CORS chặn — khác hẳn vụ Referer ở trên (2 cơ chế bảo mật độc lập của trình duyệt, không suy luận từ cái này ra cái kia được). Đã build 1 extension thử nghiệm khác (background service worker, `host_permissions: ["http://127.0.0.1:5003/*"]`), gọi `fetch('http://127.0.0.1:5003/openapi.json')` thật khi backend đang chạy. **Kết quả: thành công, HTTP 200, nhận đủ response** — xác nhận giả định đúng, không bị CORS chặn.
+
 ## 3. Kiến trúc tổng thể
 
 ```
@@ -91,9 +93,30 @@ Giữ nguyên triết lý hiện tại: lỗi từng ảnh gộp vào `errorLog`
 
 ## 9. Số phận file cũ
 
-`manga-overlay-translator.user.js` giữ nguyên trong repo (không xóa, giữ lịch sử/tham khảo) nhưng **ngừng cập nhật** kể từ khi extension hoạt động ổn định. `docs.md`/`README.md` cần cập nhật lại để trỏ người dùng mới tới extension thay vì Tampermonkey.
+`manga-overlay-translator.user.js` giữ nguyên trong repo (không xóa, giữ lịch sử/tham khảo) nhưng **ngừng cập nhật** kể từ khi extension hoạt động ổn định. `docs.md`/`README.md` cần cập nhật lại để trỏ người dùng mới tới extension thay vì Tampermonkey, **và hướng dẫn rõ phải tắt/gỡ script cũ trong Tampermonkey** khi chuyển qua — nếu để cả 2 cùng bật trên 1 trang, cả userscript lẫn extension sẽ tự tìm ảnh + dịch song song, tạo ra 2 lớp overlay chồng nhau/dịch trùng.
 
-## 10. Kiểm thử
+## 10. Rủi ro & đánh đổi đã biết
+
+Các điểm dưới đây được cân nhắc trong lúc thiết kế nhưng **không sửa/không loại bỏ được** — chấp nhận là đánh đổi hoặc rủi ro đã biết, không phải thiếu sót cần vá:
+
+**Đã kiểm chứng thật (mục 2):**
+- Không giả được `Referer` (đã có phương án thay thế: relay qua backend).
+- Gọi backend cục bộ từ background không bị CORS chặn.
+
+**Giả định hợp lý nhưng chưa tự kiểm chứng bằng thực nghiệm** (nên xác nhận sớm ở bước đầu implementation, không phải chờ tới cuối):
+- `chrome.runtime.sendMessage` (content-script → background) không bị CSP `connect-src` của trang chi phối — đây là hiểu biết chung về mô hình extension, nhưng chưa test thật như đã làm với Referer/CORS.
+
+**Rủi ro không có cách khắc phục, chấp nhận như giới hạn:**
+- Site chủ động dò tìm sự hiện diện của extension (hiếm, nhưng có thật ở 1 số site DRM nghiêm ngặt) có thể phản ứng bất lợi (ẩn nội dung, chặn) — tương tự tinh thần "giới hạn cố hữu" đã ghi ở site canvas tainted, nhưng là 1 rủi ro *mới phát sinh riêng cho việc là extension* (Tampermonkey tiêm ít "dấu vết" nhận diện được hơn).
+
+**Đánh đổi hiệu suất (chấp nhận, không phải bug):**
+- Mỗi lần tải ảnh + mỗi lần gọi dịch giờ tốn thêm 2 lượt message-passing (content-script ↔ background) so với gọi thẳng như hiện tại — với 1 ảnh đơn lẻ, chi phí thêm chỉ vài ms, không đáng kể.
+- Service worker bị trình duyệt tắt khi rảnh (~30s không hoạt động) và phải khởi động lại khi có message mới — gây độ trễ nhỏ (thường dưới vài trăm ms) ở lượt dịch đầu tiên sau khi rảnh tay 1 lúc. Tampermonkey không có vòng đời kiểu này nên đây là hành vi mới, cần người dùng biết trước để không tưởng nhầm là lỗi.
+
+**Trải nghiệm cài đặt (chấp nhận, giống dự án tham khảo):**
+- Extension cài qua "Load unpacked" (chế độ Developer) có thể bị Chrome/Edge định kỳ hiện banner nhắc "tắt các extension chế độ Developer" — phiền hơn 1 chút so với Tampermonkey (không bị nhắc kiểu này). Đây là hành vi chuẩn của trình duyệt với mọi extension sideload, không phải lỗi của dự án.
+
+## 11. Kiểm thử
 
 Không có Playwright/test tự động cho phần này trong phạm vi lần port đầu (khác `run-backend.ps1`/lib PowerShell vốn có Pester) — xác minh bằng tay trên Chrome/Edge/Cốc Cốc thật, tối thiểu các kịch bản:
 - 1 site bình thường (không cần Referer đặc biệt) — dịch được y hệt userscript cũ.
@@ -101,8 +124,9 @@ Không có Playwright/test tự động cho phần này trong phạm vi lần po
 - Alt+D, Alt+T, bấm icon toolbar — đều kích hoạt/tắt đúng như mong đợi.
 - F5 lại trang — cache hit đúng (không gọi lại backend cho ảnh đã dịch).
 - Tắt Docker — lỗi thân thiện, không treo trang, không lỗi im lặng qua message-passing.
+- 1 site có CSP nghiêm ngặt (vd 1 trang ngân hàng/Google) — xác nhận `chrome.runtime.sendMessage` từ content-script vẫn hoạt động, kiểm chứng giả định ở mục 10.
 
-## 11. Cấu trúc file thêm vào repo
+## 12. Cấu trúc file thêm vào repo
 
 ```
 manga/
