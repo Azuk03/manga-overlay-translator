@@ -32,11 +32,16 @@ async function downloadImage(url, refererUrl) {
   }
 
   // Fallback: backend tu tai kem Referer (xem patches/main.py, Task 1).
-  const relayRes = await fetch(`${BACKEND_API}/fetch-image`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, referer: refererUrl }),
-  });
+  let relayRes;
+  try {
+    relayRes = await fetch(`${BACKEND_API}/fetch-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, referer: refererUrl }),
+    });
+  } catch (err) {
+    throw new Error('Khong goi duoc backend de relay anh (backend chua bat?): ' + url);
+  }
   if (!relayRes.ok) {
     const detail = await relayRes.text();
     throw new Error(`CDN tra ve khong phai anh, ca fetch thang lan relay qua backend deu that bai: ${detail}`);
@@ -46,6 +51,7 @@ async function downloadImage(url, refererUrl) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PING') {
+    console.log('[MOT-BG] Nhan PING tu content-script, tab:', sender.tab && sender.tab.url);
     sendResponse({ type: 'PONG' });
     return true;
   }
