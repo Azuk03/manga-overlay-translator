@@ -8,3 +8,8 @@ COPY patches/to_json.py /app/server/to_json.py
 # gpt_config chi nhan DUONG DAN file tren server (OmegaConf.load), khong
 # nhan noi dung YAML truc tiep qua API - xem README.md.
 COPY patches/gpt_config-vi.yaml /app/gpt_config-vi.yaml
+
+# Them route /fetch-image: extension khong tu dat duoc header Referer trong
+# Manifest V3 (xem docs/superpowers/specs/2026-07-21-browser-extension-port-design.md
+# muc 2/6) - route nay de backend tu tai anh ho kem Referer dung.
+COPY patches/main.py /app/server/main.py
