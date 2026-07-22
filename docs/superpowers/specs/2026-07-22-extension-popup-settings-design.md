@@ -13,7 +13,7 @@ Extension Manifest V3 (`extension/`, đã merge vào `main`) hiện không có p
 2. Kích hoạt dịch trang đang xem (thay thế cơ chế "bấm icon = dịch ngay" cũ, vì thêm popup sẽ chiếm quyền click icon — xem mục 3).
 
 **Ngoài phạm vi (không làm):**
-- Ô nhập API key (lý do ở trên).
+- **Ô nhập API key.** Không chỉ vì backend không nhận key qua HTTP (lý do kỹ thuật ở trên) — mà vì popup này **không giải quyết được** vấn đề "người dùng ít rành kỹ thuật nhập key thế nào" dù có ô nhập hay không, một khi backend vẫn đọc key từ `.env` trên đĩa (browser extension không có quyền ghi file hệ thống). Vấn đề này đã có lời giải sẵn ở dự án `setup.bat`/`setup.ps1` (đang tạm dừng) — hộp thoại WinForms `Show-ApiKeyPrompt` đã tự ghi key vào `.env` giúp người dùng. Việc cần làm là **sửa lại bước cuối của installer đó để trỏ sang "Load unpacked" extension thay vì Tampermonkey**, không phải mở rộng popup này. Đã thống nhất: làm popup xong trước, quay lại sửa installer ở 1 đợt riêng sau.
 - Cấu hình ngôn ngữ đích, chọn translator engine, hay bất kỳ hằng số CFG nào khác ngoài URL backend — người dùng đã xác nhận chỉ cần URL backend ở lần này.
 - Hiển thị trạng thái backend online/offline tự động khi mở popup — thay vào đó dùng nút "Test kết nối" bấm thủ công (xem mục 5).
 - Build tool/TypeScript/framework — giữ JS thuần như phần extension đã có.
