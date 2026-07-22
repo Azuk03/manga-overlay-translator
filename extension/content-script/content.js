@@ -634,7 +634,13 @@
   // trang nen khong can ham tien ich rieng nhu Tampermonkey.
   const styleEl = document.createElement('style');
   styleEl.textContent = `
-    .mot-layer { position: absolute; pointer-events: none; }
+    // z-index toi da: nhieu trang (vd webtoons.com) dat cac the wrapper cua
+    // <img> trong 1 stacking context rieng co z-index (vd .cont_box z-index:
+    // 10) - .mot-layer la con truc tiep cua <body> nen neu khong co z-index
+    // rieng se mac dinh thua (auto ~ 0 < 10), bi anh goc de len du duoc them
+    // vao DOM sau (xac nhan thuc te qua elementFromPoint() tra ve <img> thay
+    // vi overlay tren webtoons.com - xem dieu tra ngay 2026-07-22).
+    .mot-layer { position: absolute; pointer-events: none; z-index: 2147483647; }
 
     .mot-bg {
       position: absolute;
