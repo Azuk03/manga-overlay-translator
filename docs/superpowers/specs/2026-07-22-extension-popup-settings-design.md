@@ -15,7 +15,7 @@ Extension Manifest V3 (`extension/`, đã merge vào `main`) hiện không có p
 
 **Ngoài phạm vi (không làm):**
 - **Ô nhập API key.** Không chỉ vì backend không nhận key qua HTTP (lý do kỹ thuật ở trên) — mà vì popup này **không giải quyết được** vấn đề "người dùng ít rành kỹ thuật nhập key thế nào" dù có ô nhập hay không, một khi backend vẫn đọc key từ `.env` trên đĩa (browser extension không có quyền ghi file hệ thống). Vấn đề này đã có lời giải sẵn ở dự án `setup.bat`/`setup.ps1` (đang tạm dừng) — hộp thoại WinForms `Show-ApiKeyPrompt` đã tự ghi key vào `.env` giúp người dùng. Việc cần làm là **sửa lại bước cuối của installer đó để trỏ sang "Load unpacked" extension thay vì Tampermonkey**, không phải mở rộng popup này. Đã thống nhất: làm popup xong trước, quay lại sửa installer ở 1 đợt riêng sau.
-- **Chọn translator engine** (`CFG.TRANSLATOR`, hiện cứng `'chatgpt'`) — backend hỗ trợ nhiều engine khác (Google, DeepL, Youdao, Baidu, model offline...) nhưng dự án chỉ test/dùng `chatgpt` (đi kèm prompt tuỳ chỉnh riêng), đổi engine ngoài phạm vi lần này.
+- **Chọn translator engine** (`CFG.TRANSLATOR`, hiện cứng `'chatgpt'`) — xem mục 12 để biết lý do chi tiết (đã tra thật danh sách 25 engine backend hỗ trợ lúc brainstorm, phần lớn không dùng được với cấu hình `.env` hiện tại).
 - Bất kỳ hằng số CFG nào khác ngoài URL backend + ngôn ngữ đích (vd `INPAINTER`, `INPAINTING_SIZE`, các hằng số tinh chỉnh hiệu năng/render) — người dùng đã xác nhận chỉ cần 2 mục này.
 - Hiển thị trạng thái backend online/offline tự động khi mở popup — thay vào đó dùng nút "Test kết nối" bấm thủ công (xem mục 5a).
 - Build tool/TypeScript/framework — giữ JS thuần như phần extension đã có.
@@ -116,7 +116,7 @@ async function getTargetLang() {
 }
 ```
 
-**Sửa `ApiAdapter.translateImage()`** — hiện đang xây `config.translator` dùng thẳng `CFG.TARGET_LANG`/`CFG.GPT_CONFIG_PATH` cố định; đổi thành đọc `targetLang` động, và **chỉ gửi `gpt_config` khi `targetLang === 'VIN'`** (đã thống nhất mục 5b — tránh prompt La-tinh hoá tiếng Việt lẫn vào bản dịch ngôn ngữ khác):
+**Sửa `ApiAdapter.translateImage()`** — hiện đang xây `config.translator` dùng thẳng `CFG.TARGET_LANG`/`CFG.GPT_CONFIG_PATH` cố định; đổi thành đọc `targetLang` động, và **chỉ gửi `gpt_config` khi `targetLang === 'VIN'`**:
 ```javascript
 const targetLang = await getTargetLang();
 const translatorConfig = {
@@ -128,6 +128,7 @@ if (targetLang === 'VIN') {
 }
 // dung translatorConfig thay cho object translator cu trong body gui di
 ```
+**Lưu ý về bản chất điều kiện này (đã bàn kỹ lúc brainstorm, xem mục 12):** `gpt_config` thực ra là tham số riêng của engine `chatgpt` (chỉ GPT mới hiểu prompt tuỳ chỉnh này), không phải riêng của ngôn ngữ Việt — điều kiện `targetLang === 'VIN'` ở trên **chỉ đúng vì `CFG.TRANSLATOR` hiện đang cố định là `'chatgpt'`** (chưa cho chọn engine ở đợt này, xem mục 12). Nếu sau này thêm chọn engine, điều kiện đúng bản chất phải là `translator === 'chatgpt'` (kết hợp thêm điều kiện ngôn ngữ nếu muốn), không phải chỉ dựa vào ngôn ngữ như hiện tại — đừng sao chép nguyên văn điều kiện này sang lúc đó mà không xem lại.
 
 **Sửa cache key (`Cache._key`) — phát hiện quan trọng lúc brainstorm:** cache hiện tại (`mot_cache_v${CFG.CACHE_VERSION}_${hash}`) chỉ tính theo **bytes ảnh gốc** (`Cache.hashBlob(blob)`), không tính theo ngôn ngữ đích. Vì ngôn ngữ đích giờ đổi được ngay trong lúc dùng (không cần sửa code/rebuild như trước — lúc đó đổi `CFG.TARGET_LANG` bắt buộc đi kèm bump `CACHE_VERSION` thủ công), nếu không sửa key cache: dịch 1 ảnh ra tiếng Việt (cache lại), đổi ngôn ngữ đích sang tiếng Anh, dịch lại đúng ảnh đó → nhận nhầm **kết quả tiếng Việt cũ** từ cache thay vì gọi lại backend. Sửa: thêm `targetLang` vào key:
 ```javascript
@@ -174,3 +175,13 @@ manga/extension/
     ├── popup.html              # MOI - URL backend, dropdown ngon ngu, nut dich/test
     └── popup.js                # MOI
 ```
+
+## 12. Vì sao KHÔNG thêm chọn translator engine (đã tra thật lúc brainstorm)
+
+Backend hỗ trợ 25 engine (`$defs.Translator` trong `fixtures/config-info.json`): `youdao`, `baidu`, `deepl`, `papago`, `caiyun`, `chatgpt`, `chatgpt_2stage`, `none`, `original`, `sakura`, `deepseek`, `groq`, `gemini`, `gemini_2stage`, `custom_openai`, `offline`, `nllb`, `nllb_big`, `sugoi`, `jparacrawl`, `jparacrawl_big`, `m2m100`, `m2m100_big`, `mbart50`, `qwen2`, `qwen2_big`. Chia 3 nhóm:
+
+1. **Cần API key riêng, không phải OpenAI:** `deepl`, `papago`, `youdao`, `baidu`, `caiyun`, `deepseek`, `groq`, `gemini`, `custom_openai`. `.env`/`setup.bat` hiện tại **chỉ cấu hình `OPENAI_API_KEY`** — chọn engine nhóm này sẽ lỗi ngay vì thiếu key tương ứng.
+2. **Model chạy offline, cần tải về máy:** `nllb(_big)`, `sugoi`, `jparacrawl(_big)`, `m2m100(_big)`, `mbart50`, `qwen2(_big)`. Docker image hiện tại không đóng gói sẵn các model này — chọn vào sẽ lỗi "không tìm thấy model".
+3. **Thực sự dùng được ngay:** chỉ `chatgpt` (dùng đúng `OPENAI_API_KEY` đã có). `chatgpt_2stage` có thể cũng dùng được (chưa test) nhưng không chắc chắn.
+
+Vì 22/25 lựa chọn sẽ lỗi ngay nếu chọn vào (không có key/model tương ứng), và bản thân installer/`.env` cũng chưa hỗ trợ cấu hình cho nhóm 1/2, việc thêm dropdown chọn engine lúc này chỉ tạo ra 1 danh sách phần lớn "bấm vào là lỗi" — không phục vụ mục tiêu "hoàn thiện cho người dùng khác dùng". **Quyết định: hoãn lại, để 1 đợt riêng sau khi thực sự có nhu cầu/hỗ trợ thêm key hoặc model khác.** `CFG.TRANSLATOR` giữ nguyên cố định `'chatgpt'`.
