@@ -1,6 +1,14 @@
 console.log('[MOT-BG] Service worker da khoi dong.');
 
-const BACKEND_API = 'http://127.0.0.1:5003';
+const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5003';
+
+// Doc URL backend tu chrome.storage.local moi lan goi (khong cache vao bien
+// co dinh) de doi URL trong popup (Task 4) co tac dung ngay lap tuc, khong
+// can cho service worker khoi dong lai (xem spec muc 4).
+async function getBackendUrl() {
+  const result = await chrome.storage.local.get('mot_backend_url');
+  return result.mot_backend_url || DEFAULT_BACKEND_URL;
+}
 
 // Chuyen ArrayBuffer sang chuoi base64, chia nho theo chunk de tranh tran
 // call stack cua String.fromCharCode.apply() tren anh lon (anh manga co the
@@ -51,7 +59,7 @@ async function downloadImage(url, refererUrl) {
   // Fallback: backend tu tai kem Referer (xem patches/main.py, Task 1).
   let relayRes;
   try {
-    relayRes = await fetch(`${BACKEND_API}/fetch-image`, {
+    relayRes = await fetch(`${await getBackendUrl()}/fetch-image`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, referer: refererUrl }),
@@ -120,7 +128,7 @@ async function translate(body) {
   const timeoutId = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
   let res;
   try {
-    res = await fetch(`${BACKEND_API}/translate/json/stream`, {
+    res = await fetch(`${await getBackendUrl()}/translate/json/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
@@ -162,13 +170,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
-});
-
-chrome.action.onClicked.addListener((tab) => {
-  if (!tab.id) return;
-  chrome.tabs.sendMessage(tab.id, { type: 'TRIGGER_TRANSLATE' }, () => {
-    if (chrome.runtime.lastError) {
-      console.log('[MOT-BG] Khong gui duoc TRIGGER_TRANSLATE (content-script chua nap?):', chrome.runtime.lastError.message);
-    }
-  });
 });
