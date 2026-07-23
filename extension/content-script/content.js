@@ -2,7 +2,6 @@
   'use strict';
 
   const CFG = {
-    TRANSLATOR: 'chatgpt', // da xac nhan hoat dong o Giai doan B
     // gpt_config chi nhan DUONG DAN file tren SERVER (khong nhan noi dung
     // YAML truc tiep) - file nay da duoc dong goi vao image da va, xem
     // Dockerfile + patches/gpt_config-vi.yaml.
@@ -111,21 +110,20 @@
       }
       return 'fnv' + h.toString(16) + '_' + u8.length;
     },
-    // targetLang duoc dua vao key vi ngon ngu dich gio doi duoc ngay luc dung
-    // (qua popup, Task 5) - khong the con ngam dinh "1 ngon ngu co dinh" nhu
-    // truoc (luc do doi CFG.TARGET_LANG bat buoc di kem bump CACHE_VERSION
-    // thu cong). Thieu targetLang trong key se tra nham ket qua ngon ngu cu
-    // tu cache (xem spec 2026-07-22-extension-popup-settings-design.md muc 8).
-    _key(hash, targetLang) {
-      return `mot_cache_v${CFG.CACHE_VERSION}_${targetLang}_${hash}`;
+    // targetLang/engine duoc dua vao key vi ca 2 gio doi duoc ngay luc dung
+    // (qua popup) - thieu 1 trong 2 trong key se tra nham ket qua ngon
+    // ngu/engine cu tu cache (xem spec 2026-07-22-extension-popup-settings-design.md
+    // muc 8 va 2026-07-23-translator-engine-picker-design.md muc 6).
+    _key(hash, targetLang, engine) {
+      return `mot_cache_v${CFG.CACHE_VERSION}_${engine}_${targetLang}_${hash}`;
     },
-    async get(hash, targetLang) {
-      const key = this._key(hash, targetLang);
+    async get(hash, targetLang, engine) {
+      const key = this._key(hash, targetLang, engine);
       const result = await chrome.storage.local.get(key);
       return result[key] ? JSON.parse(result[key]) : null;
     },
-    async set(hash, targetLang, value) {
-      const key = this._key(hash, targetLang);
+    async set(hash, targetLang, engine, value) {
+      const key = this._key(hash, targetLang, engine);
       await chrome.storage.local.set({ [key]: JSON.stringify(value) });
     },
   };
@@ -276,6 +274,16 @@
     return result.mot_target_lang || DEFAULT_TARGET_LANG;
   }
 
+  const DEFAULT_TRANSLATOR_ENGINE = 'chatgpt';
+
+  // Doc engine dich tu chrome.storage.local moi lan goi (khong cache vao
+  // hang so co dinh) de doi engine trong popup co tac dung ngay lap tuc cho
+  // lan dich tiep theo (xem spec 2026-07-23-translator-engine-picker-design.md).
+  async function getTranslatorEngine() {
+    const result = await chrome.storage.local.get('mot_translator_engine');
+    return result.mot_translator_engine || DEFAULT_TRANSLATOR_ENGINE;
+  }
+
   // ===== ApiAdapter — NOI DUY NHAT BIET SCHEMA BACKEND =====
   const ApiAdapter = {
     async downloadImageBlob(img) {
@@ -307,16 +315,17 @@
     async translateImage(blob) {
       const dataUrl = await this.blobToDataURL(blob);
       const targetLang = await getTargetLang();
-      // gpt_config la tham so rieng cua engine chatgpt (prompt La-tinh hoa
-      // ten rieng), khong phai rieng cua ngon ngu Viet - dieu kien duoi day
-      // chi dung vi CFG.TRANSLATOR dang co dinh 'chatgpt' (chua cho chon
-      // engine, xem spec muc 12). Neu sau nay them chon engine, sua lai dieu
-      // kien nay thanh dua vao CFG.TRANSLATOR thay vi targetLang.
+      const engine = await getTranslatorEngine();
       const translatorConfig = {
-        translator: CFG.TRANSLATOR,
+        translator: engine,
         target_lang: targetLang,
       };
-      if (targetLang === 'VIN') {
+      // gpt_config (prompt La-tinh hoa ten rieng) chi co tac dung voi engine
+      // ho GPT (chatgpt/gemini - ca 2 deu ke thua CommonGPTTranslator ben
+      // backend, doc chung 1 co che prompt qua field gpt_config), KHONG co
+      // tac dung voi deepl (kien truc khac han, khong doc gpt_config - xem
+      // spec 2026-07-23-translator-engine-picker-design.md muc 3/6).
+      if (targetLang === 'VIN' && engine !== 'deepl') {
         translatorConfig.gpt_config = CFG.GPT_CONFIG_PATH;
       }
       const body = JSON.stringify({
@@ -711,16 +720,17 @@
       const blob = await ApiAdapter.downloadImageBlob(img);
       const hash = await Cache.hashBlob(blob);
       const targetLang = await getTargetLang();
-      let result = await Cache.get(hash, targetLang);
+      const engine = await getTranslatorEngine();
+      let result = await Cache.get(hash, targetLang, engine);
       if (result) {
-        log('Cache HIT:', hash, targetLang, img.currentSrc || img.src);
+        log('Cache HIT:', hash, targetLang, engine, img.currentSrc || img.src);
       } else {
-        log('Cache MISS, goi backend:', hash, targetLang, img.currentSrc || img.src);
+        log('Cache MISS, goi backend:', hash, targetLang, engine, img.currentSrc || img.src);
         result =
           img.naturalHeight > CFG.TILE_MAX_H
             ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight)
             : await ApiAdapter.translateImage(blob);
-        await Cache.set(hash, targetLang, result);
+        await Cache.set(hash, targetLang, engine, result);
       }
       const busyFlags = await computeRegionComplexity(result.regions);
       result.regions.forEach((r, i) => {
