@@ -45,6 +45,12 @@
     // trinh duyet cung ton tai, khong chi gioi han chieu cao (xem spec 5.7).
     TILE_MAX_H: 4000,
     TILE_OVERLAP: 200,
+    // Ghep bien anh lien ke: muon them BOUNDARY_BORROW_HEIGHT px dau cua anh
+    // KE TIEP truoc khi gui detect, de bong bong/cau van bi site tu cat
+    // ngang giua 2 file anh van duoc nhin thay du. 500px du cho hau het bong
+    // bong thuc te da quan sat (cao nhat ~300-400px). Xem spec
+    // 2026-07-23-cross-image-boundary-stitching-design.md.
+    BOUNDARY_BORROW_HEIGHT: 500,
     // AI inpaint (lama_mpe) xoa chu rat tot tren nen trang phang (bong
     // thoai thuong), nhung de lai vet mo/nhoe ro ret tren nen nhieu mau/
     // chi tiet (toc, gradient, net ve day) - gioi han cua chinh model, da
@@ -344,7 +350,7 @@
       return { regions: res.regions };
     },
 
-    async translateImageTiled(blob, naturalW, naturalH) {
+    async translateImageTiled(blob, naturalW, naturalH, img) {
       const tiles = await sliceImageIntoTiles(blob, naturalW, naturalH);
       log(
         'Webtoon dai (' + naturalH + 'px > TILE_MAX_H ' + CFG.TILE_MAX_H + 'px) - cat thanh',
@@ -354,8 +360,13 @@
         'px.'
       );
       const allRegions = [];
-      for (const tile of tiles) {
-        const result = await this.translateImage(tile.blob);
+      for (let i = 0; i < tiles.length; i++) {
+        const tile = tiles[i];
+        // Chi lat CUOI CUNG moi thuc su giap ranh gioi voi anh ke tiep tren
+        // trang - cac lat truoc da co TILE_OVERLAP xu ly rieng (xem spec
+        // 2026-07-23-cross-image-boundary-stitching-design.md muc 8).
+        const tileBlob = i === tiles.length - 1 ? await buildStitchedBlob(img, tile.blob) : tile.blob;
+        const result = await this.translateImage(tileBlob);
         for (const r of result.regions) {
           allRegions.push({ ...r, y: r.y + tile.yOffset });
         }
@@ -707,6 +718,76 @@
 
   console.log('[MOT] OverlayRenderer/CSS da nap xong (Task 8).');
 
+  // ===== Ghep bien anh lien ke =====
+  // Tim anh "ke tiep" theo toa do Y TUYET DOI tren trang (khong dua vao cau
+  // truc DOM - moi site long <img> khac nhau). Dung de muon 1 dai bien phia
+  // tren cua no, giup detector nhin thay tron ven noi dung bi site cat ngang
+  // giua 2 file anh (xem spec 2026-07-23-cross-image-boundary-stitching-design.md).
+  function findNextSiblingImage(img) {
+    const myTop = img.getBoundingClientRect().top + window.scrollY;
+    let best = null;
+    let bestTop = Infinity;
+    for (const candidate of registeredImages) {
+      if (candidate === img) continue;
+      if (!candidate.naturalWidth) continue; // chua load xong, bo qua
+      const top = candidate.getBoundingClientRect().top + window.scrollY;
+      if (top > myTop && top < bestTop) {
+        best = candidate;
+        bestTop = top;
+      }
+    }
+    return best;
+  }
+
+  // Lay BOUNDARY_BORROW_HEIGHT px dau cua anh ke tiep. PHAI di qua
+  // ApiAdapter.downloadImageBlob() (khong doc truc tiep pixel qua canvas tu
+  // <img> song) - anh CDN cross-origin (khong co CORS header) se lam
+  // TAINTED canvas ngay khi ve, giong ly do downloadImageBlob() da phai
+  // relay qua background.js cho moi URL khong phai blob:/data:. Sau khi co
+  // Blob thuan (khong con la <img> song), cat bang canvas moi an toan.
+  async function getStripFromNextImage(nextImg, stripHeightPx) {
+    const fullBlob = await ApiAdapter.downloadImageBlob(nextImg);
+    const bitmap = await createImageBitmap(fullBlob);
+    const h = Math.min(stripHeightPx, bitmap.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0, bitmap.width, h, 0, 0, bitmap.width, h);
+    bitmap.close?.();
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  }
+
+  // Ghep canvas anh hien tai + dai bien cua anh ke tiep (neu co/tai duoc).
+  // Khong co anh ke tiep, hoac tai loi (mang, site chan...) -> tra ve blob
+  // GOC khong doi, khong chan tien do dich anh hien tai.
+  async function buildStitchedBlob(img, blob) {
+    const nextImg = findNextSiblingImage(img);
+    if (!nextImg) return blob;
+
+    let stripBlob;
+    try {
+      stripBlob = await getStripFromNextImage(nextImg, CFG.BOUNDARY_BORROW_HEIGHT);
+    } catch (err) {
+      return blob;
+    }
+
+    const [currentBitmap, stripBitmap] = await Promise.all([
+      createImageBitmap(blob),
+      createImageBitmap(stripBlob),
+    ]);
+    const canvas = document.createElement('canvas');
+    canvas.width = currentBitmap.width;
+    canvas.height = currentBitmap.height + stripBitmap.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(currentBitmap, 0, 0);
+    ctx.drawImage(stripBitmap, 0, currentBitmap.height);
+    currentBitmap.close?.();
+    stripBitmap.close?.();
+
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  }
+
   // ===== Job — tai + dich + ve overlay cho 1 anh (dung chung cho Queue) =====
   const state = { total: 0, done: 0, errors: 0 };
   // Luu loi chi tiet de nguoi dung bam nut xem lai (C4: "Loi - click xem"
@@ -728,8 +809,8 @@
         log('Cache MISS, goi backend:', hash, targetLang, engine, img.currentSrc || img.src);
         result =
           img.naturalHeight > CFG.TILE_MAX_H
-            ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight)
-            : await ApiAdapter.translateImage(blob);
+            ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img)
+            : await ApiAdapter.translateImage(await buildStitchedBlob(img, blob));
         await Cache.set(hash, targetLang, engine, result);
       }
       const busyFlags = await computeRegionComplexity(result.regions);
