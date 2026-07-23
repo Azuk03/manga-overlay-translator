@@ -2,10 +2,6 @@
   'use strict';
 
   const CFG = {
-    // Endpoint dung /translate/json/stream, KHONG PHAI /translate/json
-    // (endpoint khong-stream bi crash 500 - xem README.md muc "Bug da tim ra + va").
-    API: 'http://127.0.0.1:5003/translate/json/stream',
-    TARGET_LANG: 'VIN',
     TRANSLATOR: 'chatgpt', // da xac nhan hoat dong o Giai doan B
     // gpt_config chi nhan DUONG DAN file tren SERVER (khong nhan noi dung
     // YAML truc tiep) - file nay da duoc dong goi vao image da va, xem
@@ -115,16 +111,21 @@
       }
       return 'fnv' + h.toString(16) + '_' + u8.length;
     },
-    _key(hash) {
-      return `mot_cache_v${CFG.CACHE_VERSION}_${hash}`;
+    // targetLang duoc dua vao key vi ngon ngu dich gio doi duoc ngay luc dung
+    // (qua popup, Task 5) - khong the con ngam dinh "1 ngon ngu co dinh" nhu
+    // truoc (luc do doi CFG.TARGET_LANG bat buoc di kem bump CACHE_VERSION
+    // thu cong). Thieu targetLang trong key se tra nham ket qua ngon ngu cu
+    // tu cache (xem spec 2026-07-22-extension-popup-settings-design.md muc 8).
+    _key(hash, targetLang) {
+      return `mot_cache_v${CFG.CACHE_VERSION}_${targetLang}_${hash}`;
     },
-    async get(hash) {
-      const key = this._key(hash);
+    async get(hash, targetLang) {
+      const key = this._key(hash, targetLang);
       const result = await chrome.storage.local.get(key);
       return result[key] ? JSON.parse(result[key]) : null;
     },
-    async set(hash, value) {
-      const key = this._key(hash);
+    async set(hash, targetLang, value) {
+      const key = this._key(hash, targetLang);
       await chrome.storage.local.set({ [key]: JSON.stringify(value) });
     },
   };
@@ -265,6 +266,16 @@
     });
   }
 
+  const DEFAULT_TARGET_LANG = 'VIN';
+
+  // Doc ngon ngu dich tu chrome.storage.local moi lan goi (khong cache vao
+  // hang so co dinh) de doi ngon ngu trong popup (Task 5) co tac dung ngay
+  // lap tuc cho lan dich tiep theo.
+  async function getTargetLang() {
+    const result = await chrome.storage.local.get('mot_target_lang');
+    return result.mot_target_lang || DEFAULT_TARGET_LANG;
+  }
+
   // ===== ApiAdapter — NOI DUY NHAT BIET SCHEMA BACKEND =====
   const ApiAdapter = {
     async downloadImageBlob(img) {
@@ -295,14 +306,23 @@
 
     async translateImage(blob) {
       const dataUrl = await this.blobToDataURL(blob);
+      const targetLang = await getTargetLang();
+      // gpt_config la tham so rieng cua engine chatgpt (prompt La-tinh hoa
+      // ten rieng), khong phai rieng cua ngon ngu Viet - dieu kien duoi day
+      // chi dung vi CFG.TRANSLATOR dang co dinh 'chatgpt' (chua cho chon
+      // engine, xem spec muc 12). Neu sau nay them chon engine, sua lai dieu
+      // kien nay thanh dua vao CFG.TRANSLATOR thay vi targetLang.
+      const translatorConfig = {
+        translator: CFG.TRANSLATOR,
+        target_lang: targetLang,
+      };
+      if (targetLang === 'VIN') {
+        translatorConfig.gpt_config = CFG.GPT_CONFIG_PATH;
+      }
       const body = JSON.stringify({
         image: dataUrl,
         config: {
-          translator: {
-            translator: CFG.TRANSLATOR,
-            target_lang: CFG.TARGET_LANG,
-            gpt_config: CFG.GPT_CONFIG_PATH,
-          },
+          translator: translatorConfig,
           render: { renderer: 'none' },
           inpainter: { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE },
         },
@@ -690,16 +710,17 @@
     try {
       const blob = await ApiAdapter.downloadImageBlob(img);
       const hash = await Cache.hashBlob(blob);
-      let result = await Cache.get(hash); // THEM await - Cache gio la async (Task 6)
+      const targetLang = await getTargetLang();
+      let result = await Cache.get(hash, targetLang);
       if (result) {
-        log('Cache HIT:', hash, img.currentSrc || img.src);
+        log('Cache HIT:', hash, targetLang, img.currentSrc || img.src);
       } else {
-        log('Cache MISS, goi backend:', hash, img.currentSrc || img.src);
+        log('Cache MISS, goi backend:', hash, targetLang, img.currentSrc || img.src);
         result =
           img.naturalHeight > CFG.TILE_MAX_H
             ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight)
             : await ApiAdapter.translateImage(blob);
-        await Cache.set(hash, result); // THEM await - Cache gio la async (Task 6)
+        await Cache.set(hash, targetLang, result);
       }
       const busyFlags = await computeRegionComplexity(result.regions);
       result.regions.forEach((r, i) => {
