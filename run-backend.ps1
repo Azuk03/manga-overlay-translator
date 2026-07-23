@@ -50,6 +50,15 @@ if ($vars.ContainsKey("OPENAI_MODEL")) {
 if ($vars.ContainsKey("OPENAI_API_BASE")) {
     $dockerArgs += "-e"; $dockerArgs += "OPENAI_API_BASE=$($vars['OPENAI_API_BASE'])"
 }
+if ($vars.ContainsKey("GEMINI_API_KEY")) {
+    $dockerArgs += "-e"; $dockerArgs += "GEMINI_API_KEY=$($vars['GEMINI_API_KEY'])"
+}
+if ($vars.ContainsKey("GEMINI_MODEL")) {
+    $dockerArgs += "-e"; $dockerArgs += "GEMINI_MODEL=$($vars['GEMINI_MODEL'])"
+}
+if ($vars.ContainsKey("DEEPL_AUTH_KEY")) {
+    $dockerArgs += "-e"; $dockerArgs += "DEEPL_AUTH_KEY=$($vars['DEEPL_AUTH_KEY'])"
+}
 
 $dockerArgs += @(
     # Dung image da va bug to_json.py (xem Dockerfile + patches/to_json.py).
