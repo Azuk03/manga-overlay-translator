@@ -772,6 +772,8 @@
       return blob;
     }
 
+    if (!stripBlob) return blob;
+
     const [currentBitmap, stripBitmap] = await Promise.all([
       createImageBitmap(blob),
       createImageBitmap(stripBlob),
