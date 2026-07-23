@@ -27,7 +27,9 @@ chrome.storage.local.get('mot_backend_url', (result) => {
 });
 
 document.getElementById('btn-save-url').addEventListener('click', () => {
-  const value = urlInput.value.trim();
+  // Cat dau '/' cuoi - spec muc 4 yeu cau URL luu khong co dau '/' o cuoi
+  // (tranh double-slash khi background.js noi them "/translate/json/stream").
+  const value = urlInput.value.trim().replace(/\/+$/, '');
   if (!value) return;
   chrome.storage.local.set({ mot_backend_url: value }, () => {
     document.getElementById('connection-status').textContent = 'Da luu.';
