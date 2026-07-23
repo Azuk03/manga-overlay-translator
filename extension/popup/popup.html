@@ -53,8 +53,16 @@
     <option value="JPN">日本語 (Japanese)</option>
     <option value="KOR">한국어 (Korean)</option>
   </select>
+
+  <label for="translator-engine">Translator engine:</label>
+  <select id="translator-engine" style="width: 100%; margin: 4px 0 6px 0;">
+    <option value="chatgpt">ChatGPT (OpenAI)</option>
+    <option value="gemini">Gemini (Google)</option>
+    <option value="deepl">DeepL</option>
+  </select>
+
   <div id="lang-warning" class="status" style="display: none; color: #b45309;">
-    ⚠️ Prompt La-tinh hoá tên riêng hiện chỉ tối ưu cho tiếng Việt — ngôn ngữ khác dùng prompt mặc định của backend, có thể dịch chưa tối ưu.
+    ⚠️ Prompt La-tinh hoá tên riêng chỉ áp dụng cho ChatGPT/Gemini + tiếng Việt — tổ hợp hiện tại dùng prompt mặc định của backend.
   </div>
 
   <hr>

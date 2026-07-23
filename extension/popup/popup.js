@@ -65,9 +65,14 @@ document.getElementById('btn-test-connection').addEventListener('click', async (
 const DEFAULT_TARGET_LANG = 'VIN';
 const langSelect = document.getElementById('target-lang');
 const langWarning = document.getElementById('lang-warning');
+const engineSelect = document.getElementById('translator-engine');
 
+// usesGptConfig phai khop CHINH XAC dieu kien gan gpt_config ben
+// content.js (ApiAdapter.translateImage): targetLang === 'VIN' && engine
+// !== 'deepl' - xem spec 2026-07-23-translator-engine-picker-design.md muc 7.
 function updateLangWarning() {
-  langWarning.style.display = langSelect.value === 'VIN' ? 'none' : 'block';
+  const usesGptConfig = langSelect.value === 'VIN' && engineSelect.value !== 'deepl';
+  langWarning.style.display = usesGptConfig ? 'none' : 'block';
 }
 
 chrome.storage.local.get('mot_target_lang', (result) => {
@@ -77,5 +82,18 @@ chrome.storage.local.get('mot_target_lang', (result) => {
 
 langSelect.addEventListener('change', () => {
   chrome.storage.local.set({ mot_target_lang: langSelect.value });
+  updateLangWarning();
+});
+
+// ===== Khoi 6: Translator engine =====
+const DEFAULT_TRANSLATOR_ENGINE = 'chatgpt';
+
+chrome.storage.local.get('mot_translator_engine', (result) => {
+  engineSelect.value = result.mot_translator_engine || DEFAULT_TRANSLATOR_ENGINE;
+  updateLangWarning();
+});
+
+engineSelect.addEventListener('change', () => {
+  chrome.storage.local.set({ mot_translator_engine: engineSelect.value });
   updateLangWarning();
 });
