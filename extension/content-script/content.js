@@ -800,7 +800,7 @@
     const pageTop = rect.top + window.scrollY;
     const scale = rect.height / img.naturalHeight;
     return {
-      x: rect.left + region.x * scale,
+      x: rect.left + window.scrollX + region.x * scale,
       y: pageTop + region.y * scale,
       w: region.w * scale,
       h: region.h * scale,
