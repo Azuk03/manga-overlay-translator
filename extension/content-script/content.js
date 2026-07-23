@@ -917,9 +917,16 @@
 
   function init() {
     document.addEventListener('keydown', onKeyDown);
-    chrome.runtime.onMessage.addListener((message) => {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'TRIGGER_TRANSLATE') {
         onTriggerTranslate();
+        // BAT BUOC goi sendResponse() dong bo: neu khong, Chrome bao loi
+        // "The message port closed before a response was received." cho
+        // BEN GOI (popup.js, Task 3) du onTriggerTranslate() da chay thanh
+        // cong - loi nay chi lo ra khi co code THAT SU dung callback voi
+        // sendMessage (truoc popup, chua ai goi kem callback nen chua phat
+        // hien duoc).
+        sendResponse({ ok: true });
       }
     });
     watchImages();
