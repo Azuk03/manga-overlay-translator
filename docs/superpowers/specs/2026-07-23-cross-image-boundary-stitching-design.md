@@ -162,7 +162,7 @@ Vẫn hash theo blob ảnh GỐC (`Cache.hashBlob(blob)` trước khi ghép), kh
 
 - Thêm 1 lần tải + giải mã TRỌN ảnh kế tiếp (dù chỉ dùng 500px đầu) — chi phí tỉ lệ với kích thước đầy đủ của ảnh kế tiếp, không phải chỉ phần thực dùng.
 - Backend nhận ảnh cao hơn 500px — tăng nhẹ thời gian inpaint; ít ảnh hưởng bước detect vì detector đã resize về độ phân giải cố định `1280x2048` bất kể kích thước gốc.
-- Ảnh kế tiếp tải lỗi (mạng, site chặn) → bắt lỗi, bỏ qua ghép cho lần đó, không chặn tiến độ.
+- Ảnh kế tiếp tải lỗi (mạng, site chặn) → bắt lỗi, bỏ 1qua ghép cho lần đó, không chặn tiến độ.
 - Đã cân nhắc và **chấp nhận đánh đổi này có chủ đích** (xem hội thoại brainstorm): phương án heuristic phát hiện cắt ở mép để tránh tải thừa được cân nhắc nhưng loại bỏ vì không đáng tin cậy 100% (không phân biệt được viền bong bóng bị cắt với nét vẽ tranh bình thường khi bong bóng đè lên nền nhiều màu) và thêm 1 lớp tham số cần tinh chỉnh riêng. Ưu tiên đơn giản, đúng mọi trường hợp, chấp nhận chậm hơn đôi chút mỗi ảnh.
 
 ## 11. Kiểm thử (thủ công — dự án không có test tự động cho phần này)
