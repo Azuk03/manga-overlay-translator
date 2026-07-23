@@ -790,6 +790,32 @@
     return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   }
 
+  // Registry toan cuc: moi vung chu da duoc VE THAT SU (khong phai chi
+  // detect duoc) - luu toa do TUYET DOI tren trang, dung de tranh ve trung
+  // khi anh ke tiep tu phat hien lai dung noi dung da bi anh truoc muon.
+  const renderedPageBBoxes = [];
+
+  function toPageBBox(img, region) {
+    const rect = img.getBoundingClientRect();
+    const pageTop = rect.top + window.scrollY;
+    const scale = rect.height / img.naturalHeight;
+    return {
+      x: rect.left + region.x * scale,
+      y: pageTop + region.y * scale,
+      w: region.w * scale,
+      h: region.h * scale,
+    };
+  }
+
+  function isDuplicateOfRendered(img, region) {
+    const candidate = toPageBBox(img, region);
+    return renderedPageBBoxes.some((r) => iou(r, candidate) > 0.5);
+  }
+
+  function registerRenderedRegion(img, region) {
+    renderedPageBBoxes.push(toPageBBox(img, region));
+  }
+
   // ===== Job — tai + dich + ve overlay cho 1 anh (dung chung cho Queue) =====
   const state = { total: 0, done: 0, errors: 0 };
   // Luu loi chi tiet de nguoi dung bam nut xem lai (C4: "Loi - click xem"
@@ -815,6 +841,14 @@
             : await ApiAdapter.translateImage(await buildStitchedBlob(img, blob));
         await Cache.set(hash, targetLang, engine, result);
       }
+      // Loc bo vung chu da duoc anh TRUOC ve roi (qua ghep-bien muon dai
+      // tren cua anh nay) - tranh ve trung 2 lan cung 1 noi dung (xem spec
+      // 2026-07-23-cross-image-boundary-stitching-design.md muc 6).
+      result.regions = result.regions.filter((r) => {
+        if (isDuplicateOfRendered(img, r)) return false;
+        registerRenderedRegion(img, r);
+        return true;
+      });
       const busyFlags = await computeRegionComplexity(result.regions);
       result.regions.forEach((r, i) => {
         r.busy = busyFlags[i];
