@@ -35,27 +35,30 @@ function findNextSiblingImage(img) {
 
 Không tìm thấy ảnh kế tiếp (ảnh cuối trang, hoặc ảnh kế tiếp chưa load xong tại thời điểm này) → bỏ qua việc ghép, xử lý như hiện tại (không chặn/chờ đợi).
 
-## 3. Lấy dải biên của ảnh kế tiếp — ưu tiên đọc trực tiếp DOM, không tải mạng thêm
+## 3. Lấy dải biên của ảnh kế tiếp — PHẢI qua relay `downloadImageBlob`, không đọc trực tiếp DOM
 
-Vì `IntersectionObserver` (`PREFETCH_MARGIN`) khiến trình duyệt đã tải ảnh sắp cuộn tới **để hiển thị**, phần lớn trường hợp ảnh kế tiếp đã có sẵn pixel trong DOM lúc ảnh hiện tại được xử lý. Ưu tiên đọc trực tiếp (không tốn mạng), chỉ tải qua mạng (như `downloadImageBlob` đã có) khi ảnh kế tiếp thật sự chưa load xong tại DOM:
+**Sửa lại sau khi tự phát hiện sai lầm lúc viết plan:** ban đầu spec này định đọc trực tiếp pixel từ `<img>` kế tiếp qua canvas (tưởng nhầm là tránh được tải mạng thêm). Nhưng đọc lại code hiện có mới thấy: `imageElementToBlob()` (đọc pixel qua canvas) chỉ an toàn với ảnh `blob:`/`data:` URL — ảnh CDN cross-origin bình thường (mọi ảnh test thực tế trong dự án này đều thuộc loại này, vd `webtoon-phinf.pstatic.net`) sẽ làm **tainted canvas**, khiến `canvas.toBlob()` thất bại. Đây chính là lý do `ApiAdapter.downloadImageBlob()` hiện tại phải relay qua `background.js` (dùng `fetch()` ở tầng network, không đụng DOM/canvas) cho mọi URL không phải `blob:`/`data:`.
+
+**Giải quyết:** tái dùng đúng `ApiAdapter.downloadImageBlob(nextImg)` đã có (đã xử lý đúng mọi trường hợp URL) để tải TRỌN ảnh kế tiếp, rồi cắt lấy dải biên bằng canvas cục bộ — an toàn ở bước này vì lúc đó chỉ còn là 1 `Blob` thuần trong bộ nhớ (không còn là tham chiếu tới `<img>` cross-origin sống), không bị tainted:
 
 ```javascript
 async function getStripFromNextImage(nextImg, stripHeightPx) {
-  const w = nextImg.naturalWidth;
-  const h = Math.min(stripHeightPx, nextImg.naturalHeight);
+  const fullBlob = await ApiAdapter.downloadImageBlob(nextImg);
+  const bitmap = await createImageBitmap(fullBlob);
+  const h = Math.min(stripHeightPx, bitmap.height);
   const canvas = document.createElement('canvas');
-  canvas.width = w;
+  canvas.width = bitmap.width;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
-  // nextImg.complete && naturalWidth > 0 nghia la trinh duyet DA GIAI MA
-  // xong pixel that su - doc truc tiep qua <img> (giong imageElementToBlob),
-  // KHONG can tai mang rieng.
-  ctx.drawImage(nextImg, 0, 0, w, h, 0, 0, w, h);
+  ctx.drawImage(bitmap, 0, 0, bitmap.width, h, 0, 0, bitmap.width, h);
+  bitmap.close?.();
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }
 ```
 
-Nếu `nextImg.complete` là `false` (hiếm, ảnh kế tiếp chưa kịp load) — bỏ qua ghép cho lần xử lý này, không chờ đợi (best-effort, không làm chậm tốc độ chung).
+Không còn cần kiểm tra `nextImg.complete` — `downloadImageBlob()` tự tải qua mạng bất kể ảnh đã hiển thị trong DOM hay chưa, miễn `nextImg` đã có `src`/`currentSrc` thật (đảm bảo vì `findNextSiblingImage()` chỉ xét ảnh trong `registeredImages`, tức đã qua `ImageFinder.isCandidate()` — không phải placeholder `data:`). Nếu `downloadImageBlob()` ném lỗi (mạng lỗi, site chặn...) — bắt lỗi, bỏ qua ghép cho lần đó, không chặn tiến độ dịch ảnh hiện tại.
+
+**Hệ quả:** không còn "tối ưu đọc DOM miễn phí" — mọi lần ghép đều tốn 1 lần tải mạng thêm cho ảnh kế tiếp (xem lại mục 10).
 
 ## 4. Ghép canvas + gửi backend
 
@@ -68,8 +71,14 @@ async function buildStitchedBlob(img, blob) {
   const nextImg = findNextSiblingImage(img);
   if (!nextImg) return blob;
 
-  const stripBlob = await getStripFromNextImage(nextImg, CFG.BOUNDARY_BORROW_HEIGHT);
-  if (!stripBlob) return blob;
+  let stripBlob;
+  try {
+    stripBlob = await getStripFromNextImage(nextImg, CFG.BOUNDARY_BORROW_HEIGHT);
+  } catch (err) {
+    // Khong tai duoc anh ke tiep (loi mang, site chan...) - bo qua ghep,
+    // KHONG chan tien do dich anh hien tai.
+    return blob;
+  }
 
   const [currentBitmap, stripBitmap] = await Promise.all([
     createImageBitmap(blob),
@@ -149,9 +158,12 @@ Vẫn hash theo blob ảnh GỐC (`Cache.hashBlob(blob)` trước khi ghép), kh
 
 ## 10. Ảnh hưởng tốc độ
 
-- **Trường hợp thường (ảnh kế tiếp đã load sẵn trong DOM):** không tốn mạng thêm, chỉ thêm 1 lần vẽ canvas (rẻ) + backend nhận ảnh cao hơn 500px (tăng nhẹ thời gian inpaint, không đáng kể ở bước detect vì detector đã resize về độ phân giải cố định `1280x2048` bất kể kích thước gốc).
-- **Trường hợp hiếm (ảnh kế tiếp chưa load):** bỏ qua ghép cho lần đó, không có chi phí thêm, không chặn tốc độ.
-- Áp dụng cho mọi ảnh (không chỉ ảnh bị cắt) — chấp nhận đánh đổi nhỏ này để đổi lấy độ tin cậy, không cần heuristic phát hiện cắt riêng (đã cân nhắc và loại bỏ — heuristic không đáng tin cậy 100%, thêm 1 lớp phức tạp/tham số cần tinh chỉnh).
+**Cập nhật sau khi sửa mục 3:** không có cách nào đọc pixel ảnh kế tiếp miễn phí (canvas-tainting với ảnh CDN cross-origin) — mọi lần ghép đều tốn 1 lần tải mạng thêm qua `downloadImageBlob(nextImg)`, cho **mọi ảnh**, không chỉ ảnh bị cắt thật:
+
+- Thêm 1 lần tải + giải mã TRỌN ảnh kế tiếp (dù chỉ dùng 500px đầu) — chi phí tỉ lệ với kích thước đầy đủ của ảnh kế tiếp, không phải chỉ phần thực dùng.
+- Backend nhận ảnh cao hơn 500px — tăng nhẹ thời gian inpaint; ít ảnh hưởng bước detect vì detector đã resize về độ phân giải cố định `1280x2048` bất kể kích thước gốc.
+- Ảnh kế tiếp tải lỗi (mạng, site chặn) → bắt lỗi, bỏ qua ghép cho lần đó, không chặn tiến độ.
+- Đã cân nhắc và **chấp nhận đánh đổi này có chủ đích** (xem hội thoại brainstorm): phương án heuristic phát hiện cắt ở mép để tránh tải thừa được cân nhắc nhưng loại bỏ vì không đáng tin cậy 100% (không phân biệt được viền bong bóng bị cắt với nét vẽ tranh bình thường khi bong bóng đè lên nền nhiều màu) và thêm 1 lớp tham số cần tinh chỉnh riêng. Ưu tiên đơn giản, đúng mọi trường hợp, chấp nhận chậm hơn đôi chút mỗi ảnh.
 
 ## 11. Kiểm thử (thủ công — dự án không có test tự động cho phần này)
 
