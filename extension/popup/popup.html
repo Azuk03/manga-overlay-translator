@@ -44,6 +44,19 @@
   <button id="btn-test-connection">Test kết nối</button>
   <div id="connection-status" class="status"></div>
 
+  <label for="target-lang">Ngôn ngữ đích:</label>
+  <select id="target-lang" style="width: 100%; margin: 4px 0 6px 0;">
+    <option value="VIN">Tiếng Việt</option>
+    <option value="ENG">English</option>
+    <option value="CHS">中文简体 (Chinese Simplified)</option>
+    <option value="CHT">中文繁體 (Chinese Traditional)</option>
+    <option value="JPN">日本語 (Japanese)</option>
+    <option value="KOR">한국어 (Korean)</option>
+  </select>
+  <div id="lang-warning" class="status" style="display: none; color: #b45309;">
+    ⚠️ Prompt La-tinh hoá tên riêng hiện chỉ tối ưu cho tiếng Việt — ngôn ngữ khác dùng prompt mặc định của backend, có thể dịch chưa tối ưu.
+  </div>
+
   <hr>
 
   <script src="popup.js"></script>

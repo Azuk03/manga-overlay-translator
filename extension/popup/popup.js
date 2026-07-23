@@ -58,3 +58,22 @@ document.getElementById('btn-test-connection').addEventListener('click', async (
     statusEl.textContent = `❌ Khong ket noi duoc: ${reason}`;
   }
 });
+
+// ===== Khoi 5b: Ngon ngu dich =====
+const DEFAULT_TARGET_LANG = 'VIN';
+const langSelect = document.getElementById('target-lang');
+const langWarning = document.getElementById('lang-warning');
+
+function updateLangWarning() {
+  langWarning.style.display = langSelect.value === 'VIN' ? 'none' : 'block';
+}
+
+chrome.storage.local.get('mot_target_lang', (result) => {
+  langSelect.value = result.mot_target_lang || DEFAULT_TARGET_LANG;
+  updateLangWarning();
+});
+
+langSelect.addEventListener('change', () => {
+  chrome.storage.local.set({ mot_target_lang: langSelect.value });
+  updateLangWarning();
+});
