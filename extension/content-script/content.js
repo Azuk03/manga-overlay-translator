@@ -774,20 +774,25 @@
 
     if (!stripBlob) return blob;
 
-    const [currentBitmap, stripBitmap] = await Promise.all([
-      createImageBitmap(blob),
-      createImageBitmap(stripBlob),
-    ]);
-    const canvas = document.createElement('canvas');
-    canvas.width = currentBitmap.width;
-    canvas.height = currentBitmap.height + stripBitmap.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(currentBitmap, 0, 0);
-    ctx.drawImage(stripBitmap, 0, currentBitmap.height);
-    currentBitmap.close?.();
-    stripBitmap.close?.();
+    try {
+      const [currentBitmap, stripBitmap] = await Promise.all([
+        createImageBitmap(blob),
+        createImageBitmap(stripBlob),
+      ]);
+      const canvas = document.createElement('canvas');
+      canvas.width = currentBitmap.width;
+      canvas.height = currentBitmap.height + stripBitmap.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(currentBitmap, 0, 0);
+      ctx.drawImage(stripBitmap, 0, currentBitmap.height);
+      currentBitmap.close?.();
+      stripBitmap.close?.();
 
-    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const stitched = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      return stitched || blob;
+    } catch (err) {
+      return blob;
+    }
   }
 
   // Registry toan cuc: moi vung chu da duoc VE THAT SU (khong phai chi
