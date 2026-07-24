@@ -812,9 +812,34 @@
     };
   }
 
+  // Ty le giao/DIEN TICH NHO HON (khong phai IoU chuan giao/hop) - xac nhan
+  // qua test that: vung ghep-bien cua 1 anh (VD nguyen cau "TAKE YOUR
+  // TIME." gop 3 dong) rat khac kich thuoc so voi vung anh ke tiep TU
+  // PHAT HIEN LAI (VD chi rieng dong "TIME." 1 dong) - IoU chuan (chia cho
+  // DIEN TICH HOP, tuc ca 2 vung cong lai) se qua THAP du 1 vung nam GON
+  // trong vung kia (da xac nhan thuc te: bong bong "TAKE YOUR TIME." van
+  // bi ve trung "THỜI GIAN." rieng le du thu tu xu ly da dung - IoU
+  // giua vung 3-dong va vung 1-dong khong vuot qua nguong 0.5). Dung ham
+  // rieng nay (khong sua iou() dang dung chung cho dedupeRegions() - do la
+  // truong hop 2 lat CUNG 1 anh, kich thuoc luon gan giong nhau, khong gap
+  // van de nay) chia cho DIEN TICH NHO HON trong 2 vung, phan anh dung
+  // "vung nho co nam gon trong vung lon khong" bat ke chenh lech kich thuoc.
+  function overlapRatio(a, b) {
+    const x1 = Math.max(a.x, b.x);
+    const y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.w, b.x + b.w);
+    const y2 = Math.min(a.y + a.h, b.y + b.h);
+    const interW = Math.max(0, x2 - x1);
+    const interH = Math.max(0, y2 - y1);
+    const interArea = interW * interH;
+    if (interArea === 0) return 0;
+    const minArea = Math.min(a.w * a.h, b.w * b.h);
+    return interArea / minArea;
+  }
+
   function isDuplicateOfRendered(img, region) {
     const candidate = toPageBBox(img, region);
-    return renderedPageBBoxes.some((r) => iou(r, candidate) > 0.5);
+    return renderedPageBBoxes.some((r) => overlapRatio(r, candidate) > 0.5);
   }
 
   function registerRenderedRegion(img, region) {
