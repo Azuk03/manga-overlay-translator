@@ -905,6 +905,19 @@
 
     async _drain() {
       if (this._active >= CFG.CONCURRENCY) return;
+      // Sap xep lai theo vi tri Y tren trang - KHONG dua vao thu tu
+      // IntersectionObserver bao ve trong entries[], da xac nhan thuc te
+      // (test that tren webtoons.com) KHONG dam bao dung thu tu trang khi
+      // nhieu anh cung luc lot vao PREFETCH_MARGIN (200% man hinh): anh
+      // 0030 tung xu ly TRUOC anh 0029 dung phia truoc no. Xu ly sai thu tu
+      // pha vo gia dinh cua dedup chong ve trung giua anh lien ke (xem
+      // renderedPageBBoxes/isDuplicateOfRendered - dua vao gia dinh anh
+      // truoc luon dang ky TRUOC anh sau xu ly) va dich khong theo thu tu doc.
+      this._pending.sort((a, b) => {
+        const topA = a.getBoundingClientRect().top + window.scrollY;
+        const topB = b.getBoundingClientRect().top + window.scrollY;
+        return topA - topB;
+      });
       const img = this._pending.shift();
       if (!img) return;
       this._active++;
