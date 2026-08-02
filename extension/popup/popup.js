@@ -97,3 +97,18 @@ engineSelect.addEventListener('change', () => {
   chrome.storage.local.set({ mot_translator_engine: engineSelect.value });
   updateLangWarning();
 });
+
+// ===== Khoi 7: Dich truoc toan bo (eager mode) =====
+const DEFAULT_EAGER_TRANSLATE = false;
+const eagerCheckbox = document.getElementById('eager-translate');
+
+chrome.storage.local.get('mot_eager_translate', (result) => {
+  eagerCheckbox.checked =
+    result.mot_eager_translate === undefined
+      ? DEFAULT_EAGER_TRANSLATE
+      : result.mot_eager_translate;
+});
+
+eagerCheckbox.addEventListener('change', () => {
+  chrome.storage.local.set({ mot_eager_translate: eagerCheckbox.checked });
+});
