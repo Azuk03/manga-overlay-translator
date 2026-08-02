@@ -726,6 +726,22 @@
       paint-order: stroke fill;
     }
     .mot-overflow { outline: 2px solid red; }
+
+    .mot-toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 2147483647;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-family: sans-serif;
+      font-size: 14px;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+    .mot-toast-hide { opacity: 0; }
   `;
   document.head.appendChild(styleEl);
 
@@ -975,6 +991,12 @@
       } finally {
         this._queued.delete(img);
         this._active--;
+        // Hang doi vua rong VA eager mode dang bat -> bao hoan tat. Kiem tra
+        // TRUOC khi goi _drain() lai (ben duoi) de tranh doc nham trang thai
+        // sau khi _drain() co the da lay job moi ra khoi _pending.
+        if (eagerModeActive && this._pending.length === 0 && this._active === 0) {
+          showCompletionToast();
+        }
         this._drain(); // xu ly tiep job ke tiep trong hang doi (neu co)
       }
     },
@@ -1071,6 +1093,21 @@
   let eagerModeActive = false; // set boi startAutoMode() - true neu Task 1
   // checkbox dang bat LUC bam nut dich; quyet dinh registerImage() enqueue
   // truc tiep hay giao cho IntersectionObserver (xem startAutoMode() ben duoi).
+
+  // Toast goc duoi-phai, tu bien mat sau 3s - chi goi tu Queue._drain() khi
+  // eager mode dang bat VA hang doi vua rong (xem spec muc 4). Khong thay
+  // the showErrorSummary() - chi bao tong so, khong liet ke tung loi.
+  function showCompletionToast() {
+    const errSuffix = state.errors > 0 ? ` (${state.errors} lỗi)` : '';
+    const toast = document.createElement('div');
+    toast.className = 'mot-toast';
+    toast.textContent = `Đã dịch xong ${state.done}/${state.total} ảnh${errSuffix}`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('mot-toast-hide');
+      setTimeout(() => toast.remove(), 300); // khop voi transition 0.3s trong CSS
+    }, 3000);
+  }
 
   // Gop thong diep loi than thien theo nguyen nhan (backend tat, timeout...
   // da phan loai san trong ApiAdapter.translateImage), hien qua alert() vi
