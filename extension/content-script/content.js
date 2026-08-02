@@ -290,6 +290,19 @@
     return result.mot_translator_engine || DEFAULT_TRANSLATOR_ENGINE;
   }
 
+  const DEFAULT_EAGER_TRANSLATE = false;
+
+  // Doc setting "dich truoc toan bo" tu chrome.storage.local - chi doc 1
+  // lan luc startAutoMode() chay (xem CFG eager branch ben duoi), khong
+  // phan ung dong neu doi giua chung 1 phien dich (giong TARGET_LANG/
+  // TRANSLATOR_ENGINE - xem spec 2026-08-02-eager-webtoon-pretranslate-design.md).
+  async function getEagerTranslate() {
+    const result = await chrome.storage.local.get('mot_eager_translate');
+    return result.mot_eager_translate === undefined
+      ? DEFAULT_EAGER_TRANSLATE
+      : result.mot_eager_translate;
+  }
+
   // ===== ApiAdapter — NOI DUY NHAT BIET SCHEMA BACKEND =====
   const ApiAdapter = {
     async downloadImageBlob(img) {
@@ -981,10 +994,18 @@
       if (!ImageFinder.isCandidate(img)) return;
       registeredImages.add(img);
       state.total++;
-      // Neu auto mode da chay roi (da kich hoat dich roi, anh nay moi xuat
-      // hien sau, vd lazy-load) thi theo doi ngay; neu chua kich hoat thi
-      // chi dang ky, se duoc observe hang loat luc kich hoat (xem startAutoMode()).
-      if (intersectionObserver) intersectionObserver.observe(img);
+      // Eager mode: bo qua IntersectionObserver, enqueue ngay lap tuc (xem
+      // spec 2026-08-02-eager-webtoon-pretranslate-design.md muc 3). Nhanh
+      // nay CHI kich hoat khi eagerModeActive true - nhanh else giu NGUYEN
+      // hanh vi cu 100% (khong doi gi khi toggle OFF).
+      if (autoStarted && eagerModeActive) {
+        Queue.enqueue(img);
+      } else if (intersectionObserver) {
+        // Neu auto mode da chay roi (da kich hoat dich roi, anh nay moi xuat
+        // hien sau, vd lazy-load) thi theo doi ngay; neu chua kich hoat thi
+        // chi dang ky, se duoc observe hang loat luc kich hoat (xem startAutoMode()).
+        intersectionObserver.observe(img);
+      }
     };
     tryRegister(); // thu ngay - co the anh da tai xong that su tu dau
     // 'load' bat MOI LAN src doi va tai xong xong, KHONG CHI lan dau
@@ -1013,7 +1034,18 @@
     mo.observe(document.body, { childList: true, subtree: true });
   }
 
-  function startAutoMode() {
+  async function startAutoMode() {
+    eagerModeActive = await getEagerTranslate();
+
+    if (eagerModeActive) {
+      // Bo qua IntersectionObserver hoan toan - enqueue truc tiep TOAN BO
+      // anh da biet, dua vao Queue._pending sort theo vi tri Y (xem
+      // Queue._drain()) de van xu ly theo dung thu tu doc dau tien.
+      registeredImages.forEach((img) => Queue.enqueue(img));
+      log('Auto mode (eager) da bat dau. Dang dich toan bo anh hien co, khong doi cuon toi...');
+      return;
+    }
+
     intersectionObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -1036,6 +1068,9 @@
   }
 
   let autoStarted = false;
+  let eagerModeActive = false; // set boi startAutoMode() - true neu Task 1
+  // checkbox dang bat LUC bam nut dich; quyet dinh registerImage() enqueue
+  // truc tiep hay giao cho IntersectionObserver (xem startAutoMode() ben duoi).
 
   // Gop thong diep loi than thien theo nguyen nhan (backend tat, timeout...
   // da phan loai san trong ApiAdapter.translateImage), hien qua alert() vi
