@@ -731,6 +731,7 @@
       position: fixed;
       bottom: 20px;
       right: 20px;
+      pointer-events: none;
       z-index: 2147483647;
       background: rgba(0, 0, 0, 0.85);
       color: #fff;
@@ -1137,7 +1138,10 @@
       return;
     }
     autoStarted = true;
-    startAutoMode();
+    startAutoMode().catch((err) => {
+      console.error('[MOT] Khong khoi dong duoc auto mode:', err);
+      autoStarted = false; // cho phep bam lai de thu lai
+    });
     log('Bat dau dich tu dong ca trang (Alt+T de bat/tat overlay so sanh goc/dich).');
   }
 
