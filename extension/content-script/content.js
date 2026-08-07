@@ -51,6 +51,12 @@
     // bong thuc te da quan sat (cao nhat ~300-400px). Xem spec
     // 2026-07-23-cross-image-boundary-stitching-design.md.
     BOUNDARY_BORROW_HEIGHT: 500,
+    // Chi ghep-bien khi anh ke tiep NOI LIEN theo chieu doc (dinh cua no cach
+    // day anh hien tai khong qua nguong nay). Webtoon that xep chong lien mach
+    // (khoang ho 0 den vai chuc px); viewer CHUYEN TRANG chong cac anh len cung
+    // 1 vi tri hoac dat cach xa -> khong lien tuc -> khong ghep, tranh muon nham
+    // dai anh trang khac va tranh dedup ban qua trang (xem bug 2026-08-03).
+    BOUNDARY_CONTIGUITY_TOL: 50,
     // AI inpaint (lama_mpe) xoa chu rat tot tren nen trang phang (bong
     // thoai thuong), nhung de lai vet mo/nhoe ro ret tren nen nhieu mau/
     // chi tiet (toc, gradient, net ve day) - gioi han cua chinh model, da
@@ -724,7 +730,9 @@
   // tren cua no, giup detector nhin thay tron ven noi dung bi site cat ngang
   // giua 2 file anh (xem spec 2026-07-23-cross-image-boundary-stitching-design.md).
   function findNextSiblingImage(img) {
-    const myTop = img.getBoundingClientRect().top + window.scrollY;
+    const myRect = img.getBoundingClientRect();
+    const myTop = myRect.top + window.scrollY;
+    const myBottom = myRect.bottom + window.scrollY;
     let best = null;
     let bestTop = Infinity;
     for (const candidate of registeredImages) {
@@ -735,6 +743,15 @@
         best = candidate;
         bestTop = top;
       }
+    }
+    // Chi coi la "anh ke tiep webtoon" khi no NOI LIEN theo chieu doc: dinh cua
+    // no sat day anh hien tai (trong dung sai BOUNDARY_CONTIGUITY_TOL). Viewer
+    // chuyen trang chong cac anh len cung 1 vi tri (dinh anh sau ~ dinh anh
+    // hien tai, cach day 1 khoang = ca chieu cao anh) hoac dat cach xa -> lech
+    // xa nguong -> tra ve null, khong ghep bien (xem bug dedup ban qua trang
+    // 2026-08-03).
+    if (best && Math.abs(bestTop - myBottom) > CFG.BOUNDARY_CONTIGUITY_TOL) {
+      return null;
     }
     return best;
   }
@@ -876,7 +893,16 @@
       // 2026-07-23-cross-image-boundary-stitching-design.md muc 6).
       result.regions = result.regions.filter((r) => {
         if (isDuplicateOfRendered(img, r)) return false;
-        registerRenderedRegion(img, r);
+        // Chi dang ky vao registry chong-trung nhung vung NAM TRONG DAI BIEN da
+        // muon cua anh ke tiep (y+h > chieu cao THAT cua anh) - tuc noi dung
+        // THUOC anh ke tiep ma anh nay ve ho qua ghep-bien. Vung noi dung cua
+        // CHINH anh (y+h <= naturalHeight) khong bao gio bi anh khac phat hien
+        // lai trong webtoon xep doc, nen KHONG dang ky - neu dang ky, viewer
+        // CHUYEN TRANG (chong cac anh len cung toa do) se so trung nham va xoa
+        // cac vung dau trang sau (bug da xac nhan + fix 2026-08-03).
+        if (r.y + r.h > img.naturalHeight) {
+          registerRenderedRegion(img, r);
+        }
         return true;
       });
       const busyFlags = await computeRegionComplexity(result.regions);
