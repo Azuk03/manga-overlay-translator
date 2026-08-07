@@ -1083,15 +1083,49 @@
     mo.observe(document.body, { childList: true, subtree: true });
   }
 
+  // Tra ve URL anh THAT giau trong data-attribute (lazy-load), hoac null.
+  // Thu theo thu tu: data-url (webtoon), data-src, data-original,
+  // data-lazy-src. Chi nhan URL http(s) tuyet doi. Luu y: data-lazy-src ->
+  // dataset.lazySrc (dataset tu camelCase hoa).
+  function getLazyUrl(img) {
+    const candidates = [
+      img.dataset.url,
+      img.dataset.src,
+      img.dataset.original,
+      img.dataset.lazySrc,
+    ];
+    for (const v of candidates) {
+      if (v && (v.startsWith('http://') || v.startsWith('https://'))) return v;
+    }
+    return null;
+  }
+
+  // Ep tai truoc moi anh lazy-load: nhieu site (webtoon...) de <img> chua
+  // cuon toi mang src placeholder, con URL that giau trong data-*. Copy URL
+  // do vao src de trinh duyet tai ngay, khong can cuon. Anh tai xong -> 'load'
+  // listener (da gan trong registerImage) chay lai tryRegister -> isCandidate
+  // qua (co kich thuoc that) -> registerImage + eager enqueue. Xem spec
+  // 2026-08-03-eager-force-load-lazy-images-design.md.
+  function forceLoadLazyImages() {
+    document.querySelectorAll('img').forEach((img) => {
+      const u = getLazyUrl(img);
+      if (u && img.src !== u) img.src = u;
+    });
+  }
+
   async function startAutoMode() {
     eagerModeActive = await getEagerTranslate();
 
     if (eagerModeActive) {
+      // Ep tai truoc moi anh lazy-load co URL that trong data-* (webtoon...)
+      // de bat duoc CA CHUONG ma khong can nguoi dung cuon. Anh tai xong se
+      // tu register + enqueue qua 'load' listener (xem forceLoadLazyImages()).
+      forceLoadLazyImages();
       // Bo qua IntersectionObserver hoan toan - enqueue truc tiep TOAN BO
       // anh da biet, dua vao Queue._pending sort theo vi tri Y (xem
       // Queue._drain()) de van xu ly theo dung thu tu doc dau tien.
       registeredImages.forEach((img) => Queue.enqueue(img));
-      log('Auto mode (eager) da bat dau. Dang dich toan bo anh hien co, khong doi cuon toi...');
+      log('Auto mode (eager) da bat dau. Dang ep tai + dich toan bo anh ca chuong, khong doi cuon toi...');
       return;
     }
 
