@@ -138,6 +138,22 @@
       const key = this._key(hash, targetLang, engine);
       await chrome.storage.local.set({ [key]: JSON.stringify(value) });
     },
+
+    // Chi muc URL anh -> hash NOI DUNG (khong kem lang/engine vi hash la hash
+    // noi dung anh, doc lap ngon ngu). Cho phep tra cache MA KHONG phai tai +
+    // hash lai anh (~3.4s) khi da biet hash tu lan truoc (xem spec
+    // 2026-08-03-url-cache-fastpath-design.md).
+    _urlKey(url) {
+      return `mot_urlhash_v${CFG.CACHE_VERSION}_${url}`;
+    },
+    async getHashByUrl(url) {
+      const key = this._urlKey(url);
+      const result = await chrome.storage.local.get(key);
+      return result[key] || null;
+    },
+    async setUrlHash(url, hash) {
+      await chrome.storage.local.set({ [this._urlKey(url)]: hash });
+    },
   };
 
   async function computeRegionComplexity(regions) {
@@ -903,20 +919,39 @@
     if (imgLayers.has(img)) return;
     const tStart = performance.now();
     try {
-      const blob = await ApiAdapter.downloadImageBlob(img);
-      const hash = await Cache.hashBlob(blob);
       const targetLang = await getTargetLang();
       const engine = await getTranslatorEngine();
-      let result = await Cache.get(hash, targetLang, engine);
-      if (result) {
-        log('Cache HIT:', hash, targetLang, engine, img.currentSrc || img.src);
-      } else {
-        log('Cache MISS, goi backend:', hash, targetLang, engine, img.currentSrc || img.src);
-        result =
-          img.naturalHeight > CFG.TILE_MAX_H
-            ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img)
-            : await ApiAdapter.translateImage(await buildStitchedBlob(img, blob));
-        await Cache.set(hash, targetLang, engine, result);
+      const url = img.currentSrc || img.src;
+      const urlCacheable = !!url && !url.startsWith('blob:') && !url.startsWith('data:');
+      let result = null;
+
+      // FAST PATH: tra cache theo URL -> hash -> ket qua, KHONG tai anh (bo qua
+      // ~3.4s tai + hash). Chi trung khi da tung dich URL nay o dung lang/engine.
+      if (urlCacheable) {
+        const knownHash = await Cache.getHashByUrl(url);
+        if (knownHash) {
+          result = await Cache.get(knownHash, targetLang, engine);
+          if (result) log('Cache HIT (URL, khong tai anh):', targetLang, engine, url);
+        }
+      }
+
+      // SLOW PATH: tai anh + hash + tra hash-cache + (dich backend). Luu chi muc
+      // URL->hash de lan sau vao fast-path.
+      if (!result) {
+        const blob = await ApiAdapter.downloadImageBlob(img);
+        const hash = await Cache.hashBlob(blob);
+        result = await Cache.get(hash, targetLang, engine);
+        if (result) {
+          log('Cache HIT (hash):', hash, targetLang, engine, url);
+        } else {
+          log('Cache MISS, goi backend:', hash, targetLang, engine, url);
+          result =
+            img.naturalHeight > CFG.TILE_MAX_H
+              ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img)
+              : await ApiAdapter.translateImage(await buildStitchedBlob(img, blob));
+          await Cache.set(hash, targetLang, engine, result);
+        }
+        if (urlCacheable) await Cache.setUrlHash(url, hash);
       }
       // Loc bo vung chu da duoc anh TRUOC ve roi (qua ghep-bien muon dai
       // tren cua anh nay) - tranh ve trung 2 lan cung 1 noi dung (xem spec
@@ -1182,6 +1217,7 @@
           const result = await ApiAdapter.translateImage(blob);
           await Cache.set(hash, targetLang, engine, result);
         }
+        await Cache.setUrlHash(url, hash);
       } catch (e) {
         console.warn('[MOT] Prefetch loi 1 trang, bo qua:', url, e.message);
       }
