@@ -1113,10 +1113,96 @@
     });
   }
 
+  // ===== Hitomi: dich nen ca gallery (reader chuyen trang) =====
+  // Xem spec 2026-08-03-hitomi-gallery-prefetch-design.md.
+  function isHitomiReader() {
+    return (
+      /(^|\.)hitomi\.la$/.test(location.hostname) &&
+      /\/reader\/\d+\.html/.test(location.pathname)
+    );
+  }
+
+  // Nho background chay ham MAIN-world doc galleryinfo + build URL. Tra ve
+  // mang URL, hoac null neu khong phai gallery hitomi / hitomi doi cau truc.
+  async function getHitomiGalleryUrls() {
+    try {
+      const res = await sendMessageAsync({ type: 'HITOMI_GALLERY_URLS' });
+      return res && res.ok && Array.isArray(res.urls) ? res.urls : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Tai blob tu URL truc tiep (khong qua <img>). Mirror DUNG nhanh non-blob
+  // cua ApiAdapter.downloadImageBlob de hash KHOP hash luc dieu huong (cache
+  // HIT khi nguoi dung lat toi trang).
+  async function downloadBlobFromUrl(url) {
+    const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url });
+    if (!res || !res.ok) {
+      throw new Error((res && res.error) || 'Khong tai duoc anh: ' + url);
+    }
+    const rawBlob = base64ToBlob(res.base64, res.contentType);
+    return await reencodeToPng(rawBlob);
+  }
+
+  // Toast tien trinh prefetch: 1 element cap nhat textContent, tai dung style
+  // .mot-toast. Khi done == total -> doi text "xong" roi tu an sau 3s.
+  let _prefetchToastEl = null;
+  function updatePrefetchToast(done, total) {
+    if (!_prefetchToastEl) {
+      _prefetchToastEl = document.createElement('div');
+      _prefetchToastEl.className = 'mot-toast';
+      document.body.appendChild(_prefetchToastEl);
+    }
+    if (done < total) {
+      _prefetchToastEl.textContent = `Đang dịch nền gallery: ${done}/${total}`;
+    } else {
+      _prefetchToastEl.textContent = `Đã dịch xong gallery ${done}/${total}`;
+      const el = _prefetchToastEl;
+      _prefetchToastEl = null;
+      setTimeout(() => {
+        el.classList.add('mot-toast-hide');
+        setTimeout(() => el.remove(), 300);
+      }, 3000);
+    }
+  }
+
+  // Dich nen tuan tu tung URL vao cache (backend CONCURRENCY:1). Khong dung
+  // toi man hinh/dieu huong. Loi 1 trang -> bo qua, tiep tuc.
+  async function prefetchHitomiGallery(urls) {
+    const targetLang = await getTargetLang();
+    const engine = await getTranslatorEngine();
+    let done = 0;
+    for (const url of urls) {
+      try {
+        const blob = await downloadBlobFromUrl(url);
+        const hash = await Cache.hashBlob(blob);
+        const cached = await Cache.get(hash, targetLang, engine);
+        if (!cached) {
+          const result = await ApiAdapter.translateImage(blob);
+          await Cache.set(hash, targetLang, engine, result);
+        }
+      } catch (e) {
+        console.warn('[MOT] Prefetch loi 1 trang, bo qua:', url, e.message);
+      }
+      done++;
+      updatePrefetchToast(done, urls.length);
+    }
+  }
+
   async function startAutoMode() {
     eagerModeActive = await getEagerTranslate();
 
     if (eagerModeActive) {
+      // Reader chuyen trang (hitomi): dich nen CA GALLERY vao cache, khong di
+      // chuyen man hinh (xem spec 2026-08-03-hitomi-gallery-prefetch-design.md).
+      // Fire-and-forget, chay nen song song voi eager thuong; urls null (khong
+      // phai gallery hitomi / hitomi doi cau truc) -> khong lam gi dac biet.
+      if (isHitomiReader()) {
+        getHitomiGalleryUrls().then((urls) => {
+          if (urls && urls.length) prefetchHitomiGallery(urls);
+        });
+      }
       // Ep tai truoc moi anh lazy-load co URL that trong data-* (webtoon...)
       // de bat duoc CA CHUONG ma khong can nguoi dung cuon. Anh tai xong se
       // tu register + enqueue qua 'load' listener (xem forceLoadLazyImages()).
