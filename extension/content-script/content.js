@@ -1208,7 +1208,13 @@
     const targetLang = await getTargetLang();
     const engine = await getTranslatorEngine();
     let done = 0;
-    for (const url of urls) {
+    // Pipeline: tai truoc blob cua trang KE TIEP trong luc backend dich trang
+    // hien tai. Backend (~7s) >> tai anh (~3s) nen viec tai bi GIAU HOAN TOAN
+    // trong luc dich -> throughput prefetch ~7s/trang thay vi ~10s (tai la
+    // I/O, khong tranh GPU voi dich). Xem investigation 2026-08-08.
+    let nextBlobP =
+      urls.length > 0 ? downloadBlobFromUrl(urls[0]).catch(() => null) : Promise.resolve(null);
+    for (let i = 0; i < urls.length; i++) {
       // A: NHUONG trang dang xem. Backend chi 1 executor - neu prefetch va
       // hang doi anh (dich trang dang xem de ve overlay) dap cung luc thi
       // trang dang xem bi ket sau prefetch (~22s thay vi ~12s). Tam dung
@@ -1216,15 +1222,22 @@
       while (Queue._active > 0 || Queue._pending.length > 0) {
         await new Promise((r) => setTimeout(r, 300));
       }
+      const url = urls[i];
+      const blob = await nextBlobP;
+      // Bat dau tai trang KE TIEP ngay bay gio -> chay song song voi phan dich
+      // trang hien tai ben duoi (giau do tre tai).
+      nextBlobP =
+        i + 1 < urls.length ? downloadBlobFromUrl(urls[i + 1]).catch(() => null) : Promise.resolve(null);
       try {
-        const blob = await downloadBlobFromUrl(url);
-        const hash = await Cache.hashBlob(blob);
-        const cached = await Cache.get(hash, targetLang, engine);
-        if (!cached) {
-          const result = await ApiAdapter.translateImage(blob);
-          await Cache.set(hash, targetLang, engine, result);
+        if (blob) {
+          const hash = await Cache.hashBlob(blob);
+          const cached = await Cache.get(hash, targetLang, engine);
+          if (!cached) {
+            const result = await ApiAdapter.translateImage(blob);
+            await Cache.set(hash, targetLang, engine, result);
+          }
+          await Cache.setUrlHash(url, hash);
         }
-        await Cache.setUrlHash(url, hash);
       } catch (e) {
         console.warn('[MOT] Prefetch loi 1 trang, bo qua:', url, e.message);
       }
