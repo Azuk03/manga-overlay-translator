@@ -119,3 +119,38 @@ khi có 1 test cô lập cho thấy "tắt X → hết chậm".
 - Nếu Phase 1 cho thấy NHIỀU tài nguyên cùng tăng, ưu tiên test cô lập cái rẻ
   nhất trước (GT4 đổi 1 arg; GT1 trỏ result đi chỗ khác).
 - Toàn bộ sửa nằm ở BACKEND (patches + rebuild image), không đụng extension.
+
+---
+
+## KẾT QUẢ (2026-08-08) — giả thuyết "suy giảm" bị BÁC BỎ
+
+Chạy stress 130 lượt cùng ảnh trên backend tươi, đo đầy đủ:
+
+| Chỉ số | Kết quả | Kết luận |
+|---|---|---|
+| detect+OCR (local GPU) | 2-3s, phẳng suốt 130 lượt | Không suy giảm |
+| inpaint (local GPU) | 0-1s, phẳng | Không suy giảm |
+| render→200 (không concurrency) | ~0-1s | "14s gap" trước = CONCURRENCY, không phải bước xử lý |
+| số region detect | **24 CHÍNH XÁC cả 71/71 lượt** | Detection ổn định, KHÔNG sót |
+| RSS executor | 1853→1828 MB (còn giảm) | Không rò rỉ RAM |
+| GPU mem | 3382-3783 MB (dao động) | Không phình/phân mảnh tích luỹ |
+| result-files | 7450 không đổi | Không phình thư mục |
+| GPU nhiệt sau 18' | 45°C idle | Không throttle nhiệt (trong test) |
+| time_total | 7s → vọt 18s (lượt 31-60) → **hồi về 7s** (lượt 121-130) | Dao động, KHÔNG chậm dần đều |
+
+**Kết luận:** KHÔNG có suy giảm backend theo số lượt. Loại bỏ: rò rỉ RAM, phân
+mảnh GPU, phình thư mục result, `models-ttl`, suy giảm detection. Phần dao
+động/"vọt" của tổng thời gian là **ĐỘ TRỄ API GPT (OpenAI)** — bên ngoài, thất
+thường. "Restart 30s→9s" trước đây nhiều khả năng trùng hợp với lúc GPT chậm /
+lúc extension đang tải đồng thời, KHÔNG phải sửa lỗi local.
+
+**Sàn thực tế mỗi trang (đã hết concurrency nhờ A+B):** ~10-12s =
+local GPU ~5s (detect+ocr+inpaint) + GPT ~2-3s + tải ảnh ~3s (relay hitomi).
+Cộng biến động GPT khi API chậm.
+
+**Đòn bẩy giảm tốc còn lại (không có "bug" để sửa):**
+1. Tải ảnh ~3s (relay hitomi) — có thể tối ưu (pipeline/relay), thật.
+2. GPT ~2-3s + vọt — bên ngoài; đổi model/engine nhanh hơn (đánh đổi chất lượng).
+3. Local GPU ~5s — hạ độ phân giải detect (đánh đổi: dễ sót text).
+4. Prefetch-ahead (ĐÃ có) — giấu độ trễ: trang đã prefetch = tức thì.
+5. Thermal sau nhiều giờ — phần cứng (tản nhiệt/nghỉ), không phải code.
