@@ -1209,6 +1209,13 @@
     const engine = await getTranslatorEngine();
     let done = 0;
     for (const url of urls) {
+      // A: NHUONG trang dang xem. Backend chi 1 executor - neu prefetch va
+      // hang doi anh (dich trang dang xem de ve overlay) dap cung luc thi
+      // trang dang xem bi ket sau prefetch (~22s thay vi ~12s). Tam dung
+      // prefetch khi img-Queue con viec (xem bug tranh chap 2026-08-08).
+      while (Queue._active > 0 || Queue._pending.length > 0) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
       try {
         const blob = await downloadBlobFromUrl(url);
         const hash = await Cache.hashBlob(blob);
@@ -1236,7 +1243,15 @@
       // phai gallery hitomi / hitomi doi cau truc) -> khong lam gi dac biet.
       if (isHitomiReader()) {
         getHitomiGalleryUrls().then((urls) => {
-          if (urls && urls.length) prefetchHitomiGallery(urls);
+          if (urls && urls.length) {
+            // B: bat dau prefetch tu TRANG HIEN TAI (theo hash #N) di toi roi
+            // vong lai dau - dich truoc dung cac trang sap doc, khong phi cong
+            // vao trang da qua (xem bug tranh chap 2026-08-08).
+            const cur = parseInt(location.hash.replace('#', ''), 10) || 1;
+            const start = Math.min(Math.max(cur - 1, 0), urls.length - 1);
+            const ordered = [...urls.slice(start), ...urls.slice(0, start)];
+            prefetchHitomiGallery(ordered);
+          }
         });
       }
       // Ep tai truoc moi anh lazy-load co URL that trong data-* (webtoon...)
