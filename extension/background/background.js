@@ -170,4 +170,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
+
+  if (message.type === 'HITOMI_GALLERY_URLS') {
+    if (!sender.tab || sender.tab.id == null) {
+      sendResponse({ ok: false, error: 'no tab' });
+      return true;
+    }
+    // Chay o MAIN world de doc galleryinfo + goi ham build URL cua chinh
+    // hitomi (url_from_url_from_hash). func nay bi serialize + tiem vao trang,
+    // nen CHI duoc dung global cua trang (galleryinfo, url_from_url_from_hash)
+    // va bien cuc bo cua no - khong dong bao bien ngoai.
+    chrome.scripting
+      .executeScript({
+        target: { tabId: sender.tab.id },
+        world: 'MAIN',
+        func: () => {
+          try {
+            if (
+              typeof galleryinfo === 'undefined' ||
+              !galleryinfo.files ||
+              typeof url_from_url_from_hash !== 'function'
+            ) {
+              return { ok: false, reason: 'no-galleryinfo' };
+            }
+            const id = galleryinfo.id;
+            const urls = galleryinfo.files.map((f) =>
+              url_from_url_from_hash(id, f, f.hasavif ? 'avif' : f.haswebp ? 'webp' : 'avif')
+            );
+            return { ok: true, urls };
+          } catch (e) {
+            return { ok: false, reason: String((e && e.message) || e) };
+          }
+        },
+      })
+      .then((results) => {
+        const r = results && results[0] && results[0].result;
+        sendResponse(r && r.ok ? { ok: true, urls: r.urls } : { ok: false });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
 });
