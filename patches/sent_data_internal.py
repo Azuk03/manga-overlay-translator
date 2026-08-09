@@ -36,26 +36,33 @@ async def fetch_data(url, image: Image, config: Config, headers: Mapping[str, st
                 raise HTTPException(response.status, detail=await response.text())
 
 async def process_stream(response, sender: NotifyType):
-    buffer = b''
+    buffer = bytearray()
 
     async for chunk in response.content.iter_any():
         if chunk:
-            buffer += chunk
-            buffer = handle_buffer(buffer, sender)
+            buffer.extend(chunk)
+            _drain_buffer(buffer, sender)
 
 
-
-def handle_buffer(buffer, sender: NotifyType):
-    while len(buffer) >= 5:
-        status, expected_size = extract_header(buffer)
-
-        if len(buffer) >= 5 + expected_size:
-            data = buffer[5:5 + expected_size]
+def _drain_buffer(buffer: bytearray, sender: NotifyType):
+    """Consume every complete frame from the front of `buffer` in place.
+    Frame = status(1) + size(4, big-endian) + data. Amortized O(n): we
+    delete the consumed prefix once, not per-frame. The previous version
+    used `buffer = buffer[k:]` bytes-slicing on every frame, which is
+    O(n^2) on a large final frame (e.g. a ~108MB pickled Context)."""
+    consumed = 0
+    total = len(buffer)
+    while total - consumed >= 5:
+        status = buffer[consumed]
+        expected_size = int.from_bytes(buffer[consumed + 1:consumed + 5], 'big')
+        if total - consumed >= 5 + expected_size:
+            data = bytes(buffer[consumed + 5:consumed + 5 + expected_size])
             sender(status, data)
-            buffer = buffer[5 + expected_size:]
+            consumed += 5 + expected_size
         else:
             break
-    return buffer
+    if consumed:
+        del buffer[:consumed]
 
 
 def extract_header(buffer):
