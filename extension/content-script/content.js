@@ -934,6 +934,76 @@
   // - spec goc nghi cho 1 anh, o day gop thanh danh sach vi co nhieu anh).
   const errorLog = [];
 
+  // ===== Option C: ngu canh nhan vat per-truyen =====
+  // Dung ho so nhan vat 1 lan (sau vai trang) roi tiem gpt_config rieng cua
+  // truyen vao cac call dich sau => dai tu nhat quan. Xem spec
+  // 2026-08-09-per-series-character-context-design.md.
+  const SeriesCtx = {
+    _mem: null,
+    _ensuredThisSession: false,
+    _building: false,
+    _storeKey(seriesId) {
+      return `mot_series_ctx_v${CFG.CACHE_VERSION}_${seriesId}`;
+    },
+    async load(seriesId) {
+      if (this._mem && this._mem.seriesId === seriesId) return this._mem;
+      const key = this._storeKey(seriesId);
+      const got = (await chrome.storage.local.get(key))[key];
+      this._mem = got || { seriesId, sheet: '', path: null, srcAccum: [], pages: 0, built: false };
+      this._mem.seriesId = seriesId;
+      return this._mem;
+    },
+    async save() {
+      if (!this._mem) return;
+      await chrome.storage.local.set({ [this._storeKey(this._mem.seriesId)]: this._mem });
+    },
+    // Tra ve gpt_config path cua truyen neu da dung ho so (va dam bao file ton
+    // tai tren backend 1 lan/phien); null neu chua dung.
+    async resolvePath(st) {
+      if (!st.built || !st.sheet) return null;
+      if (!this._ensuredThisSession) {
+        this._ensuredThisSession = true;
+        const res = await sendMessageAsync({
+          type: 'SET_SERIES_CONTEXT',
+          payload: { series_id: st.seriesId, sheet: st.sheet },
+        }).catch(() => null);
+        if (res && res.ok && res.data && res.data.gpt_config_path) {
+          st.path = res.data.gpt_config_path;
+          await this.save();
+        }
+      }
+      return st.path;
+    },
+    // Gom src cua trang vua dich; khi du CTX_MIN_PAGES trang + CTX_MIN_CHARS ky
+    // tu thi goi backend dung ho so 1 lan (khoa _building chong goi trung).
+    async accumulateAndMaybeBuild(st, result, targetLang) {
+      const srcs = (result.regions || []).map((r) => r.src).filter(Boolean);
+      if (srcs.length) {
+        st.srcAccum.push(...srcs);
+        st.pages += 1;
+        await this.save();
+      }
+      const joined = st.srcAccum.join('\n');
+      if (this._building || st.pages < CFG.CTX_MIN_PAGES || joined.length < CFG.CTX_MIN_CHARS) return;
+      this._building = true;
+      try {
+        const res = await sendMessageAsync({
+          type: 'BUILD_SERIES_CONTEXT',
+          payload: { series_id: st.seriesId, text: joined, target_lang: targetLang },
+        }).catch(() => null);
+        if (res && res.ok && res.data && res.data.sheet) {
+          st.sheet = res.data.sheet;
+          st.path = res.data.gpt_config_path;
+          st.built = true;
+          await this.save();
+          log('Da dung ho so nhan vat cho truyen', st.seriesId, '-', st.sheet.length, 'ky tu');
+        }
+      } finally {
+        this._building = false;
+      }
+    },
+  };
+
   async function translateAndRenderImage(img) {
     if (imgLayers.has(img)) return;
     const tStart = performance.now();
@@ -964,11 +1034,27 @@
           log('Cache HIT (hash):', hash, targetLang, engine, url);
         } else {
           log('Cache MISS, goi backend:', hash, targetLang, engine, url);
+          // Option C: neu bat ngu canh + dinh danh duoc truyen + engine ho GPT,
+          // dung gpt_config rieng cua truyen (neu da dung ho so). Tat/khong dinh
+          // danh duoc => gptConfigPath null => luong cu.
+          let gptConfigPath = null;
+          const ctxOn = await getCharacterContext();
+          const seriesId =
+            ctxOn && targetLang === 'VIN' && engine !== 'deepl' ? getSeriesId() : null;
+          let st = null;
+          if (seriesId) {
+            st = await SeriesCtx.load(seriesId);
+            gptConfigPath = await SeriesCtx.resolvePath(st);
+          }
           result =
             img.naturalHeight > CFG.TILE_MAX_H
-              ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img)
-              : await ApiAdapter.translateImage(await buildStitchedBlob(img, blob));
+              ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img, gptConfigPath)
+              : await ApiAdapter.translateImage(await buildStitchedBlob(img, blob), gptConfigPath);
           await Cache.set(hash, targetLang, engine, result);
+          // Chua dung ho so => gom chu goc, du thi dung 1 lan cho truyen.
+          if (seriesId && st && !st.built) {
+            await SeriesCtx.accumulateAndMaybeBuild(st, result, targetLang);
+          }
         }
         if (urlCacheable) await Cache.setUrlHash(url, hash);
       }
