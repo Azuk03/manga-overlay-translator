@@ -144,13 +144,28 @@ Vùng chữ chồng lên chi tiết tranh vẽ (bài toán mơ hồ ngay từ đ
 
 Đã test gửi 2 request đồng thời cùng lúc → **backend xử lý tuần tự** (request 2 đợi request 1 gần xong mới bắt đầu detection). Xác nhận: `CONCURRENCY: 1` là lựa chọn đúng, tăng lên không có lợi ích với setup 1 instance này.
 
+## Tối ưu relay giữa 2 tiến trình (2026-08-09) — gap ~14s → <0.1s
+
+**Triệu chứng:** trên ảnh thật, sau khi log backend đã báo `Running rendering` (dịch + inpaint xong), overlay mãi ~10–14s sau mới hiện trên UI, dù GPT chỉ ~2s và client vẽ ~15ms.
+
+**Nguyên nhân gốc (đo bằng instrument + curl, KHÔNG concurrency):** kiến trúc 2 tiến trình — executor (`manga_translator shared`, cổng 5004) chạy pipeline rồi `pickle.dumps(ctx)` **toàn bộ `Context` ~108.5MB** (mọi ảnh trung gian full-res) truyền HTTP sang server (cổng 5003); server mới chạy `to_translation` + `model_dump_json`. Client chỉ cần **~108KB JSON** cuối. Riêng khối 108.5MB đó tốn ~11–14s để truyền + `pickle.loads`, bị khuếch đại bởi vòng lặp `buffer += chunk` **O(n²)** ở `sent_data_internal.py`.
+
+**Fix (thuần backend, không đổi client):**
+- **`patches/share.py`** (full-override `manga_translator/mode/share.py`): khi server đặt cờ `config._response_format="json"` (trong `stream_json`), executor **dựng sẵn `TranslationResponse` ngay tại chỗ** (nơi đã có `ctx.img_inpainted`) rồi chỉ pickle cái đó (~108KB) — thay vì pickle cả `Context`.
+- **`patches/to_json.py`**: `.copy()` từng mẩu nền cắt (`inpaint[y0:y1, x0:x1].copy()`) — nếu để numpy **view**, pickle mẩu nhỏ vẫn kéo theo cả ảnh inpaint gốc.
+- **`patches/main.py`**: `transform_to_json` nhận cả `TranslationResponse` đã dựng sẵn (bỏ qua `to_translation`); `stream_json` đặt cờ `_response_format`.
+- **`patches/sent_data_internal.py`** (full-override): thay `buffer += chunk` O(n²) bằng `bytearray` + offset (amortized O(n)).
+
+**Đo được:** gap `Running rendering` → response **14.3s → 0.078s** (~180×), output **byte-identical** (cùng số vùng, toạ độ, ảnh nền). Endpoint `bytes`/`image` giữ nguyên hành vi cũ. Spec/plan: `docs/superpowers/{specs,plans}/2026-08-09-backend-context-relay-optimization*`.
+
 ## File trong thư mục này
 
 | File | Vai trò |
 |---|---|
 | `.env` / `.env.example` | Config bí mật (API key, model, port) |
-| `Dockerfile` + `patches/to_json.py` | Image đã vá bug #2 ở trên |
+| `Dockerfile` + `patches/to_json.py` | Image đã vá bug #2 ở trên (+ `.copy()` mẩu nền cho fast-path json) |
 | `patches/gpt_config-vi.yaml` | Prompt dịch tùy chỉnh (La-tinh hóa tên riêng) — xem mục `gpt_config` |
+| `patches/share.py` + `patches/sent_data_internal.py` | Tối ưu relay 108.5MB → 108KB + buffer O(n) — xem mục "Tối ưu relay giữa 2 tiến trình" |
 | `run-backend.ps1` | Script chạy container, đọc `.env` |
 | `fixtures/openapi.json` | OpenAPI spec thật, dò ở Giai đoạn B |
 | `fixtures/response-that.json` | Response thật (sau khi vá) — nguồn chân lý cho `normalizeResponse()` |
