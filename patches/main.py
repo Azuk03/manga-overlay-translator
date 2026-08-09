@@ -65,7 +65,11 @@ def transform_to_image(ctx):
     return img_byte_arr.getvalue()
 
 def transform_to_json(ctx):
-    return to_translation(ctx).model_dump_json().encode("utf-8")
+    # Executor co the da dung san TranslationResponse (json fast-path, xem
+    # manga_translator/mode/share.py) de khoi pickle ca Context ~108MB qua
+    # ranh gioi tien trinh. Neu nhan Context tho thi dung nhu cu.
+    tr = ctx if isinstance(ctx, TranslationResponse) else to_translation(ctx)
+    return tr.model_dump_json().encode("utf-8")
 
 def transform_to_bytes(ctx):
     return to_translation(ctx).to_bytes()
@@ -91,6 +95,10 @@ async def image(req: Request, data: TranslateRequest) -> StreamingResponse:
 
 @app.post("/translate/json/stream", response_class=StreamingResponse,tags=["api", "json"], response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")
 async def stream_json(req: Request, data: TranslateRequest) -> StreamingResponse:
+    # Yeu cau executor dung san TranslationResponse nho (~108KB) va chi gui cai
+    # do ve, thay vi pickle ca Context ~108MB. Executor doc co nay qua getattr
+    # (giong cach _web_frontend_optimized dang chay toi executor).
+    data.config._response_format = "json"
     return await while_streaming(req, transform_to_json, data.config, data.image)
 
 @app.post("/translate/bytes/stream", response_class=StreamingResponse, tags=["api", "json"],response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")

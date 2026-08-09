@@ -101,7 +101,7 @@ def to_translation(ctx: Context) -> TranslationResponse:
         color1, color2 = text_region.get_font_colors()
         results.append(Translation(text=trans,
                     minX=int(minX),minY=int(minY),maxX=int(maxX),maxY=int(maxY),
-                    background=inpaint[minY:maxY, minX:maxX],
+                    background=inpaint[minY:maxY, minX:maxX].copy(),  # .copy() tach mau cat khoi mang goc: neu giu view, pickle vung nay se keo theo ca anh inpaint full-res (xem share.py json fast-path)
                     is_bulleted_list=text_region.is_bulleted_list,
                     text_color=TextColor(fg=color1.tolist(), bg=color2.tolist()),
                     prob=text_region.prob,

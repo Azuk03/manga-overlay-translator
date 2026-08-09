@@ -95,6 +95,12 @@ class MangaShare:
                 minimal_result.result = Image.new('RGB', (1, 1), color='white')
                 minimal_result.use_placeholder = True
                 result_bytes = pickle.dumps(minimal_result)
+            elif getattr(attributes.get("config", None), "_response_format", None) == "json":
+                # json fast-path: dung san TranslationResponse ngay tren executor
+                # (noi da co ctx.img_inpainted) roi chi pickle cai do (~108KB-vai MB)
+                # thay vi pickle ca Context ~108MB roi truyen qua tien trinh server.
+                from server.to_json import to_translation
+                result_bytes = pickle.dumps(to_translation(result))
             else:
                 result_bytes = pickle.dumps(result)
 
