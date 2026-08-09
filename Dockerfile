@@ -18,3 +18,10 @@ COPY patches/main.py /app/server/main.py
 # that da ho tro tieng Viet tu 6/2025 (code backend chua cap nhat theo) - xem
 # docs/superpowers/specs/2026-07-23-translator-engine-picker-design.md muc 3.
 COPY patches/deepl.py /app/manga_translator/translators/deepl.py
+
+# Toi uu: chuyen to_translation sang chay tren executor de chi truyen JSON nho
+# (~108KB) thay vi pickle ca Context (~108MB) qua ranh gioi tien trinh; kem sua
+# O(n^2) buffer o sent_data_internal. Xem
+# docs/superpowers/specs/2026-08-09-backend-context-relay-optimization-design.md
+COPY patches/share.py /app/manga_translator/mode/share.py
+COPY patches/sent_data_internal.py /app/server/sent_data_internal.py
