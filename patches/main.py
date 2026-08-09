@@ -7,7 +7,9 @@ import subprocess
 import sys
 from argparse import Namespace
 import asyncio
+import re as _re
 import httpx
+import openai
 from pydantic import BaseModel
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -411,6 +413,106 @@ async def fetch_image(data: FetchImageRequest) -> Response:
         raise HTTPException(resp.status_code, detail=f"CDN tra ve loi HTTP {resp.status_code}")
     content_type = resp.headers.get("content-type", "application/octet-stream")
     return Response(content=resp.content, media_type=content_type)
+
+# ==== Option C: ho so nhan vat per-truyen (per-series character context) ====
+# Xem docs/superpowers/specs/2026-08-09-per-series-character-context-design.md.
+# Dung 1 file gpt_config rieng cho tung truyen = base template + khoi CHARACTER
+# CONTEXT, tai dung dung co che gpt_config (path) san co - KHONG vendor file core.
+
+SERIES_CTX_DIR = Path("/app/series-ctx")
+
+_CTX_EXTRACT_SYSTEM = (
+    "You build a compact CHARACTER SHEET for a manga/manhwa/manhua/comic to help a "
+    "translator pick consistent Vietnamese pronouns/forms of address. Read the "
+    "dialogue/narration below (it may be Japanese, Korean, Chinese or English). "
+    "Output ONLY a short Vietnamese sheet (<=200 words) listing each identifiable "
+    "character: romanized name, gender, age/seniority, role, key relationships, and "
+    "the Vietnamese pronouns/terms of address they should use and be addressed by "
+    "(e.g. 'nhac phu -> nguoi ke goi la \"cha/ong ay\"; ong ay goi nguoi ke la "
+    "\"con\"'). Do NOT invent characters without evidence; write 'chua ro' when "
+    "unknown. Do NOT translate the passage; output the sheet only."
+)
+
+
+def _sanitize_series_id(series_id: str) -> str:
+    s = _re.sub(r"[^A-Za-z0-9_-]", "_", series_id or "")[:120]
+    return s or "unknown"
+
+
+def _write_series_gpt_config(series_id: str, sheet: str) -> str:
+    """Ghi 1 file gpt_config rieng cho truyen = base template + khoi CHARACTER
+    CONTEXT. Tra ve duong dan file."""
+    from omegaconf import OmegaConf
+    base = OmegaConf.load("/app/gpt_config-vi.yaml")
+    template = str(base.get("chat_system_template", ""))
+    block = (
+        "\n\nCHARACTER CONTEXT (use to pick consistent Vietnamese pronouns/forms of "
+        "address for THIS story; keep each character's address consistent across the "
+        "whole work):\n" + sheet.strip() + "\n"
+    )
+    merged = OmegaConf.create({"chat_system_template": template + block})
+    for k, v in base.items():
+        if k != "chat_system_template":
+            merged[k] = v
+    SERIES_CTX_DIR.mkdir(parents=True, exist_ok=True)
+    out = SERIES_CTX_DIR / (_sanitize_series_id(series_id) + ".yaml")
+    OmegaConf.save(merged, str(out))
+    return str(out)
+
+
+class BuildSeriesContextRequest(BaseModel):
+    series_id: str
+    text: str
+    target_lang: str = "VIN"
+
+
+class SetSeriesContextRequest(BaseModel):
+    series_id: str
+    sheet: str
+
+
+@app.post("/build-series-context", tags=["internal-api"])
+async def build_series_context(data: BuildSeriesContextRequest):
+    text = (data.text or "").strip()
+    if len(text) < 50:
+        return {"sheet": "", "gpt_config_path": None}
+    try:
+        client = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _CTX_EXTRACT_SYSTEM},
+                {"role": "user", "content": text[:8000]},
+            ],
+            max_tokens=500,
+            temperature=0.2,
+        )
+        sheet = (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        print(f"[series-context] build failed: {e}", flush=True)
+        return {"sheet": "", "gpt_config_path": None}
+    if not sheet:
+        return {"sheet": "", "gpt_config_path": None}
+    try:
+        path = _write_series_gpt_config(data.series_id, sheet)
+    except Exception as e:
+        print(f"[series-context] write failed: {e}", flush=True)
+        return {"sheet": sheet, "gpt_config_path": None}
+    return {"sheet": sheet, "gpt_config_path": path}
+
+
+@app.post("/set-series-context", tags=["internal-api"])
+async def set_series_context(data: SetSeriesContextRequest):
+    sheet = (data.sheet or "").strip()
+    if not sheet:
+        return {"gpt_config_path": None}
+    try:
+        path = _write_series_gpt_config(data.series_id, sheet)
+    except Exception as e:
+        print(f"[series-context] write failed: {e}", flush=True)
+        return {"gpt_config_path": None}
+    return {"gpt_config_path": path}
 
 #todo: restart if crash
 #todo: cache results
