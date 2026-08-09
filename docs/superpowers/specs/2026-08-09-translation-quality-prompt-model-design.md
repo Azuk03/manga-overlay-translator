@@ -19,8 +19,8 @@ Bản dịch hiện "máy móc": chọn đại từ/xưng hô tiếng Việt ké
 
 **Ngoài phạm vi:**
 - Ngữ cảnh xuyên trang / bảng nhân vật (Option C).
-- Không đổi client/extension. Không đổi pipeline detect/OCR/inpaint.
-- Không đổi cơ chế batch của backend (vẫn 1 call/trang, các dòng `<|n|>`).
+- Không đổi pipeline detect/OCR/inpaint. Không đổi cơ chế batch của backend (vẫn 1 call/trang, các dòng `<|n|>`).
+- Thay đổi client DUY NHẤT được phép: **bump `CFG.CACHE_VERSION`** (1 dòng) — bắt buộc để bản dịch mới không bị bản cache cũ che (đúng pattern đã dùng khi sửa prompt ở v5). Không có thay đổi tính năng nào khác ở extension.
 
 ## 3. Thiết kế
 
