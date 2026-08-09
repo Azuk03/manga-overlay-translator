@@ -32,7 +32,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 5, // sua prompt gpt_config-vi.yaml thieu chi dan giu marker <|N|> (xem patches/gpt_config-vi.yaml)
+    CACHE_VERSION: 6, // gpt-4o + prompt moi (xung ho/giong/da ngon ngu JP-KR-CN-EN) - buoc dich lai, bo cache cu
     // Da xac nhan thuc nghiem o Giai doan B: backend xu ly TUAN TU (khong
     // song song), tang CONCURRENCY khong co loi ich - xem README.md.
     CONCURRENCY: 1,
