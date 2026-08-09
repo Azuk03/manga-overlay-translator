@@ -112,3 +112,14 @@ chrome.storage.local.get('mot_eager_translate', (result) => {
 eagerCheckbox.addEventListener('change', () => {
   chrome.storage.local.set({ mot_eager_translate: eagerCheckbox.checked });
 });
+
+// ===== Khoi 8: Ngu canh nhan vat per-truyen (Option C, mac dinh BAT) =====
+const ccCheckbox = document.getElementById('character-context');
+
+chrome.storage.local.get('mot_character_context', (result) => {
+  ccCheckbox.checked = result.mot_character_context !== false; // default ON
+});
+
+ccCheckbox.addEventListener('change', () => {
+  chrome.storage.local.set({ mot_character_context: ccCheckbox.checked });
+});

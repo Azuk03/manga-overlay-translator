@@ -32,7 +32,12 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 6, // gpt-4o + prompt moi (xung ho/giong/da ngon ngu JP-KR-CN-EN) - buoc dich lai, bo cache cu
+    CACHE_VERSION: 7, // Option C: ngu canh nhan vat per-truyen (rollout) - buoc dich lai, bo cache cu
+    // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
+    // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
+    // 2026-08-09-per-series-character-context-design.md.
+    CTX_MIN_PAGES: 3,
+    CTX_MIN_CHARS: 200,
     // Da xac nhan thuc nghiem o Giai doan B: backend xu ly TUAN TU (khong
     // song song), tang CONCURRENCY khong co loi ich - xem README.md.
     CONCURRENCY: 1,
@@ -312,6 +317,17 @@
     return result.mot_translator_engine || DEFAULT_TRANSLATOR_ENGINE;
   }
 
+  // Option C: doc toggle "ngu canh nhan vat" (mac dinh BAT). Live-read moi lan
+  // nhu cac setting khac. Tat => hanh vi y het truoc Option C.
+  async function getCharacterContext() {
+    try {
+      const { mot_character_context } = await chrome.storage.local.get('mot_character_context');
+      return mot_character_context !== false; // default ON
+    } catch {
+      return true;
+    }
+  }
+
   const DEFAULT_EAGER_TRANSLATE = false;
 
   // Doc setting "dich truoc toan bo" tu chrome.storage.local - chi doc 1
@@ -353,7 +369,10 @@
       });
     },
 
-    async translateImage(blob) {
+    // gptConfigPath (tuy chon, Option C): duong dan gpt_config rieng cua truyen
+    // (base template + ho so nhan vat). Khong truyen => dung CFG.GPT_CONFIG_PATH
+    // mac dinh (hanh vi cu).
+    async translateImage(blob, gptConfigPath) {
       const dataUrl = await this.blobToDataURL(blob);
       const targetLang = await getTargetLang();
       const engine = await getTranslatorEngine();
@@ -367,7 +386,7 @@
       // tac dung voi deepl (kien truc khac han, khong doc gpt_config - xem
       // spec 2026-07-23-translator-engine-picker-design.md muc 3/6).
       if (targetLang === 'VIN' && engine !== 'deepl') {
-        translatorConfig.gpt_config = CFG.GPT_CONFIG_PATH;
+        translatorConfig.gpt_config = gptConfigPath || CFG.GPT_CONFIG_PATH;
       }
       const body = JSON.stringify({
         image: dataUrl,
@@ -385,7 +404,7 @@
       return { regions: res.regions };
     },
 
-    async translateImageTiled(blob, naturalW, naturalH, img) {
+    async translateImageTiled(blob, naturalW, naturalH, img, gptConfigPath) {
       const tiles = await sliceImageIntoTiles(blob, naturalW, naturalH);
       log(
         'Webtoon dai (' + naturalH + 'px > TILE_MAX_H ' + CFG.TILE_MAX_H + 'px) - cat thanh',
@@ -401,7 +420,7 @@
         // trang - cac lat truoc da co TILE_OVERLAP xu ly rieng (xem spec
         // 2026-07-23-cross-image-boundary-stitching-design.md muc 8).
         const tileBlob = i === tiles.length - 1 ? await buildStitchedBlob(img, tile.blob) : tile.blob;
-        const result = await this.translateImage(tileBlob);
+        const result = await this.translateImage(tileBlob, gptConfigPath);
         for (const r of result.regions) {
           allRegions.push({ ...r, y: r.y + tile.yOffset });
         }
@@ -1155,6 +1174,24 @@
       /(^|\.)hitomi\.la$/.test(location.hostname) &&
       /\/reader\/\d+\.html/.test(location.pathname)
     );
+  }
+
+  // Option C: dinh danh "truyen" de khoa ho so nhan vat + file gpt_config
+  // per-truyen. hitomi => gallery id (reader/<id>.html); site khac => host +
+  // 2 doan path dau. Tra null neu khong dinh danh duoc => luong cu (khong ngu canh).
+  function getSeriesId() {
+    try {
+      const h = location.hostname.replace(/^www\./, '');
+      if (/(^|\.)hitomi\.la$/.test(h)) {
+        const m = location.pathname.match(/\/reader\/(\d+)\.html/) || location.pathname.match(/-(\d+)\.html/);
+        if (m) return 'hitomi-' + m[1];
+      }
+      const seg = location.pathname.split('/').filter(Boolean).slice(0, 2).join('-');
+      const id = (h + (seg ? '-' + seg : '')).slice(0, 120);
+      return id || null;
+    } catch {
+      return null;
+    }
   }
 
   // Nho background chay ham MAIN-world doc galleryinfo + build URL. Tra ve
