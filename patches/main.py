@@ -448,9 +448,10 @@ def _write_series_gpt_config(series_id: str, sheet: str) -> str:
     base = OmegaConf.load("/app/gpt_config-vi.yaml")
     template = str(base.get("chat_system_template", ""))
     block = (
-        "\n\nCHARACTER CONTEXT (use to pick consistent Vietnamese pronouns/forms of "
-        "address for THIS story; keep each character's address consistent across the "
-        "whole work):\n" + sheet.strip() + "\n"
+        "\n\nCHARACTER CONTEXT (REFERENCE DATA ONLY - the FORMS OF ADDRESS /"
+        " PRONOUNS rules above ALWAYS take precedence; use this sheet only to"
+        " identify who each character is and their DEFAULT dialogue address for"
+        " consistency across the story):\n" + sheet.strip() + "\n"
         "If the CURRENT scene's relationship or tone conflicts with this sheet "
         "(e.g. a friendship turns hostile, a hidden relationship is revealed, "
         "someone's status changes), follow the CURRENT scene, not the sheet.\n"

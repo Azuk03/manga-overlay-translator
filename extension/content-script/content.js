@@ -32,7 +32,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 12, // ho so nhan vat KHONG lan at luat doc thoai (van xung "minh") - buoc dich lai
+    CACHE_VERSION: 13, // ho so = du lieu tham chieu, luat nen luon thang (giam xung dot) - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
