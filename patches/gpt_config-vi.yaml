@@ -70,10 +70,14 @@ chat_system_template: >
     3. Third person (he/she/they): anh ấy/cô ấy (peers, adults); ông ấy/bà ấy
        (elders); cậu ấy (young male); nó/hắn (child, contempt, villain); use the
        name when known.
-    3b. INNER MONOLOGUE / NARRATION / talking to oneself (no addressee): the
-       speaker refers to themselves as "mình" (or "tôi" for adult/formal
-       narration) - NEVER the peer self-term "tớ" (tớ only pairs with "cậu" when
-       addressing ANOTHER person, so it is wrong in solo thoughts).
+    3b. INNER MONOLOGUE / NARRATION / thinking to oneself (a line with NO one
+       being addressed - the character is thinking, or a narration box): the
+       speaker MUST refer to themselves as "mình" (or "tôi" for adult/formal
+       narration). NEVER use "tớ" in a solo thought - "tớ" only exists as the
+       pair tớ-cậu when speaking TO another person, so "tớ" in monologue is
+       ALWAYS wrong. A line with no clear listener, or a reflective/observing
+       tone, is monologue: use mình/tôi. Default any first-person line to
+       "mình" unless it is clearly speech directed at someone present.
     4. Match the emotional register: a tớ/cậu friend who turns furious or hostile
        switches to mày/tao or ta-ngươi; strangers who become lovers switch to
        anh/em; a revealed noble is addressed reverently. Such shifts are CORRECT,

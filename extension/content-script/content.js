@@ -32,7 +32,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 10, // doc thoai xung "minh" + chu nhan manh giu-nguyen/dich (2 case) - buoc dich lai
+    CACHE_VERSION: 11, // doc thoai xung "minh" (manh hon) + loc giu-nguyen an toan (khong sot tu Latin) - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -1218,12 +1218,22 @@
       // tren cua anh nay) - tranh ve trung 2 lan cung 1 noi dung (xem spec
       // 2026-07-23-cross-image-boundary-stitching-design.md muc 6).
       result.regions = result.regions.filter((r) => {
-        // Case A (chu nhan manh giu nguyen: SFX/tieng cuoi/ten Latin) - prompt
-        // tra dst == src (khong doi). Bo qua render de GIU NGUYEN art goc, khong
-        // dan overlay len (xem gpt_config-vi.yaml quy tac EMPHASIZED text).
+        // Case A (chu nhan manh giu nguyen: SFX/tieng cuoi) - prompt tra dst==src.
+        // Bo render de GIU art goc. NHUNG chi bo khi: (1) dst rong, HOAC (2)
+        // dst==src VA nguon co chu KHONG-Latin (CJK/hangul: SFX goc giu nguyen).
+        // KHONG bo khi src la Latin (tranh xoa nham tu hop le/ten rieng model tra
+        // trung - da tung lam sot tu). Xem gpt_config quy tac EMPHASIZED text.
         const _dst = (r.dst || '').trim();
         const _src = (r.src || '').trim();
-        if (!_dst || _dst.toLowerCase() === _src.toLowerCase()) return false;
+        const _srcNonLatin = /[^ -ɏ\s\d\p{P}]/u.test(_src);
+        if (!_dst) {
+          if (DBG) console.log('[MOT-DBG] skip region: dst rong | src=', _src.slice(0, 30));
+          return false;
+        }
+        if (_dst.toLowerCase() === _src.toLowerCase() && _srcNonLatin) {
+          if (DBG) console.log('[MOT-DBG] skip region: giu-nguyen SFX CJK | src=', _src.slice(0, 30));
+          return false;
+        }
         if (isDuplicateOfRendered(img, r)) return false;
         // Chi dang ky vao registry chong-trung nhung vung NAM TRONG DAI BIEN da
         // muon cua anh ke tiep (y+h > chieu cao THAT cua anh) - tuc noi dung
