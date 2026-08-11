@@ -12,11 +12,12 @@
     // vs ~3.7GB/4GB). Xem README.md muc "Inpaint that".
     INPAINTER: 'lama_mpe',
     INPAINTING_SIZE: 1024,
-    // Do phan giai detect chu. Nang 2048 -> 3072 giup OCR doc net hon HAN tren
-    // scan tieng Anh (da do: BHT->BUT, FIOURINE->FIGURINE, T HANDLE->HANDLE).
-    // Danh doi: cham hon chut + ton VRAM hon (van chay tren RTX 3050 Ti 4GB).
-    // Backend nhan detection_size theo tung request (khong can rebuild).
-    DETECTION_SIZE: 3072,
+    // Do phan giai detect chu. 2048 la MAC DINH da duoc tune - KHONG don dieu:
+    // nang len 3072 doc chu-da-tim-thay net hon nhung TIM DUOC IT chu hon o text
+    // tuong phan thap (da do that: page 005 hai dong nen-toi bat duoc o 2048,
+    // SOT o 3072 - 3/3 lan moi ben). Sot nguyen dong te hon loi chinh ta -> giu
+    // 2048. Backend nhan detection_size theo request (khong can rebuild).
+    DETECTION_SIZE: 2048,
     MIN_NW: 400,
     MIN_NH: 400,
     MIN_DISPLAY_RATIO: 0.3,
@@ -37,7 +38,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 14, // detection_size 2048->3072 (OCR net hon tren scan tieng Anh) - buoc dich lai
+    CACHE_VERSION: 15, // REVERT detect ve 2048 (3072 lam sot dong nen-toi, da do 3/3) - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
