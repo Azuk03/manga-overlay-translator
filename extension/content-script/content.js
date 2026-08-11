@@ -621,6 +621,51 @@
     { capture: true, passive: true }
   );
 
+  // FIX TRIET DE (vd MangaPlaza speedreader): mot so reader DI CHUYEN TRANG BANG
+  // CSS transform tren container (log thuc te: <div#content-p1>
+  // transform=matrix(...,-2328)) - viec nay KHONG phat su kien 'scroll' nen ca
+  // listener scroll cung bo lo. Cach duy nhat bam duoc MOI kieu di chuyen (scroll,
+  // transform, animation, layout doi) la tinh lai vi tri moi frame bang rAF.
+  // Toi uu de khong ton: (a) DOC het getBoundingClientRect() truoc roi moi GHI
+  // style -> 1 lan reflow/frame, khong thrash; (b) chi GHI layer nao rect THAT SU
+  // doi (idle gan nhu mien phi, khong ghi thua -> khong invalidate layout);
+  // (c) tu DUNG khi khong con overlay; (d) tam dung khi tab an (document.hidden).
+  let _rafId = null;
+  const _lastRect = new WeakMap();
+  function repositionLoop() {
+    _rafId = null;
+    if (imgLayers.size === 0) return; // khong con overlay -> dung han
+    const updates = [];
+    imgLayers.forEach((layer, img) => {
+      const r = img.getBoundingClientRect();
+      const p = _lastRect.get(layer);
+      if (!p || p.top !== r.top || p.left !== r.left || p.width !== r.width || p.height !== r.height) {
+        updates.push([layer, r]);
+        _lastRect.set(layer, { top: r.top, left: r.left, width: r.width, height: r.height });
+      }
+    });
+    for (const [layer, r] of updates) {
+      if (r.width === 0 || r.height === 0) {
+        layer.style.left = '-99999px';
+        layer.style.top = '-99999px';
+      } else {
+        layer.style.left = r.left + window.scrollX + 'px';
+        layer.style.top = r.top + window.scrollY + 'px';
+        layer.style.width = r.width + 'px';
+        layer.style.height = r.height + 'px';
+      }
+    }
+    if (!document.hidden) _rafId = requestAnimationFrame(repositionLoop);
+  }
+  function startRepositionLoop() {
+    if (_rafId == null && !document.hidden && imgLayers.size > 0) {
+      _rafId = requestAnimationFrame(repositionLoop);
+    }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) startRepositionLoop();
+  });
+
   // ===== OverlayRenderer — ve chu dich de len anh bang CSS (C2) =====
   const OverlayRenderer = {
     // Do do cao van ban khi ngat dong o khoang trang (word-break: keep-all),
@@ -725,6 +770,7 @@
       document.body.appendChild(layer);
       positionLayer(img, layer);
       imgLayers.set(img, layer);
+      startRepositionLoop(); // bam vi tri lien tuc (bat ca di chuyen bang transform)
 
       // QUAN TRONG: ve HET lop nen (LOP 1) truoc, roi moi ve HET lop chu
       // (LOP 2) sau, thanh 2 pass rieng - KHONG xen ke tung vung mot.
