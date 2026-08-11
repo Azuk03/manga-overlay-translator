@@ -112,6 +112,54 @@
     },
   };
 
+  // ===== DEBUG (TAM THOI - go sau khi xong; bat/tat bang DBG) =====
+  // Chan doan 3 van de tren MangaPlaza: (1) overlay troi khi scroll, (2) nhieu
+  // anh khong duoc bat, (3) eager khong dich truoc. Alt+G = dump trang thai.
+  const DBG = true;
+  function candidateReason(img) {
+    const src = img.currentSrc || img.src || '';
+    if (src.startsWith('data:')) return 'data-uri';
+    if (!img.naturalWidth || !img.naturalHeight) return 'no-natural(' + img.naturalWidth + 'x' + img.naturalHeight + ')';
+    if (img.naturalWidth < CFG.MIN_NW || img.naturalHeight < CFG.MIN_NH) return 'too-small';
+    if (img.clientWidth / window.innerWidth < CFG.MIN_DISPLAY_RATIO) return 'display-ratio(' + img.clientWidth + '/' + window.innerWidth + ')';
+    if (img.closest('header, nav, footer, aside')) return 'in-chrome';
+    const idClass = (img.id + ' ' + img.className).toLowerCase();
+    if (/logo|avatar|icon|banner|ad|thumb|sprite/.test(idClass)) return 'id-class';
+    const ratio = img.naturalHeight / img.naturalWidth;
+    if (ratio < 0.4 || ratio > 100) return 'aspect(' + ratio.toFixed(3) + ')';
+    return 'PASS';
+  }
+  function dbgScan(label) {
+    if (!DBG) return;
+    const imgs = [...document.querySelectorAll('img')];
+    console.log(
+      `[MOT-DBG] SCAN(${label}) eager=${eagerModeActive} autoStarted=${autoStarted} registered=${registeredImages.size} pending=${Queue._pending.length} active=${Queue._active} layers=${imgLayers.size} total=${state.total}/done=${state.done}/err=${state.errors} winScrollY=${window.scrollY} imgsInDom=${imgs.length}`
+    );
+    imgs.forEach((img, i) => {
+      console.log(
+        `[MOT-DBG]  img#${i} ${img.naturalWidth}x${img.naturalHeight} client=${img.clientWidth}x${img.clientHeight} reason=${candidateReason(img)} reg=${registeredImages.has(img)} layer=${imgLayers.has(img)} src=${(img.currentSrc || img.src || '').slice(0, 45)}`
+      );
+    });
+    const first = imgs.find((im) => registeredImages.has(im)) || imgs[0];
+    if (first) {
+      let el = first.parentElement;
+      let depth = 0;
+      while (el && depth < 14) {
+        const cs = getComputedStyle(el);
+        const scrolls = el.scrollHeight > el.clientHeight + 4 || el.scrollWidth > el.clientWidth + 4;
+        const ov = cs.overflow + cs.overflowY + cs.overflowX;
+        if (scrolls && /(auto|scroll)/.test(ov)) {
+          console.log(`[MOT-DBG]  scroll-container <${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}> scrollTop=${el.scrollTop} overflowY=${cs.overflowY}`);
+        }
+        if (cs.transform !== 'none') {
+          console.log(`[MOT-DBG]  transformed-ancestor <${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}> transform=${cs.transform.slice(0, 40)}`);
+        }
+        el = el.parentElement;
+        depth++;
+      }
+    }
+  }
+
   // ===== Cache (hash bytes anh, khong theo URL) =====
   // Khac ban userscript goc: GM_getValue/GM_setValue la dong bo, con
   // chrome.storage.local la bat dong bo - Cache.get()/set() gio la async,
@@ -547,7 +595,31 @@
   // MOI phan tu long ben trong. passive:true de khong chan cuon. Voi trang cuon
   // window binh thuong day la no-op an toan: rect.top giam dung bang scrollY
   // tang nen (rect.top + scrollY) khong doi, khong ghi lai vi tri thua.
-  window.addEventListener('scroll', scheduleReposition, { capture: true, passive: true });
+  let _lastScrollLog = 0;
+  window.addEventListener(
+    'scroll',
+    (e) => {
+      if (DBG && Date.now() - _lastScrollLog > 400) {
+        _lastScrollLog = Date.now();
+        const t = e.target;
+        const desc =
+          t === document || t === window || t === document.scrollingElement
+            ? 'document/window'
+            : t && t.tagName
+            ? '<' + t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') + '> scrollTop=' + t.scrollTop
+            : String(t);
+        let sample = '';
+        const it = imgLayers.entries().next();
+        if (!it.done) {
+          const [img, layer] = it.value;
+          sample = ` | sampleImgRectTop=${img.getBoundingClientRect().top.toFixed(0)} layerTop=${layer.style.top}`;
+        }
+        console.log(`[MOT-DBG] scroll on ${desc} winY=${window.scrollY}${sample}`);
+      }
+      scheduleReposition();
+    },
+    { capture: true, passive: true }
+  );
 
   // ===== OverlayRenderer — ve chu dich de len anh bang CSS (C2) =====
   const OverlayRenderer = {
@@ -1124,6 +1196,7 @@
     enqueue(img) {
       if (this._queued.has(img)) return;
       if (imgLayers.has(img)) return; // da dich xong
+      if (DBG) console.log('[MOT-DBG] enqueue', (img.currentSrc || img.src || '').slice(0, 45), 'pending->', this._pending.length + 1);
       this._queued.add(img);
       this._pending.push(img);
       // v0.39: do thoi gian TAM THOI - danh dau luc anh vao hang doi de
@@ -1208,6 +1281,7 @@
       if (!ImageFinder.isCandidate(img)) return;
       registeredImages.add(img);
       state.total++;
+      if (DBG) console.log('[MOT-DBG] register+', (img.currentSrc || img.src || '').slice(0, 45), '| eager=', eagerModeActive, 'autoStarted=', autoStarted);
       // Eager mode: bo qua IntersectionObserver, enqueue ngay lap tuc (xem
       // spec 2026-08-02-eager-webtoon-pretranslate-design.md muc 3). Nhanh
       // nay CHI kich hoat khi eagerModeActive true - nhanh else giu NGUYEN
@@ -1433,6 +1507,7 @@
       // Queue._drain()) de van xu ly theo dung thu tu doc dau tien.
       registeredImages.forEach((img) => Queue.enqueue(img));
       log('Auto mode (eager) da bat dau. Dang ep tai + dich toan bo anh ca chuong, khong doi cuon toi...');
+      dbgScan('afterStart-eager');
       return;
     }
 
@@ -1455,6 +1530,7 @@
     registeredImages.forEach((img) => intersectionObserver.observe(img));
 
     log('Auto mode (C3) da bat dau. Dang theo doi anh moi + cuon trang...');
+    dbgScan('afterStart-c3');
   }
 
   let autoStarted = false;
@@ -1525,6 +1601,10 @@
     } else if (key === 'd') {
       e.preventDefault();
       onTriggerTranslate();
+    } else if (key === 'g') {
+      // DEBUG (tam thoi): dump trang thai phat hien/queue/scroll ra console.
+      e.preventDefault();
+      dbgScan('manual');
     }
   }
 
