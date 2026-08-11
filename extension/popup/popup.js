@@ -134,3 +134,25 @@ chrome.storage.local.get('mot_boundary_stitch', (result) => {
 stitchCheckbox.addEventListener('change', () => {
   chrome.storage.local.set({ mot_boundary_stitch: stitchCheckbox.checked });
 });
+
+// ===== Khoi 10: Xoa cache dich (ep dich lai) =====
+// Xoa moi entry dich (mot_cache_*), chi muc URL->hash (mot_urlhash_*) va ho so
+// nhan vat (mot_series_ctx_*). GIU LAI cac setting (backend_url, target_lang,
+// engine, eager, character_context, boundary_stitch). Dung khi doi prompt/model
+// backend hoac muon giai phong dung luong.
+document.getElementById('btn-clear-cache').addEventListener('click', () => {
+  const statusEl = document.getElementById('clear-cache-status');
+  statusEl.textContent = 'Đang xóa...';
+  chrome.storage.local.get(null, (all) => {
+    const keys = Object.keys(all).filter(
+      (k) => k.startsWith('mot_cache_') || k.startsWith('mot_urlhash_') || k.startsWith('mot_series_ctx_')
+    );
+    if (keys.length === 0) {
+      statusEl.textContent = 'Cache đã trống.';
+      return;
+    }
+    chrome.storage.local.remove(keys, () => {
+      statusEl.textContent = `Đã xóa ${keys.length} mục. F5 trang để dịch lại.`;
+    });
+  });
+});
