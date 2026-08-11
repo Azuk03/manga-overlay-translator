@@ -189,16 +189,21 @@
     // (qua popup) - thieu 1 trong 2 trong key se tra nham ket qua ngon
     // ngu/engine cu tu cache (xem spec 2026-07-22-extension-popup-settings-design.md
     // muc 8 va 2026-07-23-translator-engine-picker-design.md muc 6).
-    _key(hash, targetLang, engine) {
-      return `mot_cache_v${CFG.CACHE_VERSION}_${engine}_${targetLang}_${hash}`;
+    // Cache key gom ca trang thai toggle GHEP-BIEN (s1/s0): anh gui backend khi
+    // BAT (da ghep) khac han khi TAT (tho) -> ket qua khac -> phai la 2 entry
+    // rieng. Nho vay bat/tat toggle se TU DICH LAI (cache MISS o khoa moi),
+    // khong phai bump CACHE_VERSION. _key async vi doc getBoundaryStitch().
+    async _key(hash, targetLang, engine) {
+      const s = (await getBoundaryStitch()) ? 's1' : 's0';
+      return `mot_cache_v${CFG.CACHE_VERSION}_${engine}_${targetLang}_${s}_${hash}`;
     },
     async get(hash, targetLang, engine) {
-      const key = this._key(hash, targetLang, engine);
+      const key = await this._key(hash, targetLang, engine);
       const result = await chrome.storage.local.get(key);
       return result[key] ? JSON.parse(result[key]) : null;
     },
     async set(hash, targetLang, engine, value) {
-      const key = this._key(hash, targetLang, engine);
+      const key = await this._key(hash, targetLang, engine);
       await chrome.storage.local.set({ [key]: JSON.stringify(value) });
     },
 
