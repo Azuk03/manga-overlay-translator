@@ -520,13 +520,34 @@
     layer.style.height = rect.height + 'px';
   }
 
+  // Tinh lai vi tri toan bo layer, gom bang requestAnimationFrame (moi frame
+  // chi 1 lan) de khong giat khi scroll/resize lien tuc.
+  let _reposScheduled = false;
+  function scheduleReposition() {
+    if (_reposScheduled) return;
+    _reposScheduled = true;
+    requestAnimationFrame(() => {
+      _reposScheduled = false;
+      imgLayers.forEach((layer, img) => positionLayer(img, layer));
+    });
+  }
+
   // Zoom/resize cua so co the doi kich thuoc/vi tri hien thi cua MOI anh
   // dang co overlay cung luc - tinh lai toan bo bang 1 listener chung,
   // nhe hon nhieu ResizeObserver rieng cho tung anh (van giu ResizeObserver
   // rieng trong render() de bat truong hop CHI 1 anh doi kich thuoc).
-  window.addEventListener('resize', () => {
-    imgLayers.forEach((layer, img) => positionLayer(img, layer));
-  });
+  window.addEventListener('resize', scheduleReposition, { passive: true });
+
+  // FIX (reader cuon bang container noi bo, vd MangaPlaza speedreader): layer
+  // position:absolute chi tu bam theo cuon CUA WINDOW. Khi trang cuon bang 1
+  // container co overflow rieng (hoac transform), window.scrollY KHONG doi ma
+  // <img> van di chuyen trong viewport -> layer dung yen -> overlay "troi"/bi
+  // keo lech. Phai tinh lai positionLayer moi khi co cuon. capture:true vi su
+  // kien scroll KHONG bubble - phai bat o pha capture moi nhan duoc scroll cua
+  // MOI phan tu long ben trong. passive:true de khong chan cuon. Voi trang cuon
+  // window binh thuong day la no-op an toan: rect.top giam dung bang scrollY
+  // tang nen (rect.top + scrollY) khong doi, khong ghi lai vi tri thua.
+  window.addEventListener('scroll', scheduleReposition, { capture: true, passive: true });
 
   // ===== OverlayRenderer — ve chu dich de len anh bang CSS (C2) =====
   const OverlayRenderer = {
