@@ -454,6 +454,11 @@ def _write_series_gpt_config(series_id: str, sheet: str) -> str:
         "If the CURRENT scene's relationship or tone conflicts with this sheet "
         "(e.g. a friendship turns hostile, a hidden relationship is revealed, "
         "someone's status changes), follow the CURRENT scene, not the sheet.\n"
+        "The pronoun pairs above are for DIALOGUE between characters. In inner "
+        "monologue / narration / a character thinking to themselves, they STILL "
+        "refer to themselves as \"mình\" (or \"tôi\"), NEVER their dialogue "
+        "self-term such as \"tớ\" - this sheet does not override the monologue "
+        "rule.\n"
     )
     merged = OmegaConf.create({"chat_system_template": template + block})
     for k, v in base.items():
