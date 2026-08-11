@@ -32,7 +32,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 9, // prompt ngoi nguyen-tac-sinh (6 buoc + doi-giong + uu-tien-canh) - buoc dich lai
+    CACHE_VERSION: 10, // doc thoai xung "minh" + chu nhan manh giu-nguyen/dich (2 case) - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -1218,6 +1218,12 @@
       // tren cua anh nay) - tranh ve trung 2 lan cung 1 noi dung (xem spec
       // 2026-07-23-cross-image-boundary-stitching-design.md muc 6).
       result.regions = result.regions.filter((r) => {
+        // Case A (chu nhan manh giu nguyen: SFX/tieng cuoi/ten Latin) - prompt
+        // tra dst == src (khong doi). Bo qua render de GIU NGUYEN art goc, khong
+        // dan overlay len (xem gpt_config-vi.yaml quy tac EMPHASIZED text).
+        const _dst = (r.dst || '').trim();
+        const _src = (r.src || '').trim();
+        if (!_dst || _dst.toLowerCase() === _src.toLowerCase()) return false;
         if (isDuplicateOfRendered(img, r)) return false;
         // Chi dang ky vao registry chong-trung nhung vung NAM TRONG DAI BIEN da
         // muon cua anh ke tiep (y+h > chieu cao THAT cua anh) - tuc noi dung
@@ -1236,6 +1242,9 @@
         r.busy = busyFlags[i];
       });
       await OverlayRenderer.render(img, result.regions);
+      // Ghi lai src da render de phat hien reader TAI DUNG <img> voi blob khac
+      // (virtual list, vd MangaPlaza) -> khi src doi se dich lai (xem invalidateImg).
+      img.__motRenderedSrc = img.currentSrc || img.src || '';
       log('Da ve overlay:', result.regions.length, 'vung chu, tong', (performance.now() - tStart).toFixed(0), 'ms');
       state.done++;
     } catch (err) {
@@ -1333,6 +1342,21 @@
   const registeredImages = new Set();
   let intersectionObserver = null;
 
+  // Reader AO HOA (virtual list, vd MangaPlaza) TAI DUNG cung <img> cho trang
+  // khac (doi blob src). Khi src doi tren 1 anh DA render, layer cu la cua noi
+  // dung CU -> vo hieu (xoa layer + bo danh dau) roi dich lai noi dung moi.
+  function invalidateImg(img) {
+    const layer = imgLayers.get(img);
+    if (layer) {
+      _lastRect.delete(layer);
+      layer.remove();
+      imgLayers.delete(img);
+    }
+    Queue._queued.delete(img);
+    delete img.__motRenderedSrc;
+    if (autoStarted) Queue.enqueue(img);
+  }
+
   function registerImage(img) {
     if (registeredImages.has(img)) return;
     const tryRegister = () => {
@@ -1354,13 +1378,23 @@
         intersectionObserver.observe(img);
       }
     };
+    const onLoad = () => {
+      // Anh DA render nhung src DOI (reader tai dung <img> cho trang khac) ->
+      // dich lai noi dung moi (xem invalidateImg).
+      const cur = img.currentSrc || img.src || '';
+      if (img.__motRenderedSrc && cur && cur !== img.__motRenderedSrc) {
+        invalidateImg(img);
+      }
+      tryRegister();
+    };
     tryRegister(); // thu ngay - co the anh da tai xong that su tu dau
     // 'load' bat MOI LAN src doi va tai xong xong, KHONG CHI lan dau
     // ({ once: true } cu se bo lo lan site thay placeholder bang URL
     // that). isCandidate() da loai data: URI (xem ImageFinder), nen lan
     // dau thuong bi tu choi boi placeholder, phai doi 'load' lan tiep
-    // theo (khi site gan src that vao) moi dang ky duoc.
-    img.addEventListener('load', tryRegister);
+    // theo (khi site gan src that vao) moi dang ky duoc. onLoad cung bat
+    // truong hop reader tai dung <img> doi blob (virtual list).
+    img.addEventListener('load', onLoad);
   }
 
   // Luon chay tu init(), doc lap voi viec da kich hoat dich hay chua - de

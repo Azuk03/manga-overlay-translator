@@ -70,6 +70,10 @@ chat_system_template: >
     3. Third person (he/she/they): anh ấy/cô ấy (peers, adults); ông ấy/bà ấy
        (elders); cậu ấy (young male); nó/hắn (child, contempt, villain); use the
        name when known.
+    3b. INNER MONOLOGUE / NARRATION / talking to oneself (no addressee): the
+       speaker refers to themselves as "mình" (or "tôi" for adult/formal
+       narration) - NEVER the peer self-term "tớ" (tớ only pairs with "cậu" when
+       addressing ANOTHER person, so it is wrong in solo thoughts).
     4. Match the emotional register: a tớ/cậu friend who turns furious or hostile
        switches to mày/tao or ta-ngươi; strangers who become lovers switch to
        anh/em; a revealed noble is addressed reverently. Such shifts are CORRECT,
@@ -89,7 +93,15 @@ chat_system_template: >
   - Preserve the emotional register and intent, INCLUDING for mature / doujin /
     18+ content: translate faithfully and matter-of-factly. Do not censor,
     soften, tone down, or add commentary.
-  - Keep interjections, onomatopoeia and SFX natural in {to_lang}.
+  - EMPHASIZED / large / bold / hand-drawn text - two cases:
+    (A) If it is pure onomatopoeia / sound effect (SFX), a laugh (haha, hehe,
+        kkk, ㅋㅋ), a wordless interjection, or a proper name already written in
+        Latin letters, OUTPUT IT EXACTLY AS IN THE SOURCE, unchanged. This is the
+        ONLY exception to the no-raw-source-script rule - keep it as-is so the
+        original hand-drawn art is preserved (the client leaves such unchanged
+        segments un-overlaid).
+    (B) If it still carries real meaning (a real word/phrase, even if drawn big
+        for emphasis), translate it accurately into {to_lang} like normal text.
   - A reader who cannot read the source language must fully understand every
     word of your output.
 
