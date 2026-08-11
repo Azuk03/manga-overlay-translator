@@ -32,7 +32,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 7, // Option C: ngu canh nhan vat per-truyen (rollout) - buoc dich lai, bo cache cu
+    CACHE_VERSION: 8, // prompt ngoi moi (tớ/cậu, nhat quan) + fix stitching landscape - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -889,7 +889,12 @@
     .mot-textbox {
       position: absolute;
       display: flex; align-items: center; justify-content: center;
-      pointer-events: auto;
+      /* pointer-events:none -> overlay TRONG SUOT voi chuot: cuon + click di
+         xuyen qua toi reader ben duoi. Truoc day 'auto' khien textbox hung
+         wheel nen KHONG cuon duoc reader cuon bang container/transform (overlay
+         nam tren <body>, ngoai container). Danh doi: khong con boi/chon-copy
+         chu dich - chap nhan de uu tien cuon/dieu khien reader. */
+      pointer-events: none;
       box-sizing: border-box;
     }
     .mot-textbox.mot-busy {
@@ -909,7 +914,9 @@
       -webkit-text-stroke: 4px #fff;
       paint-order: stroke fill;
     }
-    .mot-overflow { outline: 2px solid red; }
+    /* .mot-overflow: chu dich tran khoi o. Truoc day vien do 2px de danh dau,
+       nhung gay roi mat -> bo vien (van giu class de logic khac dung neu can). */
+    .mot-overflow { }
 
     .mot-toast {
       position: fixed;
@@ -938,6 +945,12 @@
   // tren cua no, giup detector nhin thay tron ven noi dung bi site cat ngang
   // giua 2 file anh (xem spec 2026-07-23-cross-image-boundary-stitching-design.md).
   function findNextSiblingImage(img) {
+    // Chi ghep bien cho anh DUNG/CAO (webtoon strip - bong bong co the bi cat
+    // ngang giua 2 file anh xep doc). Anh NGANG (landscape, vd trang doi
+    // MangaPlaza 1443x688) la TRANG RIENG BIET: bong bong khong tran sang trang
+    // ke, nen ghep bien se muon nham noi dung dau trang sau -> dich trung, ve 2
+    // overlay chong nhau (bug da xac nhan tren MangaPlaza). Bo qua stitching.
+    if (img.naturalHeight <= img.naturalWidth) return null;
     const myRect = img.getBoundingClientRect();
     const myTop = myRect.top + window.scrollY;
     const myBottom = myRect.bottom + window.scrollY;

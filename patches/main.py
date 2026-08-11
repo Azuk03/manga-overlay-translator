@@ -429,8 +429,10 @@ _CTX_EXTRACT_SYSTEM = (
     "character: romanized name, gender, age/seniority, role, key relationships, and "
     "the Vietnamese pronouns/terms of address they should use and be addressed by "
     "(e.g. 'nhac phu -> nguoi ke goi la \"cha/ong ay\"; ong ay goi nguoi ke la "
-    "\"con\"'). Do NOT invent characters without evidence; write 'chua ro' when "
-    "unknown. Do NOT translate the passage; output the sheet only."
+    "\"con\"'). For peers/friends prefer the pair tớ–cậu (default), NOT toi/ban. "
+    "Assign ONE fixed pair per relationship and keep it consistent. Do NOT invent "
+    "characters without evidence; write 'chua ro' when unknown. Do NOT translate "
+    "the passage; output the sheet only."
 )
 
 

@@ -49,11 +49,12 @@ chat_system_template: >
   - PRONOUNS / FORMS OF ADDRESS (very important for {to_lang}): choose Vietnamese
     pronouns that fit the speakers' gender, age, closeness and tone, inferred
     from the dialogue on this page. Use anh/em/chị for clear romantic or
-    senior-junior relations, tôi–cậu or tớ–cậu between peers/friends, mày–tao for
-    rough or aggressive speech, con/mẹ/bố/ông/bà for family. Keep each
-    character's address CONSISTENT within this page. When the relationship is
-    unclear, pick a natural common pair rather than a stiff default like
-    "tôi/bạn" everywhere.
+    senior-junior relations; for peers/friends prefer tớ–cậu (this reads most
+    natural for manga; use it as the default peer pair, NOT "tôi/bạn" which is
+    stiff); mày–tao for rough or aggressive speech; con/mẹ/bố/ông/bà for family;
+    ông ấy/bà ấy (not "anh ấy") when referring to an elder/senior. Keep each
+    character's address CONSISTENT - do not switch a character between "tớ" and
+    "tôi", or between "cậu" and "bạn", from one line to the next.
   - Convert Japanese/Korean honorifics and titles to Vietnamese equivalents
     (senpai → tiền bối / anh / chị, kōhai → hậu bối / em, -san → polite address,
     -kun / -chan → familiar address, oppa/hyung/noona → anh/chị as fitting), but
