@@ -38,7 +38,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 15, // REVERT detect ve 2048 (3072 lam sot dong nen-toi, da do 3/3) - buoc dich lai
+    CACHE_VERSION: 16, // KHONG ghep-bien trang manga roi (ghep lam co detection -> sot chu) - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -68,6 +68,12 @@
     // 1 vi tri hoac dat cach xa -> khong lien tuc -> khong ghep, tranh muon nham
     // dai anh trang khac va tranh dedup ban qua trang (xem bug 2026-08-03).
     BOUNDARY_CONTIGUITY_TOL: 50,
+    // Chi ghep-bien khi anh la WEBTOON DAI THAT (cao >= nguong nay). Trang manga
+    // ROI (blogger/MangaPlaza, ~1600px) khong co bong bong cat ngang giua cac
+    // trang -> ghep chi lam hai: anh cao hon -> detection co chieu rong lai (vd
+    // 1536->1280) -> chu nho di -> OCR SOT chu (da do that: "meet again" bat
+    // duoc khi RAW, sot khi da ghep 008+009). Nguong cao loai het trang thuong.
+    STITCH_MIN_HEIGHT: 2500,
     // AI inpaint (lama_mpe) xoa chu rat tot tren nen trang phang (bong
     // thoai thuong), nhung de lai vet mo/nhoe ro ret tren nen nhieu mau/
     // chi tiet (toc, gradient, net ve day) - gioi han cua chinh model, da
@@ -958,6 +964,9 @@
     // ke, nen ghep bien se muon nham noi dung dau trang sau -> dich trung, ve 2
     // overlay chong nhau (bug da xac nhan tren MangaPlaza). Bo qua stitching.
     if (img.naturalHeight <= img.naturalWidth) return null;
+    // Trang manga ROI (khong phai webtoon dai) -> khong ghep (xem CFG.STITCH_MIN_HEIGHT):
+    // ghep lam anh cao hon -> detection co chieu rong -> chu nho -> OCR sot chu.
+    if (img.naturalHeight < CFG.STITCH_MIN_HEIGHT) return null;
     const myRect = img.getBoundingClientRect();
     const myTop = myRect.top + window.scrollY;
     const myBottom = myRect.bottom + window.scrollY;
