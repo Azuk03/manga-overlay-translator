@@ -46,15 +46,39 @@ chat_system_template: >
     For a non-Latin term with no natural {to_lang} word, use its romanized Latin
     form (Hepburn for JP, Revised Romanization for KR, Pinyin for ZH). English
     source is simply translated fully into {to_lang}.
-  - PRONOUNS / FORMS OF ADDRESS (very important for {to_lang}): choose Vietnamese
-    pronouns that fit the speakers' gender, age, closeness and tone, inferred
-    from the dialogue on this page. Use anh/em/chị for clear romantic or
-    senior-junior relations; for peers/friends prefer tớ–cậu (this reads most
-    natural for manga; use it as the default peer pair, NOT "tôi/bạn" which is
-    stiff); mày–tao for rough or aggressive speech; con/mẹ/bố/ông/bà for family;
-    ông ấy/bà ấy (not "anh ấy") when referring to an elder/senior. Keep each
-    character's address CONSISTENT - do not switch a character between "tớ" and
-    "tôi", or between "cậu" and "bạn", from one line to the next.
+  - FORMS OF ADDRESS / PRONOUNS (critical for natural {to_lang}; do NOT translate
+    "I/you" literally - Vietnamese address is relational). Follow this procedure:
+    1. For each line, infer who is speaking, who they address or refer to, and
+       their relationship, relative age, gender and tone (warm / neutral / rude /
+       formal / romantic / reverent) from the surrounding dialogue.
+    2. Use the STANDARD Vietnamese address for whatever relationship the scene
+       shows - you already know these; apply them even for relationships not
+       listed here. Common pairs (self - other):
+       - Close friends / same-age peers (DEFAULT): tớ-cậu (or mình-cậu). Never
+         the stiff tôi/bạn for friends.
+       - Neutral / polite adults: tôi-anh/chị (other seems older) or tôi-bạn
+         (only true strangers).
+       - Romantic / crush: the man or older/pursuer says anh (self)-em (other);
+         the woman or younger says em-anh.
+       - Senior -> junior (age or rank): anh/chị-em, or by name. Junior ->
+         senior: em-anh/chị; cháu-chú/bác/cô/dì/ông/bà.
+       - Family: con-bố/mẹ; cháu-ông/bà; siblings em <-> anh/chị by age.
+       - Rough / hostile / insulting: tao-mày.
+       - Authority, arrogance, nobility, deity, villain-of-power: ta-ngươi.
+       - Historical / wuxia / court: ta-ngươi, huynh/đệ/tỷ/muội, tại hạ, tiền
+         bối/hậu bối, bệ hạ-thần, sư phụ/đồ đệ, chủ nhân/nô tài, as fitting.
+    3. Third person (he/she/they): anh ấy/cô ấy (peers, adults); ông ấy/bà ấy
+       (elders); cậu ấy (young male); nó/hắn (child, contempt, villain); use the
+       name when known.
+    4. Match the emotional register: a tớ/cậu friend who turns furious or hostile
+       switches to mày/tao or ta-ngươi; strangers who become lovers switch to
+       anh/em; a revealed noble is addressed reverently. Such shifts are CORRECT,
+       not inconsistency - let the address track the CURRENT relationship/tone.
+    5. CONSISTENCY: within one stable relationship state, reuse the same pair
+       every time; never randomly alternate tớ<->tôi or cậu<->bạn for the same
+       relationship. Change only when the story/tone genuinely changes it (rule 4).
+    6. If the relationship is truly unclear: default to tớ/cậu for young/casual
+       scenes, tôi-anh/chị for adult/formal scenes - never a flat tôi/bạn.
   - Convert Japanese/Korean honorifics and titles to Vietnamese equivalents
     (senpai → tiền bối / anh / chị, kōhai → hậu bối / em, -san → polite address,
     -kun / -chan → familiar address, oppa/hyung/noona → anh/chị as fitting), but
