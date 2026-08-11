@@ -123,3 +123,14 @@ chrome.storage.local.get('mot_character_context', (result) => {
 ccCheckbox.addEventListener('change', () => {
   chrome.storage.local.set({ mot_character_context: ccCheckbox.checked });
 });
+
+// ===== Khoi 9: Ghep bien webtoon dai (mac dinh TAT) =====
+const stitchCheckbox = document.getElementById('boundary-stitch');
+
+chrome.storage.local.get('mot_boundary_stitch', (result) => {
+  stitchCheckbox.checked = result.mot_boundary_stitch === true; // default OFF
+});
+
+stitchCheckbox.addEventListener('change', () => {
+  chrome.storage.local.set({ mot_boundary_stitch: stitchCheckbox.checked });
+});

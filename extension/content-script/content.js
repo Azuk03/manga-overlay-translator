@@ -68,12 +68,6 @@
     // 1 vi tri hoac dat cach xa -> khong lien tuc -> khong ghep, tranh muon nham
     // dai anh trang khac va tranh dedup ban qua trang (xem bug 2026-08-03).
     BOUNDARY_CONTIGUITY_TOL: 50,
-    // Chi ghep-bien khi anh la WEBTOON DAI THAT (cao >= nguong nay). Trang manga
-    // ROI (blogger/MangaPlaza, ~1600px) khong co bong bong cat ngang giua cac
-    // trang -> ghep chi lam hai: anh cao hon -> detection co chieu rong lai (vd
-    // 1536->1280) -> chu nho di -> OCR SOT chu (da do that: "meet again" bat
-    // duoc khi RAW, sot khi da ghep 008+009). Nguong cao loai het trang thuong.
-    STITCH_MIN_HEIGHT: 2500,
     // AI inpaint (lama_mpe) xoa chu rat tot tren nen trang phang (bong
     // thoai thuong), nhung de lai vet mo/nhoe ro ret tren nen nhieu mau/
     // chi tiet (toc, gradient, net ve day) - gioi han cua chinh model, da
@@ -389,6 +383,19 @@
       return mot_character_context !== false; // default ON
     } catch {
       return true;
+    }
+  }
+
+  // Ghep-bien webtoon (muon dai anh ke tiep de bat bong bong cat ngang giua 2
+  // file anh dai). Mac dinh TAT: chi co ich cho webtoon dai lien tuc; tren manga
+  // trang ROI no lam anh cao hon -> detection co chieu rong -> OCR SOT chu (da do
+  // that). Bat len khi doc webtoon dai. Live-read nhu cac setting khac.
+  async function getBoundaryStitch() {
+    try {
+      const { mot_boundary_stitch } = await chrome.storage.local.get('mot_boundary_stitch');
+      return mot_boundary_stitch === true; // default OFF
+    } catch {
+      return false;
     }
   }
 
@@ -964,9 +971,6 @@
     // ke, nen ghep bien se muon nham noi dung dau trang sau -> dich trung, ve 2
     // overlay chong nhau (bug da xac nhan tren MangaPlaza). Bo qua stitching.
     if (img.naturalHeight <= img.naturalWidth) return null;
-    // Trang manga ROI (khong phai webtoon dai) -> khong ghep (xem CFG.STITCH_MIN_HEIGHT):
-    // ghep lam anh cao hon -> detection co chieu rong -> chu nho -> OCR sot chu.
-    if (img.naturalHeight < CFG.STITCH_MIN_HEIGHT) return null;
     const myRect = img.getBoundingClientRect();
     const myTop = myRect.top + window.scrollY;
     const myBottom = myRect.bottom + window.scrollY;
@@ -1016,6 +1020,9 @@
   // Khong co anh ke tiep, hoac tai loi (mang, site chan...) -> tra ve blob
   // GOC khong doi, khong chan tien do dich anh hien tai.
   async function buildStitchedBlob(img, blob) {
+    // Mac dinh TAT (xem getBoundaryStitch): manga trang roi khong can ghep, ghep
+    // chi lam co detection -> sot chu. Chi ghep khi nguoi dung bat (doc webtoon dai).
+    if (!(await getBoundaryStitch())) return blob;
     const nextImg = findNextSiblingImage(img);
     if (!nextImg) return blob;
 
