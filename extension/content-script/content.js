@@ -1330,6 +1330,13 @@
   async function prefetchHitomiGallery(urls) {
     const targetLang = await getTargetLang();
     const engine = await getTranslatorEngine();
+    // Option C: prefetch cung phai dung/tiem ho so nhan vat, neu khong cac trang
+    // prefetch bi cache KHONG ngu canh -> khi xem la cache-hit, feature bi bo qua
+    // hoan toan voi truyen prefetch (dung la case hitomi chinh). Chia se SeriesCtx
+    // voi luong xem (translateAndRenderImage) qua singleton nen phoi hop nhat quan.
+    const ctxOn = await getCharacterContext();
+    const seriesId = ctxOn && targetLang === 'VIN' && engine !== 'deepl' ? getSeriesId() : null;
+    const st = seriesId ? await SeriesCtx.load(seriesId) : null;
     let done = 0;
     // Pipeline: tai truoc blob cua trang KE TIEP trong luc backend dich trang
     // hien tai. Backend (~7s) >> tai anh (~3s) nen viec tai bi GIAU HOAN TOAN
@@ -1356,8 +1363,10 @@
           const hash = await Cache.hashBlob(blob);
           const cached = await Cache.get(hash, targetLang, engine);
           if (!cached) {
-            const result = await ApiAdapter.translateImage(blob);
+            const gptConfigPath = st ? await SeriesCtx.resolvePath(st) : null;
+            const result = await ApiAdapter.translateImage(blob, gptConfigPath);
             await Cache.set(hash, targetLang, engine, result);
+            if (st && !st.built) await SeriesCtx.accumulateAndMaybeBuild(st, result, targetLang);
           }
           await Cache.setUrlHash(url, hash);
         }
