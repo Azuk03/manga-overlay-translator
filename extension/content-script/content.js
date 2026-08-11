@@ -102,8 +102,12 @@
       if (img.closest('header, nav, footer, aside')) return false;
       const idClass = `${img.id} ${img.className}`.toLowerCase();
       if (/logo|avatar|icon|banner|ad|thumb|sprite/.test(idClass)) return false;
+      // ratio = cao/rong. Nguong duoi 0.4 (thay vi 0.5) de CHAP NHAN trang DOI
+      // nam ngang cua mot so reader (vd MangaPlaza: 1442x688 ~ 0.475, truoc day
+      // bi loai nham). Banner/ad thuong rong hon nhieu (ratio < 0.2) nen van bi
+      // loai. Nguong tren 100 chan anh soc bat thuong.
       const ratio = img.naturalHeight / img.naturalWidth;
-      if (ratio < 0.5 || ratio > 100) return false;
+      if (ratio < 0.4 || ratio > 100) return false;
       return true;
     },
   };
