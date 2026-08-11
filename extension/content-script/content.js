@@ -12,12 +12,13 @@
     // vs ~3.7GB/4GB). Xem README.md muc "Inpaint that".
     INPAINTER: 'lama_mpe',
     INPAINTING_SIZE: 1024,
-    // Do phan giai detect chu. 2048 la MAC DINH da duoc tune - KHONG don dieu:
-    // nang len 3072 doc chu-da-tim-thay net hon nhung TIM DUOC IT chu hon o text
-    // tuong phan thap (da do that: page 005 hai dong nen-toi bat duoc o 2048,
-    // SOT o 3072 - 3/3 lan moi ben). Sot nguyen dong te hon loi chinh ta -> giu
-    // 2048. Backend nhan detection_size theo request (khong can rebuild).
-    DETECTION_SIZE: 2048,
+    // Do phan giai detect chu. KHONG don dieu theo kich thuoc chu: chu NHO nen-toi
+    // (page 005) bat o ~2048 nhung sot o 3072; chu TO/dam (page 012 "IF I TEACH")
+    // sot o 1536-2048 nhung bat o 1024/3072. Da do mịn: 2400 la DIEM NGOT DUY NHAT
+    // bat duoc CA hai on dinh (005=2/2, 012 ok - 3/3 lan). Nen dung 2400 (khong
+    // can multi-scale/2-pass). VRAM ~4.3MP < 3072 nen an toan 4GB. Backend nhan
+    // detection_size theo request (khong can rebuild).
+    DETECTION_SIZE: 2400,
     MIN_NW: 400,
     MIN_NH: 400,
     MIN_DISPLAY_RATIO: 0.3,
@@ -38,7 +39,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 17, // stitching thanh toggle (mac dinh TAT) + ep dich lai tuoi/ho so moi - buoc dich lai
+    CACHE_VERSION: 18, // DETECTION_SIZE 2048->2400 (bat ca chu nho lan chu to) - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
