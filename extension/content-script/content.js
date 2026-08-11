@@ -12,6 +12,11 @@
     // vs ~3.7GB/4GB). Xem README.md muc "Inpaint that".
     INPAINTER: 'lama_mpe',
     INPAINTING_SIZE: 1024,
+    // Do phan giai detect chu. Nang 2048 -> 3072 giup OCR doc net hon HAN tren
+    // scan tieng Anh (da do: BHT->BUT, FIOURINE->FIGURINE, T HANDLE->HANDLE).
+    // Danh doi: cham hon chut + ton VRAM hon (van chay tren RTX 3050 Ti 4GB).
+    // Backend nhan detection_size theo tung request (khong can rebuild).
+    DETECTION_SIZE: 3072,
     MIN_NW: 400,
     MIN_NH: 400,
     MIN_DISPLAY_RATIO: 0.3,
@@ -32,7 +37,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 13, // ho so = du lieu tham chieu, luat nen luon thang (giam xung dot) - buoc dich lai
+    CACHE_VERSION: 14, // detection_size 2048->3072 (OCR net hon tren scan tieng Anh) - buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -443,6 +448,7 @@
       const body = JSON.stringify({
         image: dataUrl,
         config: {
+          detector: { detection_size: CFG.DETECTION_SIZE },
           translator: translatorConfig,
           render: { renderer: 'none' },
           inpainter: { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE },
