@@ -127,12 +127,27 @@ longer collide with a neighbor.
 at the real inpainted bbox). PASS 2 (`.mot-textbox`) currently only applies
 the translucent white backing (`.mot-busy` styling) when the backend flagged
 the region `busy`. Change: apply that same backing to **any** region whose
-clamped box area exceeds its original bbox area by more than 10%,
-independent of the `busy` flag — this is reusing existing CSS, not
-adding new classes. (10% is a starting default: small enough that ordinary
-minor reshapes on non-CJK text don't sprout a visible backing plate, large
-enough to catch the CJK narrow-to-wide reshape case this component targets;
-tune against real pages during implementation.)
+clamped box has more than 10% of its own area lying **outside the original
+bbox** (intersection-based, not a raw area-ratio comparison — see erratum
+below), independent of the `busy` flag — this is reusing existing CSS, not
+adding new classes.
+
+**Erratum (found in final review, corrected before merge):** the box first
+written here — "clamped box area exceeds its original bbox area by more
+than 10%" — is a no-op by construction and never fires. `_reshapeForHorizontalText`
+is exactly area-preserving (`w = min(sqrt(area*1.3), r.w*3.5)`, `h = area/w`,
+so `w*h` stays equal to the original `r.w*r.h`), and the safe-bounds clamp
+only ever shrinks that area further — so the clamped box's area can never
+exceed the original's. What actually needs measuring is spatial coverage,
+not area: does the box's rectangle extend outside the original rectangle's
+footprint, regardless of whether total area grew or shrank. Corrected rule:
+compute the intersection between the clamped box and the original bbox,
+and flag `(clampedArea - intersectionArea) / clampedArea > 0.1` — i.e. more
+than 10% of the rendered box's own footprint sits outside the original
+detected area. Confirmed against the real CJK fixture regions: all 5 have
+45-67% of their clamped box outside the original bbox, and the corrected
+rule fires `true` for all of them (the original, wrong rule fired `false`
+for all 5).
 
 ## Component 2 — Decoupled boundary detection (content.js + background.js)
 
