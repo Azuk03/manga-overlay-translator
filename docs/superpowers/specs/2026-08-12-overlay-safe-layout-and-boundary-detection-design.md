@@ -92,13 +92,21 @@ is never translated at all (63 empty images vs 50, 260 OCR lines vs 377).
 **New pure function `_computeSafeBounds(regions)`**, called once per image
 before the existing reshape/draw loop:
 
-- For every region, compute the maximum half-extent it may grow to in each of
-  the four directions (up/down/left/right) as the distance from its own
-  center to the **nearest other region's original (un-reshaped) bbox edge**
-  in that direction, minus a fixed safety margin (default: 4px in natural-image
-  space, i.e. the same scale `r.x`/`r.y` are already expressed in — matches the
-  existing small pixel-level paddings elsewhere in `OverlayRenderer`; tunable
-  during implementation if real pages need more breathing room).
+- For every pair of regions that face each other on one axis (their original,
+  un-reshaped bboxes overlap on the *other* axis — i.e. genuine left/right or
+  up/down neighbors, not diagonal), the safe boundary between them is the
+  **midpoint between their original facing edges**, each side clamped to stay
+  within `MARGIN` (default 4px, natural-image space) of that midpoint.
+  Critically, the midpoint is computed the same way from either region's
+  side — region A's max-rightward-reach and region B's max-leftward-reach
+  are derived from the *same* shared line, so the two clamped boxes can
+  never cross each other no matter how large either region's own ideal
+  reshape wants to be. (An earlier version of this design computed each
+  region's limit independently as "distance to the neighbor's edge" — that
+  version was verified against the real detector output below and found
+  broken: both sides can independently believe they own the *entire* gap,
+  so both grow into it and still collide. The midpoint version was
+  re-verified against the same data with zero overlap.)
 - Using the *original* bboxes (not reshaped candidates) as the reference
   makes the computation order-independent and symmetric — no region's clamp
   depends on the order regions happen to be processed in.
@@ -184,8 +192,8 @@ same goal ("works with any manga/webtoon"):
 | Case | Verifies | Source |
 |---|---|---|
 | English manga pages (p005/p007/p008/p012) | Font fit + background coverage (Component 1) | Already downloaded this session |
-| CJK (JP/CN/KR) page with vertical text | Collision avoidance (Component 1) | To be sourced (public raw/webtoon page) before implementation is verified |
-| The webtoon page already tested by the user (2 real runs captured above) | Component 2: main-image resolution must stay ~1536 wide (not regress to 1280), total OCR lines must be ≥ 377 (no coverage loss vs. old stitch-on) | URL to be requested from the user at verification time |
+| CJK vertical-text fixture | Collision avoidance (Component 1) | `fixtures/cjk_vertical_test.png` + `.html` (synthetic — a real public source could not be used: JP/CN/KR sites found are either DRM-protected (MangaPlaza, GigaViewer/ShonenJump+, see earlier investigation) or unauthorized distributors, and the fetch tool declined the latter on copyright grounds. Generated with PIL + the system's MS Gothic font, generic greeting phrases only. **Confirmed against the real backend detector**: 5 regions, `fixtures/cjk_vertical_test_detect.txt` (w≈43-46px, h≈236-425px, two pairs only ~45-65px apart) — their *ideal* reshaped boxes overlap by ~30px without this fix, verified to reach zero overlap with it (see Component 1 for the algorithm this was verified against)) |
+| `https://www.webtoons.com/en/action/the-stellar-swordmaster/s2-episode-121/viewer?title_no=5988&episode_no=121` (2 real runs already captured — see Problem B table) | Component 2: main-image resolution must stay ~1536 wide (not regress to 1280), total OCR lines must be ≥ 377 (no coverage loss vs. old stitch-on) | User-provided |
 
 Both components are browser-verified per this project's standing convention
 (code review is necessary but not sufficient) before merge.
