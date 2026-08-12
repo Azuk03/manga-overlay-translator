@@ -683,6 +683,55 @@
       }
     },
 
+    // Gioi han an toan de nong khung: voi moi CAP vung "doi dien" nhau (bbox
+    // GOC chong lan theo TRUC KIA - tuc la hang xom that su ben canh/tren-
+    // duoi, khong phai o goc xa), ranh gioi dung chung la DIEM GIUA 2 mep
+    // GOC doi dien - ca 2 phia deu tinh ra CUNG 1 duong ranh gioi nay (du
+    // tinh tu vung nao truoc), nen 2 khung da kep KHONG BAO GIO cheo nhau,
+    // bat ke vung kia muon nong to den dau. (Ban dau tung thu cach tinh
+    // "khoang cach toi mep hang xom" tu MOT PHIA - SAI: ca 2 vung co the
+    // doc lap tin rang chung duoc chiem TRON khoang trong giua, van de len
+    // nhau - da kiem chung that bang du lieu detect that, xem
+    // fixtures/verify_safe_bounds.js va spec 2026-08-12.)
+    _computeSafeBounds(regions) {
+      const MARGIN = 4; // px trong khong gian anh goc (naturalWidth/Height)
+      return regions.map((r, i) => {
+        const cx = r.x + r.w / 2;
+        const cy = r.y + r.h / 2;
+        let maxLeft = Infinity;
+        let maxRight = Infinity;
+        let maxUp = Infinity;
+        let maxDown = Infinity;
+        regions.forEach((other, j) => {
+          if (i === j) return;
+          const overlapsY = other.y < r.y + r.h && other.y + other.h > r.y;
+          const overlapsX = other.x < r.x + r.w && other.x + other.w > r.x;
+          if (overlapsY) {
+            if (other.x >= r.x + r.w) {
+              const mid = (r.x + r.w + other.x) / 2;
+              maxRight = Math.min(maxRight, mid - cx - MARGIN);
+            } else if (r.x >= other.x + other.w) {
+              const mid = (other.x + other.w + r.x) / 2;
+              maxLeft = Math.min(maxLeft, cx - mid - MARGIN);
+            }
+          }
+          if (overlapsX) {
+            if (other.y >= r.y + r.h) {
+              const mid = (r.y + r.h + other.y) / 2;
+              maxDown = Math.min(maxDown, mid - cy - MARGIN);
+            } else if (r.y >= other.y + other.h) {
+              const mid = (other.y + other.h + r.y) / 2;
+              maxUp = Math.min(maxUp, cy - mid - MARGIN);
+            }
+          }
+        });
+        return {
+          maxHalfW: Math.max(r.w / 2, Math.min(maxLeft, maxRight)),
+          maxHalfH: Math.max(r.h / 2, Math.min(maxUp, maxDown)),
+        };
+      });
+    },
+
     // Chu Nhat goc thuong la cot doc HEP (vd rong 14px, cao 339px). Chu dich
     // tieng Viet luon ve NGANG (khong co field "vertical" trong API - xem
     // README.md), neu giu nguyen ti le hep-cao nay thi chu Viet bi nhoi vao
@@ -690,8 +739,13 @@
     // rong hon CHI DE DAT CHU (khung nay TRONG SUOT, khong dung de che chu
     // goc - viec che chu la cua anh inpaint, xem render()). Han che do
     // "phinh ngang" (TARGET_ASPECT thap + gioi han max width) de giam
-    // chong lan sang cot ben canh khi trang qua day dac.
-    _reshapeForHorizontalText(r) {
+    // chong lan sang cot ben canh khi trang qua day dac. `bounds` (tu
+    // _computeSafeBounds, optional) kep them theo hang xom that - khong
+    // bao gio nong vuot qua gioi han nay du TARGET_ASPECT/3.5x muon nhieu
+    // hon. Khi bi kep hep lai theo be rong, chieu cao duoc tinh lai theo
+    // DIEN TICH da dinh hinh (khong phai dien tich bbox goc) de tan dung
+    // toi da khong gian con lai, roi moi kep tiep theo chieu cao neu can.
+    _reshapeForHorizontalText(r, bounds) {
       const centerX = r.x + r.w / 2;
       const centerY = r.y + r.h / 2;
       let w = r.w;
@@ -701,6 +755,17 @@
         const TARGET_ASPECT = 1.3;
         w = Math.min(Math.sqrt(area * TARGET_ASPECT), r.w * 3.5);
         h = area / w;
+      }
+      if (bounds) {
+        const maxW = bounds.maxHalfW * 2;
+        const maxH = bounds.maxHalfH * 2;
+        if (w > maxW) {
+          h = Math.min((w * h) / maxW, maxH);
+          w = maxW;
+        } else if (h > maxH) {
+          w = Math.min((w * h) / maxH, maxW);
+          h = maxH;
+        }
       }
       return { x: centerX - w / 2, y: centerY - h / 2, w, h };
     },
@@ -769,8 +834,9 @@
       // dich noi bat ro rang tren tranh goc nhieu mau/chi tiet, thay vi
       // chi dua vao vien trang (da du doc nhung khong "sach" bang).
       const textboxes = [];
-      regions.forEach((r) => {
-        const eff = this._reshapeForHorizontalText(r);
+      const safeBounds = this._computeSafeBounds(regions);
+      regions.forEach((r, i) => {
+        const eff = this._reshapeForHorizontalText(r, safeBounds[i]);
         const padW = eff.w * CFG.TEXTBOX_PAD;
         const padH = eff.h * CFG.TEXTBOX_PAD;
         const tx = Math.max(0, eff.x - padW / 2);
