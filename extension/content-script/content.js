@@ -1286,7 +1286,7 @@
           } else {
             result = await ApiAdapter.translateImage(blob, gptConfigPath);
             const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
-            result.regions = result.regions.concat(boundaryRegions);
+            result.regions = dedupeRegions(result.regions.concat(boundaryRegions));
           }
           await Cache.set(hash, targetLang, engine, result);
           // Chua dung ho so => gom chu goc, du thi dung 1 lan cho truyen.
