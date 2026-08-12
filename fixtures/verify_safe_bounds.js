@@ -77,6 +77,10 @@ function reshapeForHorizontalText(r, bounds) {
       h = Math.min((w * h) / maxW, maxH);
       w = maxW;
     } else if (h > maxH) {
+      // Nhanh nay khong the xay ra tren thuc te (voi bao dam maxHalfH >=
+      // r.h/2 va cong thuc nong bao toan dien tich, h truoc-clamp o day
+      // khong bao gio vuot qua maxH - da xac nhan trong final review) -
+      // giu lai lam bao ve phong thu neu cong thuc nong sau nay doi.
       w = Math.min((w * h) / maxH, maxW);
       h = maxH;
     }

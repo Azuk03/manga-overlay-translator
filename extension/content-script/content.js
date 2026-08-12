@@ -347,9 +347,12 @@
   }
 
   // Ghep-bien webtoon (muon dai anh ke tiep de bat bong bong cat ngang giua 2
-  // file anh dai). Mac dinh TAT: chi co ich cho webtoon dai lien tuc; tren manga
-  // trang ROI no lam anh cao hon -> detection co chieu rong -> OCR SOT chu (da do
-  // that). Bat len khi doc webtoon dai. Live-read nhu cac setting khac.
+  // file anh dai). Mac dinh TAT: chi co ich cho webtoon dai lien tuc; detect
+  // bien gio DOC LAP voi anh chinh (khong con noi vao anh chinh nen khong con
+  // anh huong toi do phan giai/OCR cua anh chinh - xem detectBoundaryRegions()),
+  // nhung tra gia 1 lan goi backend THEM cho moi mep noi anh khi bat, nen van
+  // de mac dinh TAT tren manga trang ROI khong can. Bat len khi doc webtoon
+  // dai. Live-read nhu cac setting khac.
   async function getBoundaryStitch() {
     try {
       const { mot_boundary_stitch } = await chrome.storage.local.get('mot_boundary_stitch');
@@ -446,6 +449,7 @@
         'px.'
       );
       const allRegions = [];
+      let boundaryRegions = [];
       for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
         const result = await this.translateImage(tile.blob, gptConfigPath);
@@ -458,13 +462,16 @@
         // bien RIENG (khong con noi vao blob cua lat) - xem
         // detectBoundaryRegions(); tra ve toa do da o khong gian ANH GOC
         // (dung naturalH thuc, khong phai kich thuoc lat) nen cong thang
-        // vao allRegions, khong can + tile.yOffset.
+        // vao allRegions, khong can + tile.yOffset. KHONG gop truc tiep vao
+        // allRegions o day - dedupeRegions(allRegions) ben duoi dung IoU,
+        // chi dung cho vung CUNG ty le (giua 2 lat chong lan); vung boundary
+        // detect o ty le KHAC (crop rieng) can mergeBoundaryRegions
+        // (containment) tach rieng sau khi dedupeRegions da chay xong.
         if (i === tiles.length - 1) {
-          const boundaryRegions = await detectBoundaryRegions(img, tile.blob, gptConfigPath);
-          allRegions.push(...boundaryRegions);
+          boundaryRegions = await detectBoundaryRegions(img, tile.blob, gptConfigPath);
         }
       }
-      return { regions: dedupeRegions(allRegions) };
+      return { regions: mergeBoundaryRegions(dedupeRegions(allRegions), boundaryRegions) };
     },
   };
 
@@ -780,6 +787,10 @@
           h = Math.min((w * h) / maxW, maxH);
           w = maxW;
         } else if (h > maxH) {
+          // Nhanh nay khong the xay ra tren thuc te (voi bao dam maxHalfH >=
+          // r.h/2 va cong thuc nong bao toan dien tich, h truoc-clamp o day
+          // khong bao gio vuot qua maxH - da xac nhan trong final review) -
+          // giu lai lam bao ve phong thu neu cong thuc nong sau nay doi.
           w = Math.min((w * h) / maxH, maxW);
           h = maxH;
         }
@@ -859,16 +870,30 @@
         const tx = Math.max(0, eff.x - padW / 2);
         const ty = Math.max(0, eff.y - padH / 2);
         const tw = Math.min(naturalW - tx, eff.w + padW);
-        const th = Math.min(naturalH - ty, eff.h + padH);
+        // Khong clamp chieu cao khi vung THAT SU vuot qua day anh (vd tu
+        // detectBoundaryRegions() - toa do co the > naturalH, xem ham do) -
+        // Math.min(naturalH - ty, ...) se ra AM trong truong hop nay, thanh
+        // CSS height khong hop le (bi bo qua, khung sup ve height:auto).
+        // .mot-layer khong co overflow:hidden nen khung khong-clamp van ve
+        // dung, giong ly do .mot-bg o PASS 1 cung khong clamp (xem tren).
+        const th = eff.y + eff.h > naturalH ? eff.h + padH : Math.min(naturalH - ty, eff.h + padH);
 
         // Phan khung da nong VUOT QUA bbox goc (khong con nam gon trong
         // vung anh da inpaint that - xem PASS 1) khong co nen inpaint che -
         // phu them nen trang mo (giong .mot-busy) bat ke r.busy hay khong,
-        // tranh chu/tranh raw lo ra quanh chu dich. Nguong 10%: du nho de
-        // cac lan nong nhe (chu khong-CJK) khong tu nhien co nen, du lon de
-        // bat dung truong hop CJK doc bi nong ngang manh (xem spec
-        // 2026-08-12-overlay-safe-layout-and-boundary-detection-design.md).
-        const grew = eff.w * eff.h > r.w * r.h * 1.1;
+        // tranh chu/tranh raw lo ra quanh chu dich. Do dien tich PHAN KHUNG
+        // NAM NGOAI bbox goc so voi tong dien tich khung (khong phai so
+        // sanh eff.w*eff.h > r.w*r.h nhu ban dau - _reshapeForHorizontalText
+        // BAO TOAN dien tich va safe-bounds chi CO THE thu hep them, nen
+        // eff.w*eff.h khong bao gio > r.w*r.h => phep so sanh cu la no-op,
+        // "grew" khong bao gio true; da xac nhan la loi trong final review,
+        // xem erratum trong spec 2026-08-12-overlay-safe-layout-and-boundary-
+        // detection-design.md). Nguong 10%: du nho de cac lan nong nhe (chu
+        // khong-CJK) khong tu nhien co nen, du lon de bat dung truong hop
+        // CJK doc bi nong ngang manh.
+        const interW = Math.max(0, Math.min(eff.x + eff.w, r.x + r.w) - Math.max(eff.x, r.x));
+        const interH = Math.max(0, Math.min(eff.y + eff.h, r.y + r.h) - Math.max(eff.y, r.y));
+        const grew = eff.w * eff.h - interW * interH > eff.w * eff.h * 0.1;
         const textbox = document.createElement('div');
         textbox.className = 'mot-textbox' + (r.busy || grew ? ' mot-busy' : '');
         textbox.style.left = (tx / naturalW) * 100 + '%';
@@ -1059,15 +1084,22 @@
   async function detectBoundaryRegions(img, blob, gptConfigPath) {
     if (!(await getBoundaryStitch())) return [];
     const nextImg = findNextSiblingImage(img);
-    if (!nextImg) return [];
+    if (!nextImg) {
+      log('Ghep-bien: khong co anh ke tiep, bo qua.');
+      return [];
+    }
 
     let stripBlob;
     try {
       stripBlob = await getStripFromNextImage(nextImg, CFG.BOUNDARY_BORROW_HEIGHT);
     } catch (err) {
+      log('Ghep-bien: loi tai dai anh ke tiep, bo qua.', err);
       return [];
     }
-    if (!stripBlob) return [];
+    if (!stripBlob) {
+      log('Ghep-bien: khong lay duoc dai anh ke tiep, bo qua.');
+      return [];
+    }
 
     let cropBlob;
     let ownStripH;
@@ -1092,14 +1124,19 @@
       stripBitmap.close?.();
       cropBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     } catch (err) {
+      log('Ghep-bien: loi dung anh crop bien, bo qua.', err);
       return [];
     }
-    if (!cropBlob) return [];
+    if (!cropBlob) {
+      log('Ghep-bien: khong dung duoc anh crop bien, bo qua.');
+      return [];
+    }
 
     let cropResult;
     try {
       cropResult = await ApiAdapter.translateImage(cropBlob, gptConfigPath);
     } catch (err) {
+      log('Ghep-bien: loi dich anh crop bien, bo qua.', err);
       return [];
     }
 
@@ -1152,6 +1189,17 @@
     if (interArea === 0) return 0;
     const minArea = Math.min(a.w * a.h, b.w * b.h);
     return interArea / minArea;
+  }
+
+  // Hop nhat vung tu detectBoundaryRegions() vao vung da detect chinh: dung
+  // overlapRatio (containment) chu KHONG dung dedupeRegions/IoU thuong - anh
+  // crop bien duoc detect o ty le KHAC voi anh/lat chinh, nen cung 1 noi dung
+  // co the bi tach dong khac nhau giua 2 lan detect (vd 1 bong bong 3 dong o
+  // lan chinh vs 3 vung 1-dong rieng le o lan crop) - IoU chuan se khong bat
+  // duoc trung lap nay (xem ghi chu tren overlapRatio()). Uu tien giu vung
+  // CHINH (main) khi trung, boundary chi BO SUNG noi dung con thieu.
+  function mergeBoundaryRegions(base, boundary) {
+    return base.concat(boundary.filter((b) => !base.some((m) => overlapRatio(m, b) > 0.5)));
   }
 
   function isDuplicateOfRendered(img, region) {
@@ -1286,7 +1334,7 @@
           } else {
             result = await ApiAdapter.translateImage(blob, gptConfigPath);
             const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
-            result.regions = dedupeRegions(result.regions.concat(boundaryRegions));
+            result.regions = mergeBoundaryRegions(result.regions, boundaryRegions);
           }
           await Cache.set(hash, targetLang, engine, result);
           // Chua dung ho so => gom chu goc, du thi dung 1 lan cho truyen.
