@@ -713,6 +713,10 @@
             } else if (r.x >= other.x + other.w) {
               const mid = (other.x + other.w + r.x) / 2;
               maxLeft = Math.min(maxLeft, cx - mid - MARGIN);
+            } else {
+              // Both axes overlap: genuine overlap, constrain to no horizontal growth
+              maxLeft = Math.min(maxLeft, 0);
+              maxRight = Math.min(maxRight, 0);
             }
           }
           if (overlapsX) {
@@ -722,6 +726,10 @@
             } else if (r.y >= other.y + other.h) {
               const mid = (other.y + other.h + r.y) / 2;
               maxUp = Math.min(maxUp, cy - mid - MARGIN);
+            } else {
+              // Both axes overlap: genuine overlap, constrain to no vertical growth
+              maxUp = Math.min(maxUp, 0);
+              maxDown = Math.min(maxDown, 0);
             }
           }
         });
