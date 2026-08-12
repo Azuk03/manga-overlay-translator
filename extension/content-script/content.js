@@ -852,8 +852,16 @@
         const tw = Math.min(naturalW - tx, eff.w + padW);
         const th = Math.min(naturalH - ty, eff.h + padH);
 
+        // Phan khung da nong VUOT QUA bbox goc (khong con nam gon trong
+        // vung anh da inpaint that - xem PASS 1) khong co nen inpaint che -
+        // phu them nen trang mo (giong .mot-busy) bat ke r.busy hay khong,
+        // tranh chu/tranh raw lo ra quanh chu dich. Nguong 10%: du nho de
+        // cac lan nong nhe (chu khong-CJK) khong tu nhien co nen, du lon de
+        // bat dung truong hop CJK doc bi nong ngang manh (xem spec
+        // 2026-08-12-overlay-safe-layout-and-boundary-detection-design.md).
+        const grew = eff.w * eff.h > r.w * r.h * 1.1;
         const textbox = document.createElement('div');
-        textbox.className = 'mot-textbox' + (r.busy ? ' mot-busy' : '');
+        textbox.className = 'mot-textbox' + (r.busy || grew ? ' mot-busy' : '');
         textbox.style.left = (tx / naturalW) * 100 + '%';
         textbox.style.top = (ty / naturalH) * 100 + '%';
         textbox.style.width = (tw / naturalW) * 100 + '%';
