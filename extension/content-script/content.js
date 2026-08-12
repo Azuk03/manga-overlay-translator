@@ -39,7 +39,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 18, // DETECTION_SIZE 2048->2400 (bat ca chu nho lan chu to) - buoc dich lai
+    CACHE_VERSION: 19, // ghep bien tach lam 2 lan detect doc lap thay vi noi anh - doi tap region cache cho anh co bat stitch, buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -57,11 +57,13 @@
     // trinh duyet cung ton tai, khong chi gioi han chieu cao (xem spec 5.7).
     TILE_MAX_H: 4000,
     TILE_OVERLAP: 200,
-    // Ghep bien anh lien ke: muon them BOUNDARY_BORROW_HEIGHT px dau cua anh
-    // KE TIEP truoc khi gui detect, de bong bong/cau van bi site tu cat
-    // ngang giua 2 file anh van duoc nhin thay du. 500px du cho hau het bong
-    // bong thuc te da quan sat (cao nhat ~300-400px). Xem spec
-    // 2026-07-23-cross-image-boundary-stitching-design.md.
+    // Ghep bien anh lien ke: dai BOUNDARY_BORROW_HEIGHT px CUOI anh hien tai
+    // + dai cung do DAU anh KE TIEP duoc ghep thanh 1 anh NHO RIENG BIET va
+    // detect DOC LAP voi anh chinh (KHONG con noi vao anh chinh truoc khi
+    // detect nhu truoc - lam vay se co hep do phan giai CA anh chinh, xem
+    // spec 2026-08-12-overlay-safe-layout-and-boundary-detection-design.md).
+    // 500px du cho hau het bong bong thuc te da quan sat (cao nhat ~300-
+    // 400px). Xem ham detectBoundaryRegions().
     BOUNDARY_BORROW_HEIGHT: 500,
     // Chi ghep-bien khi anh ke tiep NOI LIEN theo chieu doc (dinh cua no cach
     // day anh hien tai khong qua nguong nay). Webtoon that xep chong lien mach
@@ -446,13 +448,20 @@
       const allRegions = [];
       for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
-        // Chi lat CUOI CUNG moi thuc su giap ranh gioi voi anh ke tiep tren
-        // trang - cac lat truoc da co TILE_OVERLAP xu ly rieng (xem spec
-        // 2026-07-23-cross-image-boundary-stitching-design.md muc 8).
-        const tileBlob = i === tiles.length - 1 ? await buildStitchedBlob(img, tile.blob) : tile.blob;
-        const result = await this.translateImage(tileBlob, gptConfigPath);
+        const result = await this.translateImage(tile.blob, gptConfigPath);
         for (const r of result.regions) {
           allRegions.push({ ...r, y: r.y + tile.yOffset });
+        }
+        // Chi lat CUOI CUNG moi thuc su giap ranh gioi voi anh ke tiep tren
+        // trang - cac lat truoc da co TILE_OVERLAP xu ly rieng (xem spec
+        // 2026-07-23-cross-image-boundary-stitching-design.md muc 8). Detect
+        // bien RIENG (khong con noi vao blob cua lat) - xem
+        // detectBoundaryRegions(); tra ve toa do da o khong gian ANH GOC
+        // (dung naturalH thuc, khong phai kich thuoc lat) nen cong thang
+        // vao allRegions, khong can + tile.yOffset.
+        if (i === tiles.length - 1) {
+          const boundaryRegions = await detectBoundaryRegions(img, tile.blob, gptConfigPath);
+          allRegions.push(...boundaryRegions);
         }
       }
       return { regions: dedupeRegions(allRegions) };
@@ -1038,44 +1047,69 @@
     return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   }
 
-  // Ghep canvas anh hien tai + dai bien cua anh ke tiep (neu co/tai duoc).
-  // Khong co anh ke tiep, hoac tai loi (mang, site chan...) -> tra ve blob
-  // GOC khong doi, khong chan tien do dich anh hien tai.
-  async function buildStitchedBlob(img, blob) {
-    // Mac dinh TAT (xem getBoundaryStitch): manga trang roi khong can ghep, ghep
-    // chi lam co detection -> sot chu. Chi ghep khi nguoi dung bat (doc webtoon dai).
-    if (!(await getBoundaryStitch())) return blob;
+  // Detect DOC LAP vung giap ranh: cat rieng [BOUNDARY_BORROW_HEIGHT px CUOI
+  // cua anh hien tai] + [BOUNDARY_BORROW_HEIGHT px DAU cua anh ke tiep]
+  // thanh 1 anh NHO, gui backend detect+dich RIENG (KHONG con noi vao anh
+  // chinh - anh chinh detect o kich thuoc goc, khong bi co do phan giai).
+  // Tra ve mang region ĐA quy doi toa do ve khong gian anh hien tai (co the
+  // vuot qua naturalHeight cua no - da duoc render() ho tro tu truoc, xem
+  // spec 2026-07-23-cross-image-boundary-stitching-design.md muc render
+  // khong clamp 100%). Khong bat/khong co anh ke/loi bat ky buoc nao ->
+  // tra ve [] êm xuoi, khong chan render anh chinh.
+  async function detectBoundaryRegions(img, blob, gptConfigPath) {
+    if (!(await getBoundaryStitch())) return [];
     const nextImg = findNextSiblingImage(img);
-    if (!nextImg) return blob;
+    if (!nextImg) return [];
 
     let stripBlob;
     try {
       stripBlob = await getStripFromNextImage(nextImg, CFG.BOUNDARY_BORROW_HEIGHT);
     } catch (err) {
-      return blob;
+      return [];
     }
+    if (!stripBlob) return [];
 
-    if (!stripBlob) return blob;
-
+    let cropBlob;
+    let ownStripH;
     try {
       const [currentBitmap, stripBitmap] = await Promise.all([
         createImageBitmap(blob),
         createImageBitmap(stripBlob),
       ]);
+      ownStripH = Math.min(CFG.BOUNDARY_BORROW_HEIGHT, currentBitmap.height);
       const canvas = document.createElement('canvas');
       canvas.width = currentBitmap.width;
-      canvas.height = currentBitmap.height + stripBitmap.height;
+      canvas.height = ownStripH + stripBitmap.height;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(currentBitmap, 0, 0);
-      ctx.drawImage(stripBitmap, 0, currentBitmap.height);
+      // Dai CUOI cua anh hien tai (khong phai toan bo anh).
+      ctx.drawImage(
+        currentBitmap,
+        0, currentBitmap.height - ownStripH, currentBitmap.width, ownStripH,
+        0, 0, currentBitmap.width, ownStripH
+      );
+      ctx.drawImage(stripBitmap, 0, ownStripH);
       currentBitmap.close?.();
       stripBitmap.close?.();
-
-      const stitched = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      return stitched || blob;
+      cropBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     } catch (err) {
-      return blob;
+      return [];
     }
+    if (!cropBlob) return [];
+
+    let cropResult;
+    try {
+      cropResult = await ApiAdapter.translateImage(cropBlob, gptConfigPath);
+    } catch (err) {
+      return [];
+    }
+
+    // Toa do tra ve la KHONG GIAN CUA ANH CROP NHO (0..ownStripH+stripH).
+    // Diem 0 cua crop tuong ung y = naturalHeight - ownStripH trong anh
+    // hien tai - cong offset nay la du, ap dung dung cho ca phan thuoc
+    // "duoi anh hien tai" LAN phan thuoc "dau anh ke tiep" (ca 2 deu la
+    // tiep noi truc tiep tu diem do trong khong gian anh hien tai).
+    const offsetY = img.naturalHeight - ownStripH;
+    return (cropResult.regions || []).map((r) => ({ ...r, y: offsetY + r.y }));
   }
 
   // Registry toan cuc: moi vung chu da duoc VE THAT SU (khong phai chi
@@ -1247,10 +1281,13 @@
             st = await SeriesCtx.load(seriesId);
             gptConfigPath = await SeriesCtx.resolvePath(st);
           }
-          result =
-            img.naturalHeight > CFG.TILE_MAX_H
-              ? await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img, gptConfigPath)
-              : await ApiAdapter.translateImage(await buildStitchedBlob(img, blob), gptConfigPath);
+          if (img.naturalHeight > CFG.TILE_MAX_H) {
+            result = await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img, gptConfigPath);
+          } else {
+            result = await ApiAdapter.translateImage(blob, gptConfigPath);
+            const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
+            result.regions = result.regions.concat(boundaryRegions);
+          }
           await Cache.set(hash, targetLang, engine, result);
           // Chua dung ho so => gom chu goc, du thi dung 1 lan cho truyen.
           if (seriesId && st && !st.built) {
