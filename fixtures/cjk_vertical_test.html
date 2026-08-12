@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<!--
+  Test fixture cho spec 2026-08-12-overlay-safe-layout-and-boundary-detection-design.md.
+  Anh cjk_vertical_test.png la ANH TONG HOP (khong phai trang manga that - tranh
+  van de ban quyen), ve bang PIL + font MS Gothic he thong: 2 cap cot doc tieng
+  Nhat nam SAT NHAU (~45-65px), mo phong dung pattern gay loi chong chu khi
+  reshape ngang. Da xac nhan qua backend that: detect ra 5 vung hep-cao (w~43-46px,
+  h~236-425px) - xem fixtures/cjk_vertical_test_detect.txt.
+  Phuc vu: python -m http.server 8000 (tu thu muc fixtures/), roi mo
+  http://localhost:8000/cjk_vertical_test.html trong Chrome/Edge co extension.
+-->
+<html>
+<head><meta charset="utf-8"><title>CJK vertical text test fixture</title></head>
+<body style="margin:0;">
+  <img src="cjk_vertical_test.png" alt="CJK vertical test">
+</body>
+</html>
