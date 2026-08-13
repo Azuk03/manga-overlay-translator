@@ -8,3 +8,7 @@ test-image.png
 test-image.b64
 *.webp
 .claude/
+
+# Python build artifacts
+__pycache__/
+*.pyc

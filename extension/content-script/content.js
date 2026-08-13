@@ -1342,7 +1342,9 @@
         payload: { series_id: seriesId, recent: text },
       })
         .then((res) => {
-          if (res && res.ok && res.data && res.data.gpt_config_path) {
+          // Chi bat path neu VAN con dung truyen do (append cu cua truyen truoc
+          // co the ve tre sau khi da doi truyen -> khong ghi de path nham).
+          if (this._seriesId === seriesId && res && res.ok && res.data && res.data.gpt_config_path) {
             this.path = res.data.gpt_config_path;
           }
         })
