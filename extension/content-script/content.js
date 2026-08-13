@@ -39,7 +39,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 21, // mergeBoundaryRegions giu ban DAY DU hon khi trung (truoc luon giu main = ban cut) - doi region render, buoc dich lai
+    CACHE_VERSION: 22, // crop-bien chi giu vung VAT QUA ranh gioi (truoc bat ca bong bong chi-thuoc-anh-sau -> chan detect day du) - doi region render, buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -1152,8 +1152,22 @@
     // hien tai - cong offset nay la du, ap dung dung cho ca phan thuoc
     // "duoi anh hien tai" LAN phan thuoc "dau anh ke tiep" (ca 2 deu la
     // tiep noi truc tiep tu diem do trong khong gian anh hien tai).
+    // CHI GIU vung VAT QUA ranh gioi (straddle): trong toa do crop, ranh gioi
+    // giua [day anh hien tai] va [dau anh ke tiep] nam o y = ownStripH. Vung
+    // NAM HAN 1 phia khong phai viec cua crop-bien:
+    //  - Nam han TREN ranh gioi (r.y+r.h <= ownStripH): thuoc anh HIEN TAI,
+    //    detect chinh cua no da bat du.
+    //  - Nam han DUOI ranh gioi (r.y >= ownStripH): thuoc anh KE TIEP, detect
+    //    chinh cua NO se bat DAY DU. Neu crop tra ve ban CUT o day (chi bat
+    //    phan dau lot vao 500px), no se dang ky vao registry chong-trung ->
+    //    CHAN anh ke tiep ve ban day du (bug thuc te: "I RECKON IT" cut, mat
+    //    "COULD SWALLOW ALL YOUR LITTLE FRIENDS..."). Bo di.
+    // Chi vung co noi dung o CA HAI phia (that su bi cat ngang giua 2 anh) moi
+    // duoc crop-bien xu ly - dung muc dich ban dau cua no.
     const offsetY = img.naturalHeight - ownStripH;
-    return (cropResult.regions || []).map((r) => ({ ...r, y: offsetY + r.y }));
+    return (cropResult.regions || [])
+      .filter((r) => r.y < ownStripH && r.y + r.h > ownStripH)
+      .map((r) => ({ ...r, y: offsetY + r.y }));
   }
 
   // Registry toan cuc: moi vung chu da duoc VE THAT SU (khong phai chi
