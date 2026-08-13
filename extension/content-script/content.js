@@ -39,7 +39,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 22, // crop-bien chi giu vung VAT QUA ranh gioi (truoc bat ca bong bong chi-thuoc-anh-sau -> chan detect day du) - doi region render, buoc dich lai
+    CACHE_VERSION: 23, // ghep-bien HOP NHAT (bo toggle) + edge-gate: chi chay crop-bien khi anh co bong bong CHAM MEP DUOI - doi khoa cache (bo co s0/s1)
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -72,6 +72,12 @@
     // 500px du cho hau het bong bong thuc te da quan sat (cao nhat ~300-
     // 400px). Xem ham detectBoundaryRegions().
     BOUNDARY_BORROW_HEIGHT: 500,
+    // Edge-gate (Option C): chi chay crop-bien khi anh chinh CO vung cham mep
+    // DUOI (khoang cach <= margin px toi day anh) -> kha nang bong bong bi cat
+    // sang anh sau. Da do thuc te (test_cvsd, 12 ranh gioi): gate nay bat dung
+    // 1 ranh gioi co vat-bien that, bo 11 ranh gioi thua, 0 sot. Tiet kiem ~91%
+    // luot goi backend crop ma khong mat chat luong.
+    BOUNDARY_EDGE_MARGIN: 8,
     // Chi ghep-bien khi anh ke tiep NOI LIEN theo chieu doc (dinh cua no cach
     // day anh hien tai khong qua nguong nay). Webtoon that xep chong lien mach
     // (khoang ho 0 den vai chuc px); viewer CHUYEN TRANG chong cac anh len cung
@@ -151,21 +157,18 @@
     // (qua popup) - thieu 1 trong 2 trong key se tra nham ket qua ngon
     // ngu/engine cu tu cache (xem spec 2026-07-22-extension-popup-settings-design.md
     // muc 8 va 2026-07-23-translator-engine-picker-design.md muc 6).
-    // Cache key gom ca trang thai toggle GHEP-BIEN (s1/s0): anh gui backend khi
-    // BAT (da ghep) khac han khi TAT (tho) -> ket qua khac -> phai la 2 entry
-    // rieng. Nho vay bat/tat toggle se TU DICH LAI (cache MISS o khoa moi),
-    // khong phai bump CACHE_VERSION. _key async vi doc getBoundaryStitch().
-    async _key(hash, targetLang, engine) {
-      const s = (await getBoundaryStitch()) ? 's1' : 's0';
-      return `mot_cache_v${CFG.CACHE_VERSION}_${engine}_${targetLang}_${s}_${hash}`;
+    // Ghep-bien gio HOP NHAT (luon bat, auto-gate) nen khoa cache khong con
+    // phu thuoc trang thai toggle - bo co s0/s1 (CACHE_VERSION da bump).
+    _key(hash, targetLang, engine) {
+      return `mot_cache_v${CFG.CACHE_VERSION}_${engine}_${targetLang}_${hash}`;
     },
     async get(hash, targetLang, engine) {
-      const key = await this._key(hash, targetLang, engine);
+      const key = this._key(hash, targetLang, engine);
       const result = await chrome.storage.local.get(key);
       return result[key] ? JSON.parse(result[key]) : null;
     },
     async set(hash, targetLang, engine, value) {
-      const key = await this._key(hash, targetLang, engine);
+      const key = this._key(hash, targetLang, engine);
       await chrome.storage.local.set({ [key]: JSON.stringify(value) });
     },
 
@@ -353,21 +356,6 @@
     }
   }
 
-  // Ghep-bien webtoon (muon dai anh ke tiep de bat bong bong cat ngang giua 2
-  // file anh dai). Mac dinh TAT: chi co ich cho webtoon dai lien tuc; detect
-  // bien gio DOC LAP voi anh chinh (khong con noi vao anh chinh nen khong con
-  // anh huong toi do phan giai/OCR cua anh chinh - xem detectBoundaryRegions()),
-  // nhung tra gia 1 lan goi backend THEM cho moi mep noi anh khi bat, nen van
-  // de mac dinh TAT tren manga trang ROI khong can. Bat len khi doc webtoon
-  // dai. Live-read nhu cac setting khac.
-  async function getBoundaryStitch() {
-    try {
-      const { mot_boundary_stitch } = await chrome.storage.local.get('mot_boundary_stitch');
-      return mot_boundary_stitch === true; // default OFF
-    } catch {
-      return false;
-    }
-  }
 
   const DEFAULT_EAGER_TRANSLATE = false;
 
@@ -474,7 +462,10 @@
         // chi dung cho vung CUNG ty le (giua 2 lat chong lan); vung boundary
         // detect o ty le KHAC (crop rieng) can mergeBoundaryRegions
         // (containment) tach rieng sau khi dedupeRegions da chay xong.
-        if (i === tiles.length - 1) {
+        // Edge-gate: lat cuoi cham day anh -> chi crop-bien khi lat co bong
+        // bong cham mep duoi cua NO (= day anh goc). result.regions o day la
+        // toa do KHONG GIAN LAT (chua cong tile.yOffset) nen so voi tile.height.
+        if (i === tiles.length - 1 && hasBottomEdgeRegion(result.regions, tile.height)) {
           boundaryRegions = await detectBoundaryRegions(img, tile.blob, gptConfigPath);
         }
       }
@@ -1088,8 +1079,16 @@
   // spec 2026-07-23-cross-image-boundary-stitching-design.md muc render
   // khong clamp 100%). Khong bat/khong co anh ke/loi bat ky buoc nao ->
   // tra ve [] êm xuoi, khong chan render anh chinh.
+  // Edge-gate (Option C): anh chinh CO vung cham mep DUOI khong? (day vung
+  // <= BOUNDARY_EDGE_MARGIN px toi mep duoi cua blob) -> dau hieu bong bong co
+  // the bi cat sang anh sau, moi dang chay crop-bien. refHeight = chieu cao
+  // khong gian toa do cua regions (anh chinh: naturalHeight; lat cuoi: chieu
+  // cao lat). Xem CFG.BOUNDARY_EDGE_MARGIN.
+  function hasBottomEdgeRegion(regions, refHeight) {
+    return (regions || []).some((r) => r.y + r.h >= refHeight - CFG.BOUNDARY_EDGE_MARGIN);
+  }
+
   async function detectBoundaryRegions(img, blob, gptConfigPath) {
-    if (!(await getBoundaryStitch())) return [];
     const nextImg = findNextSiblingImage(img);
     if (!nextImg) {
       log('Ghep-bien: khong co anh ke tiep, bo qua.');
@@ -1433,8 +1432,11 @@
             result = await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img, gptConfigPath);
           } else {
             result = await ApiAdapter.translateImage(blob, gptConfigPath);
-            const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
-            result.regions = mergeBoundaryRegions(result.regions, boundaryRegions);
+            // Edge-gate: chi crop-bien khi anh chinh co bong bong cham mep duoi.
+            if (hasBottomEdgeRegion(result.regions, img.naturalHeight)) {
+              const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
+              result.regions = mergeBoundaryRegions(result.regions, boundaryRegions);
+            }
           }
           await Cache.set(hash, targetLang, engine, result);
           // Chua dung ho so => gom chu goc, du thi dung 1 lan cho truyen.

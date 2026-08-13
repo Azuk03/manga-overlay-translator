@@ -124,21 +124,12 @@ ccCheckbox.addEventListener('change', () => {
   chrome.storage.local.set({ mot_character_context: ccCheckbox.checked });
 });
 
-// ===== Khoi 9: Ghep bien webtoon dai (mac dinh TAT) =====
-const stitchCheckbox = document.getElementById('boundary-stitch');
-
-chrome.storage.local.get('mot_boundary_stitch', (result) => {
-  stitchCheckbox.checked = result.mot_boundary_stitch === true; // default OFF
-});
-
-stitchCheckbox.addEventListener('change', () => {
-  chrome.storage.local.set({ mot_boundary_stitch: stitchCheckbox.checked });
-});
-
-// ===== Khoi 10: Xoa cache dich (ep dich lai) =====
+// ===== Khoi 9: Xoa cache dich (ep dich lai) =====
+// Ghep-bien webtoon gio HOP NHAT (luon bat, auto-gate theo findNextSiblingImage
+// + edge-gate) nen KHONG con toggle - bo checkbox boundary-stitch.
 // Xoa moi entry dich (mot_cache_*), chi muc URL->hash (mot_urlhash_*) va ho so
 // nhan vat (mot_series_ctx_*). GIU LAI cac setting (backend_url, target_lang,
-// engine, eager, character_context, boundary_stitch). Dung khi doi prompt/model
+// engine, eager, character_context). Dung khi doi prompt/model
 // backend hoac muon giai phong dung luong.
 document.getElementById('btn-clear-cache').addEventListener('click', () => {
   const statusEl = document.getElementById('clear-cache-status');
