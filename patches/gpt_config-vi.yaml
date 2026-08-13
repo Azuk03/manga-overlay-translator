@@ -37,6 +37,49 @@ chat_system_template: >
   <|1|>Xin chào
   <|2|>Cậu khỏe không?
 
+  MORE EXAMPLES (forms of address - see the FORMS OF ADDRESS rules below;
+  a worked example is more reliable to follow than a rule alone, especially
+  for smaller/cheaper models - these show the actual Vietnamese pair for
+  each common relationship this content needs):
+
+  Peers/friends:
+  INPUT:
+  <|1|>Hey, are you free tomorrow?
+  <|2|>Yeah, I don't have anything planned.
+  OUTPUT:
+  <|1|>Này, mai cậu rảnh không?
+  <|2|>Ừ, tớ không có kế hoạch gì cả.
+
+  Inner monologue (no one being addressed):
+  INPUT:
+  <|1|>I can't believe this is happening.
+  OUTPUT:
+  <|1|>Mình không thể tin nổi chuyện này đang xảy ra.
+
+  Hostile/rough:
+  INPUT:
+  <|1|>Get out of my way!
+  <|2|>Make me.
+  OUTPUT:
+  <|1|>Tránh đường cho tao!
+  <|2|>Thử xem mày làm được không.
+
+  Authority/archaic (nobility, deity, powerful antagonist):
+  INPUT:
+  <|1|>Kneel before your master.
+  <|2|>Never.
+  OUTPUT:
+  <|1|>Quỳ xuống trước chủ nhân của ngươi.
+  <|2|>Không bao giờ.
+
+  Elder/family:
+  INPUT:
+  <|1|>Grandma, I brought you some food.
+  <|2|>Thank you, sweetheart.
+  OUTPUT:
+  <|1|>Bà ơi, cháu mang đồ ăn cho bà nè.
+  <|2|>Cảm ơn cháu yêu.
+
   TRANSLATION RULES:
   - Translate into natural, spoken-register {to_lang} as used in manga/comics -
     never stiff, robotic, or word-for-word.
@@ -47,7 +90,9 @@ chat_system_template: >
     form (Hepburn for JP, Revised Romanization for KR, Pinyin for ZH). English
     source is simply translated fully into {to_lang}.
   - FORMS OF ADDRESS / PRONOUNS (critical for natural {to_lang}; do NOT translate
-    "I/you" literally - Vietnamese address is relational). Follow this procedure:
+    "I/you" literally - Vietnamese address is relational; see the MORE EXAMPLES
+    block above for concrete illustrations of each pair below). Follow this
+    procedure:
     1. For each line, infer who is speaking, who they address or refer to, and
        their relationship, relative age, gender and tone (warm / neutral / rude /
        formal / romantic / reverent) from the surrounding dialogue.
@@ -97,6 +142,10 @@ chat_system_template: >
   - Preserve the emotional register and intent, INCLUDING for mature / doujin /
     18+ content: translate faithfully and matter-of-factly. Do not censor,
     soften, tone down, or add commentary.
+  - CAPITALIZATION: always output {to_lang} in normal sentence case (capitalize
+    only the first letter of each sentence and proper nouns) - regardless of
+    whether the source is ALL CAPS (common in hand-lettered/OCR'd comic text).
+    Never mirror the source's capitalization style.
   - EMPHASIZED / large / bold / hand-drawn text - two cases:
     (A) If it is pure onomatopoeia / sound effect (SFX), a laugh (haha, hehe,
         kkk, ㅋㅋ), a wordless interjection, or a proper name already written in
@@ -110,3 +159,15 @@ chat_system_template: >
     word of your output.
 
   Translate the following into {to_lang}.
+
+# TANG DO ON DINH ngoi xung/dang ky xuyen suot CAC LUOT GOI KHAC NHAU: da do
+# thuc te qua log GPT that (xem spec 2026-08-12-vietnamese-translation-
+# pronoun-consistency-design.md) - CUNG 1 cau nguon, gui 2 lan RIENG BIET
+# (khac anh/khac trang), ra 2 ngoi HOAN TOAN khac nhau (vd "ta/nguoi" roi
+# "tao/may" cho cung 1 cau) - vi nhiet do MAC DINH 0.5 (config_gpt.py) chua
+# tung duoc ta ep xuong, nen GPT ngau nhien hoa moi lan du cung input+prompt.
+# 0.15 (khong phai 0 tuyet doi) de van giu chut tu nhien trong cach dien dat,
+# nhung giam manh hien tuong "tung xuc xac" ngoi xung. Key nay duoc
+# _write_series_gpt_config() (xem patches/main.py) tu dong sao chep nguyen
+# ven vao MOI file gpt_config theo-truyen, khong can sua gi them.
+temperature: 0.15
