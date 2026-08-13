@@ -39,12 +39,19 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 19, // ghep bien tach lam 2 lan detect doc lap thay vi noi anh - doi tap region cache cho anh co bat stitch, buoc dich lai
+    CACHE_VERSION: 20, // prompt: temperature thap + few-shot ngoi xung + chuan hoa viet hoa + ho so nhan vat mac-dinh-bat-buoc + cua so hoi thoai gan nhat - doi output dich, buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
     CTX_MIN_PAGES: 3,
     CTX_MIN_CHARS: 200,
+    // Cua so hoi thoai GAN NHAT (mo rong Option C): khong doi CTX_MIN_PAGES/
+    // CTX_MIN_CHARS (van danh cho ho so nhan vat tinh) - day la lop RIENG,
+    // bat dau tich luy tu ANH DAU TIEN, khong can dat nguong. Gioi han so
+    // dong/ky tu de chi phi token them moi luot dich o muc nho. Xem spec
+    // 2026-08-12-vietnamese-translation-pronoun-consistency-design.md.
+    RECENT_DIALOGUE_MAX_LINES: 20,
+    RECENT_DIALOGUE_MAX_CHARS: 600,
     // Da xac nhan thuc nghiem o Giai doan B: backend xu ly TUAN TU (khong
     // song song), tang CONCURRENCY khong co loi ich - xem README.md.
     CONCURRENCY: 1,
@@ -1287,6 +1294,37 @@
     },
   };
 
+  // ===== Option C mo rong: cua so hoi thoai GAN NHAT =====
+  // Bo sung ho so nhan vat TINH (SeriesCtx o tren) bang 1 lop NGAN HAN: danh
+  // sach cac dong da dich GAN DAY nhat theo dung thu tu doc, giup cac luot
+  // dich chi co 1-2 dong ngan (khong du de tu suy ra ai-noi-voi-ai) van co
+  // mach truyen de bam vao. KHONG doi CTX_MIN_PAGES/CTX_MIN_CHARS (van danh
+  // rieng cho ho so nhan vat) - lop nay bat dau tich luy tu ANH DAU TIEN,
+  // khong can dat nguong. KHONG ton them luot goi GPT nao - chi dump text
+  // da dich (src->dst), khong tom tat bang AI. Xem spec
+  // 2026-08-12-vietnamese-translation-pronoun-consistency-design.md.
+  const RecentDialogue = {
+    _buf: [], // {src, dst} theo dung thu tu doc, toi da RECENT_DIALOGUE_MAX_LINES
+    async append(seriesId, regions) {
+      const lines = (regions || [])
+        .map((r) => ({ src: (r.src || '').trim(), dst: (r.dst || '').trim() }))
+        .filter((l) => l.src && l.dst);
+      if (!lines.length) return;
+      this._buf.push(...lines);
+      if (this._buf.length > CFG.RECENT_DIALOGUE_MAX_LINES) {
+        this._buf = this._buf.slice(-CFG.RECENT_DIALOGUE_MAX_LINES);
+      }
+      const text = this._buf
+        .map((l) => `${l.src} -> ${l.dst}`)
+        .join('\n')
+        .slice(-CFG.RECENT_DIALOGUE_MAX_CHARS);
+      await sendMessageAsync({
+        type: 'SET_RECENT_DIALOGUE',
+        payload: { series_id: seriesId, recent: text },
+      }).catch(() => null);
+    },
+  };
+
   async function translateAndRenderImage(img) {
     if (imgLayers.has(img)) return;
     const tStart = performance.now();
@@ -1296,6 +1334,13 @@
       const url = img.currentSrc || img.src;
       const urlCacheable = !!url && !url.startsWith('blob:') && !url.startsWith('data:');
       let result = null;
+
+      // Option C: tinh seriesId 1 LAN cho ca ham (Cache MISS dung de xay
+      // gpt_config path, VA cuoi ham dung de cap nhat RecentDialogue bat ke
+      // Cache HIT hay MISS - noi dung nguoi doc vua "luot qua" van la mach
+      // truyen dang dien ra, du la dich lai hay lay tu cache).
+      const ctxOn = await getCharacterContext();
+      const seriesId = ctxOn && targetLang === 'VIN' && engine !== 'deepl' ? getSeriesId() : null;
 
       // FAST PATH: tra cache theo URL -> hash -> ket qua, KHONG tai anh (bo qua
       // ~3.4s tai + hash). Chi trung khi da tung dich URL nay o dung lang/engine.
@@ -1321,9 +1366,6 @@
           // dung gpt_config rieng cua truyen (neu da dung ho so). Tat/khong dinh
           // danh duoc => gptConfigPath null => luong cu.
           let gptConfigPath = null;
-          const ctxOn = await getCharacterContext();
-          const seriesId =
-            ctxOn && targetLang === 'VIN' && engine !== 'deepl' ? getSeriesId() : null;
           let st = null;
           if (seriesId) {
             st = await SeriesCtx.load(seriesId);
@@ -1375,6 +1417,9 @@
         }
         return true;
       });
+      if (seriesId) {
+        await RecentDialogue.append(seriesId, result.regions);
+      }
       const busyFlags = await computeRegionComplexity(result.regions);
       result.regions.forEach((r, i) => {
         r.busy = busyFlags[i];
@@ -1694,6 +1739,7 @@
             const gptConfigPath = st ? await SeriesCtx.resolvePath(st) : null;
             const result = await ApiAdapter.translateImage(blob, gptConfigPath);
             await Cache.set(hash, targetLang, engine, result);
+            if (seriesId) await RecentDialogue.append(seriesId, result.regions);
             if (st && !st.built) await SeriesCtx.accumulateAndMaybeBuild(st, result, targetLang);
           }
           await Cache.setUrlHash(url, hash);
