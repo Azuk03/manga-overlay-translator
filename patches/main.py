@@ -441,32 +441,66 @@ def _sanitize_series_id(series_id: str) -> str:
     return s or "unknown"
 
 
-def _write_series_gpt_config(series_id: str, sheet: str) -> str:
-    """Ghi 1 file gpt_config rieng cho truyen = base template + khoi CHARACTER
-    CONTEXT. Tra ve duong dan file."""
+def _write_series_gpt_config(series_id: str, sheet: str | None = None, recent: str | None = None) -> str:
+    """Ghi 1 file gpt_config rieng cho truyen = base template + (tuy chon)
+    khoi CHARACTER CONTEXT + (tuy chon) khoi RECENT DIALOGUE. sheet/recent la
+    None => GIU NGUYEN gia tri da co trong file cu (neu co) - cho phep cap
+    nhat rieng 1 trong 2 khoi ma khong lam mat khoi kia (vd
+    /set-recent-dialogue goi lien tuc khong duoc xoa mat ho so nhan vat da
+    xay truoc do, va nguoc lai). Tra ve duong dan file."""
     from omegaconf import OmegaConf
     base = OmegaConf.load("/app/gpt_config-vi.yaml")
     template = str(base.get("chat_system_template", ""))
-    block = (
-        "\n\nCHARACTER CONTEXT (REFERENCE DATA ONLY - the FORMS OF ADDRESS /"
-        " PRONOUNS rules above ALWAYS take precedence; use this sheet only to"
-        " identify who each character is and their DEFAULT dialogue address for"
-        " consistency across the story):\n" + sheet.strip() + "\n"
-        "If the CURRENT scene's relationship or tone conflicts with this sheet "
-        "(e.g. a friendship turns hostile, a hidden relationship is revealed, "
-        "someone's status changes), follow the CURRENT scene, not the sheet.\n"
-        "The pronoun pairs above are for DIALOGUE between characters. In inner "
-        "monologue / narration / a character thinking to themselves, they STILL "
-        "refer to themselves as \"mình\" (or \"tôi\"), NEVER their dialogue "
-        "self-term such as \"tớ\" - this sheet does not override the monologue "
-        "rule.\n"
-    )
-    merged = OmegaConf.create({"chat_system_template": template + block})
+
+    out = SERIES_CTX_DIR / (_sanitize_series_id(series_id) + ".yaml")
+    prev_sheet = ""
+    prev_recent = ""
+    if out.exists():
+        try:
+            prev = OmegaConf.load(str(out))
+            prev_sheet = str(prev.get("_series_sheet", "") or "")
+            prev_recent = str(prev.get("_series_recent", "") or "")
+        except Exception:
+            pass
+
+    final_sheet = sheet.strip() if sheet is not None else prev_sheet
+    final_recent = recent.strip() if recent is not None else prev_recent
+
+    blocks = ""
+    if final_sheet:
+        blocks += (
+            "\n\nCHARACTER CONTEXT (DEFAULT ADDRESS PAIRS - use the pair below"
+            " for EVERY line involving this character UNLESS the segment you"
+            " are translating RIGHT NOW contains UNAMBIGUOUS evidence of a"
+            " state change, e.g. a fight breaking out, a reveal, a confession."
+            " Brevity or missing surrounding detail in a short segment is NOT"
+            " evidence to deviate - short/ambiguous segments MUST use the"
+            " default below, not a fresh guess):\n" + final_sheet + "\n"
+            "The pronoun pairs above are for DIALOGUE between characters. In "
+            "inner monologue / narration / a character thinking to "
+            "themselves, they STILL refer to themselves as \"mình\" (or "
+            "\"tôi\"), NEVER their dialogue self-term such as \"tớ\" - this "
+            "sheet does not override the monologue rule.\n"
+        )
+    if final_recent:
+        blocks += (
+            "\n\nRECENT DIALOGUE (context only - this is dialogue that JUST"
+            " HAPPENED right before what you are translating now, given so"
+            " you can infer who is speaking/listening and stay consistent"
+            " with the ongoing scene. Do NOT re-translate any of it and do"
+            " NOT include it in your output - translate ONLY the numbered"
+            " segments in the user message):\n" + final_recent + "\n"
+        )
+
+    merged = OmegaConf.create({
+        "chat_system_template": template + blocks,
+        "_series_sheet": final_sheet,
+        "_series_recent": final_recent,
+    })
     for k, v in base.items():
         if k != "chat_system_template":
             merged[k] = v
     SERIES_CTX_DIR.mkdir(parents=True, exist_ok=True)
-    out = SERIES_CTX_DIR / (_sanitize_series_id(series_id) + ".yaml")
     OmegaConf.save(merged, str(out))
     return str(out)
 
@@ -520,6 +554,22 @@ async def set_series_context(data: SetSeriesContextRequest):
         return {"gpt_config_path": None}
     try:
         path = _write_series_gpt_config(data.series_id, sheet)
+    except Exception as e:
+        print(f"[series-context] write failed: {e}", flush=True)
+        return {"gpt_config_path": None}
+    return {"gpt_config_path": path}
+
+
+class SetRecentDialogueRequest(BaseModel):
+    series_id: str
+    recent: str
+
+
+@app.post("/set-recent-dialogue", tags=["internal-api"])
+async def set_recent_dialogue(data: SetRecentDialogueRequest):
+    recent = (data.recent or "").strip()
+    try:
+        path = _write_series_gpt_config(data.series_id, recent=recent)
     except Exception as e:
         print(f"[series-context] write failed: {e}", flush=True)
         return {"gpt_config_path": None}
