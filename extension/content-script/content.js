@@ -395,10 +395,14 @@
     // gptConfigPath (tuy chon, Option C): duong dan gpt_config rieng cua truyen
     // (base template + ho so nhan vat). Khong truyen => dung CFG.GPT_CONFIG_PATH
     // mac dinh (hanh vi cu).
-    async translateImage(blob, gptConfigPath) {
+    // detectOnly: chi chay detect + OCR (translator 'none' - KHONG goi GPT,
+    // KHONG inpaint) de lay TOA DO + text goc cac vung. Rat re (chi model
+    // local). Dung cho gate detect-first cua ghep-bien: biet truoc co vung
+    // vat-bien khong ma khong ton 1 luot GPT (xem detectBoundaryRegions()).
+    async translateImage(blob, gptConfigPath, detectOnly = false) {
       const dataUrl = await this.blobToDataURL(blob);
       const targetLang = await getTargetLang();
-      const engine = await getTranslatorEngine();
+      const engine = detectOnly ? 'none' : await getTranslatorEngine();
       const translatorConfig = {
         translator: engine,
         target_lang: targetLang,
@@ -408,18 +412,19 @@
       // backend, doc chung 1 co che prompt qua field gpt_config), KHONG co
       // tac dung voi deepl (kien truc khac han, khong doc gpt_config - xem
       // spec 2026-07-23-translator-engine-picker-design.md muc 3/6).
-      if (targetLang === 'VIN' && engine !== 'deepl') {
+      if (!detectOnly && targetLang === 'VIN' && engine !== 'deepl') {
         translatorConfig.gpt_config = gptConfigPath || CFG.GPT_CONFIG_PATH;
       }
-      const body = JSON.stringify({
-        image: dataUrl,
-        config: {
-          detector: { detection_size: CFG.DETECTION_SIZE },
-          translator: translatorConfig,
-          render: { renderer: 'none' },
-          inpainter: { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE },
-        },
-      });
+      const config = {
+        detector: { detection_size: CFG.DETECTION_SIZE },
+        translator: translatorConfig,
+        render: { renderer: 'none' },
+      };
+      // Inpaint chi phuc vu render (xoa chu goc) - detect-only khong render nen bo.
+      if (!detectOnly) {
+        config.inpainter = { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE };
+      }
+      const body = JSON.stringify({ image: dataUrl, config });
 
       const res = await sendMessageAsync({ type: 'TRANSLATE', body });
       if (!res || !res.ok) {
@@ -1117,6 +1122,26 @@
     }
     if (!cropBlob) {
       log('Ghep-bien: khong dung duoc anh crop bien, bo qua.');
+      return [];
+    }
+
+    // Detect-first (zero-loss): chay DETECT-ONLY (translator 'none' - KHONG
+    // GPT, chi model local) tren crop TRUOC. Crop chua NGUYEN bong bong da
+    // ghep nen detection dang tin (khong phai sliver o mep anh chinh). Neu
+    // KHONG co vung VAT QUA ranh gioi (y < ownStripH < y+h) -> khong co gi de
+    // ghep -> tra [] ma KHONG ton 1 luot GPT. ~92% seam roi vao day. Da do
+    // thuc te (test_detectfirst + test_synth: 27 co hoi vat-bien, gate 'none'
+    // bat 100% vung ma chatgpt bat, 0 sot; on dinh qua 6 lan lap). Detect-only
+    // dung CUNG detector always-run van dung de tim vat-bien -> khong the thua.
+    let probeRegions;
+    try {
+      probeRegions = (await ApiAdapter.translateImage(cropBlob, gptConfigPath, true)).regions || [];
+    } catch (err) {
+      log('Ghep-bien: loi detect-only crop bien, bo qua.', err);
+      return [];
+    }
+    if (!probeRegions.some((r) => r.y < ownStripH && r.y + r.h > ownStripH)) {
+      log('Ghep-bien: detect-only khong thay vung vat-bien, bo qua (khong ton GPT).');
       return [];
     }
 
