@@ -441,6 +441,15 @@ def _sanitize_series_id(series_id: str) -> str:
     return s or "unknown"
 
 
+def _esc_braces(s: str) -> str:
+    # Noi dung TIEM vao (ho so + hoi thoai) chua text OCR/output THO co the co
+    # { hoac } -> template ghep lai bi backend chay qua str.format(to_lang=...)
+    # (chatgpt.py/common_gpt.py) nem KeyError/ValueError va HONG BEN VUNG moi
+    # luot dich cua truyen do. Escape { -> {{, } -> }} CHI cho phan tiem vao;
+    # {to_lang} that trong base template KHONG bi dung toi (no o ngoai phan nay).
+    return s.replace("{", "{{").replace("}", "}}")
+
+
 def _write_series_gpt_config(series_id: str, sheet: str | None = None, recent: str | None = None) -> str:
     """Ghi 1 file gpt_config rieng cho truyen = base template + (tuy chon)
     khoi CHARACTER CONTEXT + (tuy chon) khoi RECENT DIALOGUE. sheet/recent la
@@ -475,7 +484,7 @@ def _write_series_gpt_config(series_id: str, sheet: str | None = None, recent: s
             " state change, e.g. a fight breaking out, a reveal, a confession."
             " Brevity or missing surrounding detail in a short segment is NOT"
             " evidence to deviate - short/ambiguous segments MUST use the"
-            " default below, not a fresh guess):\n" + final_sheet + "\n"
+            " default below, not a fresh guess):\n" + _esc_braces(final_sheet) + "\n"
             "The pronoun pairs above are for DIALOGUE between characters. In "
             "inner monologue / narration / a character thinking to "
             "themselves, they STILL refer to themselves as \"mình\" (or "
@@ -489,7 +498,7 @@ def _write_series_gpt_config(series_id: str, sheet: str | None = None, recent: s
             " you can infer who is speaking/listening and stay consistent"
             " with the ongoing scene. Do NOT re-translate any of it and do"
             " NOT include it in your output - translate ONLY the numbered"
-            " segments in the user message):\n" + final_recent + "\n"
+            " segments in the user message):\n" + _esc_braces(final_recent) + "\n"
         )
 
     merged = OmegaConf.create({

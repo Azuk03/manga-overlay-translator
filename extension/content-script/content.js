@@ -1305,23 +1305,48 @@
   // 2026-08-12-vietnamese-translation-pronoun-consistency-design.md.
   const RecentDialogue = {
     _buf: [], // {src, dst} theo dung thu tu doc, toi da RECENT_DIALOGUE_MAX_LINES
-    async append(seriesId, regions) {
+    _seriesId: null,
+    // gpt_config_path backend tra ve tu /set-recent-dialogue - dung lam FALLBACK
+    // cho gptConfigPath TRUOC khi ho so nhan vat kip xay xong (luc do
+    // SeriesCtx.resolvePath con tra null, backend se dung file base khong co khoi
+    // hoi thoai) -> cua so hoi thoai co hieu luc ngay tu ~anh thu 2 thay vi phai
+    // doi ho so nhan vat xay xong (~trang 4). Reset khi doi truyen.
+    path: null,
+    append(seriesId, regions) {
+      if (this._seriesId !== seriesId) {
+        this._seriesId = seriesId;
+        this._buf = [];
+        this.path = null;
+      }
+      // Loc: bo dong rong VA dong dst==src (SFX/giu-nguyen) - luong prefetch
+      // truyen regions CHUA loc (khac luong xem da loc san), gom filter vao day
+      // de ca 2 luong nhat quan, khong nhet rac (vd "ドドド -> ドドド") vao cua so.
       const lines = (regions || [])
         .map((r) => ({ src: (r.src || '').trim(), dst: (r.dst || '').trim() }))
-        .filter((l) => l.src && l.dst);
+        .filter((l) => l.src && l.dst && l.dst.toLowerCase() !== l.src.toLowerCase());
       if (!lines.length) return;
       this._buf.push(...lines);
       if (this._buf.length > CFG.RECENT_DIALOGUE_MAX_LINES) {
         this._buf = this._buf.slice(-CFG.RECENT_DIALOGUE_MAX_LINES);
       }
-      const text = this._buf
-        .map((l) => `${l.src} -> ${l.dst}`)
-        .join('\n')
-        .slice(-CFG.RECENT_DIALOGUE_MAX_CHARS);
-      await sendMessageAsync({
+      let text = this._buf.map((l) => `${l.src} -> ${l.dst}`).join('\n');
+      if (text.length > CFG.RECENT_DIALOGUE_MAX_CHARS) {
+        // Cat phan cu, roi bo not dong DAU bi cat do dang (tranh manh vun).
+        text = text.slice(-CFG.RECENT_DIALOGUE_MAX_CHARS).replace(/^[^\n]*\n/, '');
+      }
+      // Fire-and-forget: KHONG await - render KHONG duoc cho round-trip nay
+      // (content-script -> service worker IPC -> fetch backend). Ket qua chi
+      // can cho cac luot dich SAU (bat path tra ve). .catch de khong nem loi.
+      sendMessageAsync({
         type: 'SET_RECENT_DIALOGUE',
         payload: { series_id: seriesId, recent: text },
-      }).catch(() => null);
+      })
+        .then((res) => {
+          if (res && res.ok && res.data && res.data.gpt_config_path) {
+            this.path = res.data.gpt_config_path;
+          }
+        })
+        .catch(() => null);
     },
   };
 
@@ -1369,7 +1394,7 @@
           let st = null;
           if (seriesId) {
             st = await SeriesCtx.load(seriesId);
-            gptConfigPath = await SeriesCtx.resolvePath(st);
+            gptConfigPath = (await SeriesCtx.resolvePath(st)) || RecentDialogue.path;
           }
           if (img.naturalHeight > CFG.TILE_MAX_H) {
             result = await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img, gptConfigPath);
@@ -1418,7 +1443,7 @@
         return true;
       });
       if (seriesId) {
-        await RecentDialogue.append(seriesId, result.regions);
+        RecentDialogue.append(seriesId, result.regions);
       }
       const busyFlags = await computeRegionComplexity(result.regions);
       result.regions.forEach((r, i) => {
@@ -1736,10 +1761,10 @@
           const hash = await Cache.hashBlob(blob);
           const cached = await Cache.get(hash, targetLang, engine);
           if (!cached) {
-            const gptConfigPath = st ? await SeriesCtx.resolvePath(st) : null;
+            const gptConfigPath = (st ? await SeriesCtx.resolvePath(st) : null) || RecentDialogue.path;
             const result = await ApiAdapter.translateImage(blob, gptConfigPath);
             await Cache.set(hash, targetLang, engine, result);
-            if (seriesId) await RecentDialogue.append(seriesId, result.regions);
+            if (seriesId) RecentDialogue.append(seriesId, result.regions);
             if (st && !st.built) await SeriesCtx.accumulateAndMaybeBuild(st, result, targetLang);
           }
           await Cache.setUrlHash(url, hash);

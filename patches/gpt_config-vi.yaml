@@ -66,11 +66,11 @@ chat_system_template: >
 
   Authority/archaic (nobility, deity, powerful antagonist):
   INPUT:
-  <|1|>Kneel before your master.
-  <|2|>Never.
+  <|1|>You dare defy me?
+  <|2|>I will never kneel to you.
   OUTPUT:
-  <|1|>Quỳ xuống trước chủ nhân của ngươi.
-  <|2|>Không bao giờ.
+  <|1|>Ngươi dám chống lại ta sao?
+  <|2|>Ta sẽ không bao giờ quỳ gối trước ngươi.
 
   Elder/family:
   INPUT:
