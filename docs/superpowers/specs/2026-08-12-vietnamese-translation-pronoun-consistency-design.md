@@ -153,6 +153,38 @@ translated lines, not a summarization or extraction step — satisfies the
 "no added API cost" goal directly (the only cost is a small increase in
 each real translate call's input token count).
 
+**Errata (found in final review, fixed before merge):**
+- *Latency wording was wrong.* An earlier draft said the client `await`s
+  the sync as "one small file write" — but it is a content-script →
+  service-worker → backend `fetch` round-trip. Awaiting it in the render
+  hot path made every image's overlay wait on that round-trip, against
+  this project's per-page-latency budget. The sync is fire-and-forget
+  (its result is only needed by *later* translate calls), so it is not
+  awaited in the render path; the returned `gpt_config_path` is captured
+  in a `.then` for reuse.
+- *Loop-closure gap.* The claim that the window "covers the gap from the
+  first image" only holds if a translate call actually loads the
+  per-series gpt_config that the window is written into. But
+  `SeriesCtx.resolvePath` returns a path only after the character sheet is
+  built (`st.built`), so before that the backend fell back to the default
+  base config, which has no recent-dialogue block — leaving the window
+  inert during exactly the pre-sheet pages it was meant to cover. Fixed by
+  having the client capture the `gpt_config_path` that `/set-recent-dialogue`
+  returns and use it as the translate call's `gptConfigPath` fallback when
+  `resolvePath` is still null, so the window applies from ~the second image
+  onward rather than only after the sheet builds.
+- *Injected text must be brace-escaped.* The composed system prompt
+  (base template + injected sheet + injected recent dialogue) is run
+  through Python `str.format(to_lang=...)` by the backend GPT translators.
+  Raw OCR source and raw model output — which the recent-dialogue block
+  dumps verbatim — can contain `{`/`}`, which makes `format()` raise
+  (`KeyError`/`ValueError`) and *persistently* fails every translate call
+  for that series (the poisoned block stays in the yaml). The injected
+  sheet/recent content is escaped (`{`→`{{`, `}`→`}}`) before
+  concatenation, leaving the base template's real `{to_lang}` intact; the
+  stored `_series_sheet`/`_series_recent` keep the raw text so round-trips
+  stay idempotent.
+
 ## Cache invalidation
 
 Components 1 and 2 change what the backend produces for already-cached
