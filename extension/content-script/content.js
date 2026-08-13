@@ -39,7 +39,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 23, // ghep-bien HOP NHAT (bo toggle) + edge-gate: chi chay crop-bien khi anh co bong bong CHAM MEP DUOI - doi khoa cache (bo co s0/s1)
+    CACHE_VERSION: 24, // GO edge-gate (phu thuoc main-detect nondeterministic -> miss bong bong vat-bien): crop-bien chay LUON moi seam lien mach (nhu lan test tot). Giu hop nhat (bo toggle)
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -72,12 +72,6 @@
     // 500px du cho hau het bong bong thuc te da quan sat (cao nhat ~300-
     // 400px). Xem ham detectBoundaryRegions().
     BOUNDARY_BORROW_HEIGHT: 500,
-    // Edge-gate (Option C): chi chay crop-bien khi anh chinh CO vung cham mep
-    // DUOI (khoang cach <= margin px toi day anh) -> kha nang bong bong bi cat
-    // sang anh sau. Da do thuc te (test_cvsd, 12 ranh gioi): gate nay bat dung
-    // 1 ranh gioi co vat-bien that, bo 11 ranh gioi thua, 0 sot. Tiet kiem ~91%
-    // luot goi backend crop ma khong mat chat luong.
-    BOUNDARY_EDGE_MARGIN: 8,
     // Chi ghep-bien khi anh ke tiep NOI LIEN theo chieu doc (dinh cua no cach
     // day anh hien tai khong qua nguong nay). Webtoon that xep chong lien mach
     // (khoang ho 0 den vai chuc px); viewer CHUYEN TRANG chong cac anh len cung
@@ -462,10 +456,7 @@
         // chi dung cho vung CUNG ty le (giua 2 lat chong lan); vung boundary
         // detect o ty le KHAC (crop rieng) can mergeBoundaryRegions
         // (containment) tach rieng sau khi dedupeRegions da chay xong.
-        // Edge-gate: lat cuoi cham day anh -> chi crop-bien khi lat co bong
-        // bong cham mep duoi cua NO (= day anh goc). result.regions o day la
-        // toa do KHONG GIAN LAT (chua cong tile.yOffset) nen so voi tile.height.
-        if (i === tiles.length - 1 && hasBottomEdgeRegion(result.regions, tile.height)) {
+        if (i === tiles.length - 1) {
           boundaryRegions = await detectBoundaryRegions(img, tile.blob, gptConfigPath);
         }
       }
@@ -1079,15 +1070,6 @@
   // spec 2026-07-23-cross-image-boundary-stitching-design.md muc render
   // khong clamp 100%). Khong bat/khong co anh ke/loi bat ky buoc nao ->
   // tra ve [] êm xuoi, khong chan render anh chinh.
-  // Edge-gate (Option C): anh chinh CO vung cham mep DUOI khong? (day vung
-  // <= BOUNDARY_EDGE_MARGIN px toi mep duoi cua blob) -> dau hieu bong bong co
-  // the bi cat sang anh sau, moi dang chay crop-bien. refHeight = chieu cao
-  // khong gian toa do cua regions (anh chinh: naturalHeight; lat cuoi: chieu
-  // cao lat). Xem CFG.BOUNDARY_EDGE_MARGIN.
-  function hasBottomEdgeRegion(regions, refHeight) {
-    return (regions || []).some((r) => r.y + r.h >= refHeight - CFG.BOUNDARY_EDGE_MARGIN);
-  }
-
   async function detectBoundaryRegions(img, blob, gptConfigPath) {
     const nextImg = findNextSiblingImage(img);
     if (!nextImg) {
@@ -1432,11 +1414,8 @@
             result = await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img, gptConfigPath);
           } else {
             result = await ApiAdapter.translateImage(blob, gptConfigPath);
-            // Edge-gate: chi crop-bien khi anh chinh co bong bong cham mep duoi.
-            if (hasBottomEdgeRegion(result.regions, img.naturalHeight)) {
-              const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
-              result.regions = mergeBoundaryRegions(result.regions, boundaryRegions);
-            }
+            const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
+            result.regions = mergeBoundaryRegions(result.regions, boundaryRegions);
           }
           await Cache.set(hash, targetLang, engine, result);
           // Chua dung ho so => gom chu goc, du thi dung 1 lan cho truyen.
