@@ -39,7 +39,7 @@
     // TARGET_LANG...) - cache se TU DONG bo qua ket qua cu (khong can nguoi
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
-    CACHE_VERSION: 20, // prompt: temperature thap + few-shot ngoi xung + chuan hoa viet hoa + ho so nhan vat mac-dinh-bat-buoc + cua so hoi thoai gan nhat - doi output dich, buoc dich lai
+    CACHE_VERSION: 21, // mergeBoundaryRegions giu ban DAY DU hon khi trung (truoc luon giu main = ban cut) - doi region render, buoc dich lai
     // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
     // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
     // 2026-08-09-per-series-character-context-design.md.
@@ -1203,10 +1203,27 @@
   // crop bien duoc detect o ty le KHAC voi anh/lat chinh, nen cung 1 noi dung
   // co the bi tach dong khac nhau giua 2 lan detect (vd 1 bong bong 3 dong o
   // lan chinh vs 3 vung 1-dong rieng le o lan crop) - IoU chuan se khong bat
-  // duoc trung lap nay (xem ghi chu tren overlapRatio()). Uu tien giu vung
-  // CHINH (main) khi trung, boundary chi BO SUNG noi dung con thieu.
+  // duoc trung lap nay (xem ghi chu tren overlapRatio()).
+  // Khi trung: GIU BAN DAY DU HON (dst dai hon), KHONG phai luon giu main.
+  // Ly do (bug thuc te da do qua log): anh CHINH thuong cat chu o DAY anh ->
+  // ban CUT ("OTHERWISE, THE LINE WILL"); crop bien bat duoc TRON cau vat qua
+  // ranh gioi -> ban DU ("OTHERWISE, THE LINE WILL BE BROKEN..."). Neu luon
+  // giu main thi ve ban cut, bo ban du -> mat chu. Nen giu ben nao co nhieu
+  // chu dich hon.
   function mergeBoundaryRegions(base, boundary) {
-    return base.concat(boundary.filter((b) => !base.some((m) => overlapRatio(m, b) > 0.5)));
+    let result = [...base];
+    for (const b of boundary) {
+      const overlapping = result.filter((m) => overlapRatio(m, b) > 0.5);
+      if (overlapping.length === 0) {
+        result.push(b); // khong trung vung nao -> them noi dung moi
+      } else if (overlapping.every((m) => (b.dst || '').length > (m.dst || '').length)) {
+        // b day du hon MOI vung no trung -> bo cac vung do, thay bang b
+        result = result.filter((m) => overlapRatio(m, b) <= 0.5);
+        result.push(b);
+      }
+      // else: co 1 vung main day-du-hon-hoac-bang -> giu main, bo b
+    }
+    return result;
   }
 
   function isDuplicateOfRendered(img, region) {
