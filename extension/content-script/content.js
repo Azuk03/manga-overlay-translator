@@ -69,9 +69,13 @@
     // detect DOC LAP voi anh chinh (KHONG con noi vao anh chinh truoc khi
     // detect nhu truoc - lam vay se co hep do phan giai CA anh chinh, xem
     // spec 2026-08-12-overlay-safe-layout-and-boundary-detection-design.md).
-    // 500px du cho hau het bong bong thuc te da quan sat (cao nhat ~300-
-    // 400px). Xem ham detectBoundaryRegions().
-    BOUNDARY_BORROW_HEIGHT: 500,
+    // Bong bong BI CAT nam NGAY tai seam (2 nua sat duong noi) nen chi can
+    // muon it. Da do thuc te (test_synth: 15 ca vat-bien tong hop): borrow
+    // 500/300/200/150 deu bat y het (14/15). 200px giu du margin ma GIAM ~60%
+    // vung chong lan bi re-detect/re-OCR -> bot "detect/dich lap" backend
+    // (probe + crop khong con quet lai bong bong nam SAU trong trang, vo can
+    // voi seam) va probe nhanh hon. Xem ham detectBoundaryRegions().
+    BOUNDARY_BORROW_HEIGHT: 200,
     // Chi ghep-bien khi anh ke tiep NOI LIEN theo chieu doc (dinh cua no cach
     // day anh hien tai khong qua nguong nay). Webtoon that xep chong lien mach
     // (khoang ho 0 den vai chuc px); viewer CHUYEN TRANG chong cac anh len cung
