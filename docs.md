@@ -2,32 +2,26 @@
 
 > Tài liệu này giải thích **toàn bộ dự án** từ đầu đến cuối: mục tiêu, kiến trúc, từng khái niệm nền tảng (kể cả nhỏ nhất), toàn bộ luồng dữ liệu, và lý do đằng sau từng quyết định kỹ thuật. Đọc file này là đủ để hiểu dự án mà không cần đọc lại lịch sử chat.
 >
-> Các tài liệu khác trong thư mục: `spec-manga-overlay-translator.md` (spec gốc) là bản đặc tả ban đầu; `README.md` là ghi chép chi tiết về backend (Giai đoạn A+B); file này (`docs.md`) là bức tranh toàn cảnh, viết sau khi mọi thứ đã chạy được.
+> **Cập nhật 2026-08-13:** viết lại toàn bộ để phản ánh đúng **extension** (kiến trúc chính thức từ 2026-07-22) — bản trước đó vẫn mô tả userscript cũ (đã deprecated) dù extension đã tồn tại hơn 3 tuần. Với mỗi tính năng lớn, phần lý do/thiết kế chi tiết nằm ở file spec riêng trong `docs/superpowers/specs/` (liệt kê đầy đủ ở mục 11) — file này chỉ tóm tắt đủ để hiểu bức tranh chung, không lặp lại toàn bộ nội dung spec.
+>
+> Các tài liệu khác trong thư mục: `spec-manga-overlay-translator.md` (spec gốc, chỉ còn giá trị lịch sử — mô tả userscript) là bản đặc tả ban đầu; `README.md` là nhật ký kỹ thuật backend (API thật, bug đã vá, schema, endpoint); file này (`docs.md`) là bức tranh toàn cảnh phía **frontend** (extension) + kiến trúc tổng thể.
 
 ---
 
-## Cài đặt (khuyến nghị: Extension)
+## Cài đặt
 
 1. Mở `chrome://extensions/` (hoặc `edge://extensions/`), bật **Developer mode**.
 2. Bấm **Load unpacked**, chọn thư mục `extension/` trong repo này.
 3. Bấm icon extension trên toolbar (hoặc Alt+D) để bắt đầu dịch trang đang xem, Alt+T để bật/tắt so sánh gốc/dịch.
+4. Backend Docker phải đang chạy trước (`.\run-backend.ps1` — xem `README.md` mục "Chạy backend").
 
-**Nếu trước đây đã cài `manga-overlay-translator.user.js` qua Tampermonkey: tắt hoặc gỡ script đó đi** trước khi dùng extension — để cả 2 cùng bật trên 1 trang sẽ khiến cả userscript lẫn extension tự tìm ảnh và dịch song song, tạo ra 2 lớp overlay chồng nhau/dịch trùng.
-
-### Cài đặt cũ qua Tampermonkey (không còn khuyến nghị, giữ lại tham khảo)
-
-File `manga-overlay-translator.user.js` vẫn khả dụng để tham khảo, nhưng **không còn được khuyến nghị**. Để sử dụng nó (không khuyến khích):
-1. Cài đặt extension [Tampermonkey](https://www.tampermonkey.net/)
-2. Tạo script mới, dán nội dung của `manga-overlay-translator.user.js`
-3. Lưu và kích hoạt
-
-Ưu điểm userscript cũ: không cần developer mode. Nhược điểm: không còn được bảo trì, extension mới là phiên bản chính thức.
+**`manga-overlay-translator.user.js` (Tampermonkey) đã deprecated, giữ lại chỉ để tham khảo lịch sử** — xem mục 2.1 vì sao dự án bắt đầu bằng userscript rồi chuyển hẳn sang extension. **Nếu trước đây đã cài nó: tắt hoặc gỡ đi** trước khi dùng extension, nếu không cả 2 sẽ cùng tìm ảnh và dịch song song trên 1 trang, tạo 2 lớp overlay chồng nhau/dịch trùng.
 
 ---
 
 ## 1. Dự án này làm gì
 
-**Mục tiêu:** đọc truyện tranh raw (tiếng Nhật/Hàn/Trung) trên bất kỳ website nào, tự động dịch sang tiếng Việt và **vẽ đè bản dịch lên đúng vị trí bóng thoại**, ngay trong lúc cuộn trang đọc — không cần tải ảnh về, không cần dùng công cụ dịch riêng.
+**Mục tiêu:** đọc truyện tranh raw (tiếng Nhật/Hàn/Trung/Anh...) trên bất kỳ website nào, tự động dịch sang tiếng Việt và **vẽ đè bản dịch lên đúng vị trí bóng thoại**, ngay trong lúc cuộn trang đọc — không cần tải ảnh về, không cần dùng công cụ dịch riêng.
 
 **Trong phạm vi:**
 - Ảnh truyện là thẻ `<img>` bất kỳ trên trang web (không giới hạn danh sách site)
@@ -35,12 +29,12 @@ File `manga-overlay-translator.user.js` vẫn khả dụng để tham khảo, nh
 - Backend chạy ở máy của chính mình (không dùng dịch vụ cloud trả phí)
 - Chỉ phục vụ 1 người dùng (chính là người viết ra nó)
 
-**Ngoài phạm vi (cố tình không làm):** desktop app, đọc file local (CBZ/PDF), tài khoản/thanh toán, deploy backend lên internet, giao diện cài đặt, đa ngôn ngữ đích khác ngoài tiếng Việt.
+**Ngoài phạm vi (cố tình không làm):** desktop app, đọc file local (CBZ/PDF), tài khoản/thanh toán, deploy backend lên internet, đa ngôn ngữ đích khác ngoài tiếng Việt (dù popup có cho chọn ENG/CHS/CHT/JPN/KOR làm đích, prompt La-tinh-hóa/ngôi xưng tùy biến chỉ đầu tư cho VIN — xem mục 5.1).
 
-**Hai nguyên tắc kiến trúc cốt lõi** (mọi quyết định sau này đều xoay quanh 2 điều này):
+**Hai nguyên tắc kiến trúc cốt lõi** (mọi quyết định sau này đều xoay quanh 2 điều này — không đổi từ ngày đầu, kể cả sau khi port sang extension):
 
-1. **Chỉ có 1 module duy nhất biết "hình dạng" dữ liệu backend trả về** (`ApiAdapter`). Toàn bộ phần còn lại của userscript chỉ làm việc với một cấu trúc dữ liệu nội bộ đã được chuẩn hóa (`{ regions: [{x, y, w, h, src, dst, background}] }`). Nếu backend đổi cách trả dữ liệu, chỉ cần sửa đúng 1 chỗ.
-2. **Backend không vẽ chữ lên ảnh. Trình duyệt tự vẽ bằng CSS/HTML.** Backend chỉ có nhiệm vụ: tìm bóng thoại ở đâu (tọa độ) + dịch chữ trong đó là gì (text). Việc "dán" chữ dịch lên đúng vị trí, chọn font, canh giữa, tự co giãn cỡ chữ... là việc của trình duyệt. Điều này giúp: không phụ thuộc font tiếng Việt của backend, không cần bật tính năng "vẽ lại ảnh" nặng nề của backend cho phần chữ, và **chữ dịch vẫn bôi đen/copy được** như chữ thường trên web.
+1. **Chỉ có 1 module duy nhất biết "hình dạng" dữ liệu backend trả về** (`ApiAdapter` trong `content.js`, cộng `normalizeResponse()` trong `background.js` — xem mục 4 vì sao có 2 lớp). Phần còn lại của extension chỉ làm việc với 1 cấu trúc dữ liệu nội bộ đã chuẩn hóa (`{ regions: [{x, y, w, h, src, dst, background}] }`). Nếu backend đổi cách trả dữ liệu, chỉ cần sửa đúng 1-2 chỗ.
+2. **Backend không vẽ chữ lên ảnh. Trình duyệt tự vẽ bằng CSS/HTML.** Backend chỉ có nhiệm vụ: tìm bóng thoại ở đâu (tọa độ) + dịch chữ trong đó là gì (text). Việc "dán" chữ dịch lên đúng vị trí, chọn font, canh giữa, tự co giãn cỡ chữ... là việc của trình duyệt (`OverlayRenderer`). Điều này giúp: không phụ thuộc font tiếng Việt của backend, không cần bật tính năng "vẽ lại ảnh" nặng nề của backend cho phần chữ, và **chữ dịch vẫn bôi đen/copy được** như chữ thường trên web.
 
 ---
 
@@ -48,77 +42,86 @@ File `manga-overlay-translator.user.js` vẫn khả dụng để tham khảo, nh
 
 Phần này giải thích từng khái niệm/công nghệ xuất hiện trong dự án, kể cả những cái tưởng "hiển nhiên", vì các phần sau sẽ dùng lại chúng liên tục.
 
-### 2.1 Userscript là gì, khác gì "extension"
+### 2.1 Userscript, extension, và vì sao dự án bắt đầu bằng cái này rồi chuyển sang cái kia
 
-Một **extension** (tiện ích mở rộng trình duyệt, ví dụ Chrome Extension) là 1 gói phần mềm hoàn chỉnh: có `manifest.json` khai báo quyền hạn, có thể có "background script"/service worker chạy ngầm, cần build (đóng gói, có thể cần TypeScript/bundler như Webpack), và phải cài qua Chrome Web Store hoặc "Load unpacked" thủ công.
+Một **extension** (tiện ích mở rộng trình duyệt) là 1 gói phần mềm hoàn chỉnh: có `manifest.json` khai báo quyền hạn, có "background script"/service worker chạy ngầm, và phải cài qua "Load unpacked" (dev) hoặc Chrome Web Store.
 
-Một **userscript** đơn giản hơn nhiều: nó chỉ là **1 file JavaScript duy nhất** (`.user.js`), có 1 khối comment đặc biệt ở đầu file (`// ==UserScript== ... // ==/UserScript==`) khai báo tên, quyền cần cấp, trang nào script này chạy trên đó. Để chạy được userscript, trình duyệt cần cài sẵn 1 extension "trình quản lý userscript" — ở đây là **Tampermonkey**. Sau đó chỉ cần paste nội dung file `.user.js` vào Tampermonkey là chạy ngay, không build, không đóng gói.
+Một **userscript** đơn giản hơn nhiều: 1 file JavaScript duy nhất (`.user.js`), chạy qua trình quản lý userscript (Tampermonkey), không cần build/đóng gói.
 
-Dự án này **cố tình chọn userscript thay vì extension** vì lý do kỹ thuật quan trọng ở mục tiếp theo (CORS/mixed-content).
+**Dự án bắt đầu bằng userscript (Giai đoạn C, 2026-07-19 trở về trước) vì lý do CORS/mixed-content** (xem 2.3): Tampermonkey cấp `GM_xmlhttpRequest`, bỏ qua hoàn toàn giới hạn CORS/HTTPS→HTTP mà JS thường của trang bị chặn — lúc đó có vẻ extension (Manifest V3 hiện đại) sẽ bị chính sách bảo mật mới chặn việc gọi tuỳ ý tới `localhost` từ context trang.
 
-### 2.2 Tampermonkey và các quyền `GM_*`
+**2026-07-21: chuyển hẳn sang extension** sau khi xác nhận giả định trên **sai một nửa**: đúng là *content-script* (chạy trong context của trang) vẫn bị CORS/mixed-content y hệt JS thường, **nhưng** **`background` service worker** (chạy trong context riêng của chính extension, không phải context trang) **có thể fetch tự do tới bất kỳ origin nào đã khai báo trong `host_permissions`** — kể cả HTTP từ context nền tảng HTTPS — mà không bị CORS/mixed-content chặn. Vậy chỉ cần chuyển toàn bộ việc gọi mạng (tới backend VÀ tới CDN ảnh của site truyện) sang `background.js`, để `content-script` chỉ nhắn tin nội bộ (`chrome.runtime.sendMessage`) xin nó làm hộ — không có gì bị chặn cả (xem mục 4). Lý do đổi hẳn từ userscript deprecated hẳn: extension không cần cài Tampermonkey trung gian, có UI cài đặt (popup) là công dân hạng nhất của trình duyệt thay vì phải "giả lập" bằng `GM_*`, và không còn giới hạn "1 file duy nhất" (dễ tách module `content-script`/`background`/`popup` rõ ràng).
 
-Tampermonkey cấp cho userscript một số hàm đặc biệt mà JavaScript thường của trang web không có quyền dùng, gọi là `GM_*` API (Greasemonkey Manager). Khai báo `// @grant GM_xxx` ở đầu file là "xin quyền" dùng hàm đó. Dự án dùng:
+Đầy đủ lý do + kế hoạch port: `docs/superpowers/specs/2026-07-21-browser-extension-port-design.md`.
 
-- **`GM_xmlhttpRequest`** — giống `fetch()`/`XMLHttpRequest` bình thường, nhưng **bỏ qua CORS và "mixed content"** (xem 2.3). Đây là lý do userscript được chọn: nếu dùng extension với Manifest V3 hiện đại, việc gọi request tuỳ ý tới `localhost` từ context của trang HTTPS bất kỳ bị giới hạn rất nhiều bởi chính sách bảo mật mới của Chrome. `GM_xmlhttpRequest` không bị giới hạn này.
-- **`GM_setValue` / `GM_getValue`** — lưu trữ dữ liệu **vĩnh viễn**, tồn tại qua các lần tải lại trang, dùng làm cache (mục 5.3).
-- **`GM_addStyle`** — chèn 1 khối CSS vào trang, dùng để định nghĩa các class `.mot-*` cho overlay.
-- **`GM_registerMenuCommand`** — thêm 1 mục vào **menu popup của chính Tampermonkey** (bấm icon Tampermonkey trên thanh công cụ trình duyệt sẽ thấy). Đây là cơ chế kích hoạt dịch cuối cùng được chọn (xem mục 6.7 — lý do khá dài, có cả 1 "cuộc điều tra").
-- **`@connect`** — danh sách domain userscript được phép gọi `GM_xmlhttpRequest` tới. `@connect localhost`, `@connect 127.0.0.1` (gọi backend), `@connect *` (tải ảnh gốc từ CDN bất kỳ của site truyện).
-- **`@run-at`** — thời điểm script bắt đầu chạy so với vòng đời tải trang (xem 2.8 — quan trọng trong "vụ" quảng cáo chặn click).
+### 2.2 Tampermonkey `GM_*` API cũ → tương đương bên extension
 
-### 2.3 CORS, "mixed content", và tại sao không dùng `fetch()` thường
+Bảng đối chiếu (chỉ để hiểu userscript cũ nếu cần đọc lại nó — extension **không dùng** bất kỳ `GM_*` nào):
 
-- **CORS** (Cross-Origin Resource Sharing) là cơ chế trình duyệt chặn 1 trang web (A) tự ý đọc dữ liệu từ 1 domain khác (B) bằng JavaScript, trừ khi B cho phép rõ ràng qua header đặc biệt. Đây là cơ chế bảo vệ người dùng khỏi website độc hại đánh cắp dữ liệu từ site khác mà bạn đang đăng nhập.
-- **Mixed content** là khi 1 trang tải qua **HTTPS** (an toàn) lại cố gắng gọi 1 tài nguyên qua **HTTP** thường (không mã hoá) — trình duyệt sẽ chặn việc này để tránh kẻ tấn công chèn nội dung giả vào giữa đường truyền. Backend của dự án chạy ở `http://127.0.0.1:5003` (HTTP thường), trong khi hầu hết site đọc truyện dùng HTTPS → nếu dùng `fetch()` bình thường từ trang HTTPS gọi tới backend HTTP, trình duyệt sẽ chặn ngay lập tức.
-- **Giải pháp:** `GM_xmlhttpRequest` không bị 2 giới hạn trên, vì nó không chạy trong "ngữ cảnh" JavaScript thông thường của trang — nó chạy với quyền của chính Tampermonkey (một extension), vốn được trình duyệt tin tưởng hơn trang web thường.
+| Userscript cũ (`GM_*`) | Extension tương đương | Ghi chú |
+|---|---|---|
+| `GM_xmlhttpRequest` | `fetch()` trong `background.js` (context đặc quyền, có `host_permissions`) | Xem 2.1/2.3 |
+| `GM_setValue`/`GM_getValue` | `chrome.storage.local` | Bất đồng bộ (`await`), không đồng bộ như `GM_*` |
+| `GM_addStyle` | `document.createElement('style')` + `textContent` trong `content.js` | Tự chèn, không cần API riêng |
+| `GM_registerMenuCommand` | `manifest.json` → `action.default_popup` (popup HTML riêng) + hotkey | Popup là bề mặt UI hạng nhất của trình duyệt — mạnh hơn cả menu Tampermonkey (xem mục 6 vì sao điều này quan trọng) |
+| `@connect <domain>` | `host_permissions: ["<all_urls>"]` trong `manifest.json` | Khai báo 1 lần, áp dụng cho `background.js` |
+| `@run-at` | `content_scripts[].run_at` trong `manifest.json` (hiện `document_idle`) | Xem mục 6.9 vì sao giá trị này quan trọng |
+
+### 2.3 CORS, "mixed content", và vì sao content-script vẫn phải nhờ background
+
+- **CORS** (Cross-Origin Resource Sharing) là cơ chế trình duyệt chặn 1 trang web (A) tự ý đọc dữ liệu từ 1 domain khác (B) bằng JavaScript, trừ khi B cho phép rõ ràng qua header đặc biệt.
+- **Mixed content** là khi 1 trang tải qua **HTTPS** (an toàn) lại cố gọi tài nguyên qua **HTTP** thường — trình duyệt chặn để tránh kẻ tấn công chèn nội dung giả vào giữa đường truyền. Backend chạy ở `http://127.0.0.1:5003` (HTTP), hầu hết site đọc truyện dùng HTTPS.
+- **Vì sao `content-script` (dù thuộc về extension) vẫn không thoát được 2 giới hạn này:** content-script được trình duyệt tiêm **vào chính document của trang**, chạy trong "isolated world" (biến/hàm riêng, không đụng JS của trang) nhưng **cùng 1 network/security context** với trang — nên `fetch()` gọi trực tiếp từ content-script vẫn bị CORS/mixed-content y hệt JS thường của trang.
+- **Giải pháp (khác hẳn userscript):** `background.js` (service worker) chạy trong context **riêng của extension**, có quyền `host_permissions: ["<all_urls>"]` khai báo trong `manifest.json` — fetch từ đây không bị CORS/mixed-content chặn với **bất kỳ origin nào** đã khai báo. `content-script` gửi `chrome.runtime.sendMessage({type: 'TRANSLATE', ...})`, `background.js` mới thực sự `fetch()` tới backend/CDN ảnh, trả kết quả lại qua `sendResponse()`. Đây là lý do kiến trúc 3-mảnh ở mục 4.
 
 ### 2.4 Tainted canvas (canvas bị "nhiễm bẩn")
 
-`<canvas>` là 1 thẻ HTML cho phép vẽ đồ hoạ bằng JavaScript (`CanvasRenderingContext2D`), và có thể đọc lại dữ liệu điểm ảnh đã vẽ (`getImageData()`) hoặc xuất ra file ảnh (`toBlob()`). Nhưng nếu bạn vẽ lên canvas 1 tấm ảnh tải từ **domain khác** (cross-origin) mà không qua CORS hợp lệ, trình duyệt sẽ đánh dấu canvas đó là **"tainted" (nhiễm bẩn)** — từ lúc đó, mọi thao tác đọc lại dữ liệu (`getImageData`, `toBlob`, `toDataURL`) sẽ ném lỗi `SecurityError`, để tránh 1 trang web dùng `<canvas>` như "cửa hậu" đọc trộm ảnh riêng tư của site khác.
+`<canvas>` cho phép vẽ đồ hoạ bằng JavaScript và đọc lại pixel (`getImageData()`/`toBlob()`/`toDataURL()`). Nhưng nếu vẽ lên canvas 1 ảnh tải từ **domain khác** (cross-origin) không qua CORS hợp lệ, trình duyệt đánh dấu canvas đó **"tainted"** — mọi thao tác đọc lại pixel sau đó ném `SecurityError`, để tránh 1 trang dùng `<canvas>` làm "cửa hậu" đọc trộm ảnh riêng tư của site khác.
 
-Ảnh truyện tranh trên các site đọc truyện gần như luôn nằm ở CDN khác domain với chính site đó → nếu code vẽ trực tiếp từ thẻ `<img>` của trang lên `<canvas>` thì canvas sẽ bị tainted. Dự án né việc này bằng cách: **luôn tải ảnh về dưới dạng `Blob`** (dữ liệu nhị phân thô, không gắn với "nguồn gốc" nào) qua `GM_xmlhttpRequest` trước, rồi mới vẽ `Blob` đó lên canvas (`createImageBitmap(blob)`) — lúc này canvas không bị coi là tainted vì dữ liệu không "mang quốc tịch" của domain nào nữa.
+Ảnh truyện gần như luôn nằm ở CDN khác domain → nếu vẽ trực tiếp từ `<img>` của trang lên `<canvas>` thì canvas bị tainted. Dự án né bằng cách **luôn tải ảnh về dưới dạng `Blob`** (dữ liệu nhị phân thô, không mang "quốc tịch" domain nào) qua `background.js` (message `DOWNLOAD_IMAGE`) trước, rồi mới vẽ `Blob` đó lên canvas.
 
-**Trường hợp đặc biệt — ảnh `blob:`/`data:` URL:** một số site (thường là site đọc truyện chính thống, chống scrape) không đặt `<img src="...">` là URL CDN thật, mà tự tải ảnh về bằng JavaScript của chính họ rồi tạo ra 1 **`blob:` URL cục bộ** (`URL.createObjectURL()`) để gán vào `src` — và **thu hồi nó ngay sau khi trình duyệt giải mã xong** (`URL.revokeObjectURL()`), để không ai tải lại được nữa qua mạng (kể cả chính họ). Gặp trường hợp này, `GM_xmlhttpRequest`/`fetch` tải lại `src` đó **luôn thất bại** (`net::ERR_FILE_NOT_FOUND`) vì dữ liệu không còn tồn tại — không liên quan gì đến CORS hay sandbox của Tampermonkey. Nhưng vì `blob:`/`data:` URL được trình duyệt coi là **cùng gốc (same-origin)** với trang đã tạo ra nó (khác hẳn ảnh cross-origin thật từ CDN), nên `drawImage()` **trực tiếp từ chính thẻ `<img>` đang hiển thị** (đọc thẳng pixel đã giải mã sẵn trong bộ nhớ trình duyệt, không cần tải lại qua mạng) **không** làm canvas bị tainted — đây là cách `downloadImageBlob()` xử lý riêng cho 2 loại URL này (`imageElementToBlob()`).
+**Trường hợp đặc biệt — ảnh `blob:`/`data:` URL:** một số site (thường chống scrape) không đặt `src` là URL CDN thật, mà tự tải ảnh bằng JS của họ rồi tạo `blob:` URL cục bộ (`URL.createObjectURL()`) — và **thu hồi ngay sau khi giải mã xong** (`URL.revokeObjectURL()`). Gặp trường hợp này, tải lại `src` đó qua `background.js` **luôn thất bại** (dữ liệu không còn tồn tại) — không liên quan CORS. Nhưng vì `blob:`/`data:` URL được coi là **cùng gốc (same-origin)** với trang đã tạo ra nó, `drawImage()` **trực tiếp từ chính thẻ `<img>` đang hiển thị** (đọc pixel đã giải mã sẵn trong bộ nhớ, không tải lại qua mạng) **không** làm canvas bị tainted. `ApiAdapter.downloadImageBlob()` (content.js:373) tự rẽ nhánh: `src` bắt đầu bằng `blob:`/`data:` → `imageElementToBlob(img)` (đọc trực tiếp qua canvas); ngược lại → nhờ `background.js` tải hộ.
 
 ### 2.5 Docker và vì sao backend chạy trong container
 
-**Docker** là công cụ đóng gói 1 chương trình cùng toàn bộ môi trường nó cần (hệ điều hành thu nhỏ, thư viện, phiên bản Python...) thành 1 "container" chạy độc lập, không phụ thuộc máy thật đã cài gì. Backend `manga-image-translator` (dự án mã nguồn mở, xem mục 3) được phân phối sẵn dưới dạng 1 Docker image (`zyddnys/manga-image-translator:main`), nên chỉ cần `docker run` là có ngay môi trường Python + PyTorch + các model AI đã cài đặt đúng, không cần tự cài Python/CUDA/thư viện thủ công (vốn rất dễ xung đột phiên bản).
+**Docker** đóng gói 1 chương trình cùng toàn bộ môi trường nó cần thành 1 "container" chạy độc lập. Backend `manga-image-translator` (mã nguồn mở, xem mục 3) phân phối sẵn dưới dạng Docker image, nên chỉ cần `docker run` là có ngay môi trường Python + PyTorch + model AI đã cài đúng, không cần tự cài thủ công.
 
-**GPU passthrough:** container mặc định không thấy được card đồ hoạ (GPU) của máy thật. Cờ `--gpus all` khi chạy `docker run` yêu cầu Docker "chia sẻ" GPU vào trong container — bắt buộc phải có để chạy AI nhanh (dùng CPU sẽ chậm hơn 10–20 lần).
+**GPU passthrough:** cờ `--gpus all` khi `docker run` yêu cầu Docker chia sẻ GPU thật vào container — bắt buộc để chạy AI nhanh (CPU chậm hơn 10–20 lần).
 
-**WSL2:** trên Windows, Docker Desktop không chạy container trực tiếp trên Windows mà chạy bên trong 1 máy ảo Linux nhẹ gọi là WSL2 (Windows Subsystem for Linux 2). Đây là lý do các lệnh Docker gốc hay dùng cú pháp bash (`\` để xuống dòng, `$(pwd)`) thay vì PowerShell.
+**WSL2:** trên Windows, Docker Desktop chạy container bên trong 1 máy ảo Linux nhẹ (WSL2) — lý do lệnh Docker hay dùng cú pháp bash.
 
-**VRAM vs "shared memory":** GPU laptop dùng trong dự án có 4GB bộ nhớ chuyên dụng (VRAM, gắn liền trên card). Windows Task Manager thường hiển thị số "GPU Memory" lớn hơn nhiều (~12GB) vì nó cộng thêm cả RAM hệ thống mà GPU "mượn tạm" qua khe cắm PCIe — nhưng PyTorch (thư viện AI) **không dùng được phần mượn tạm này để tính toán**, nó chỉ dùng đúng 4GB VRAM thật. Đây là lý do phải luôn kiểm tra bằng lệnh `nvidia-smi` (cho số thật) chứ không tin Task Manager, và phải cẩn thận với các cấu hình AI "nặng" (ảnh lớn, model to) vì rất dễ hết bộ nhớ (OOM — Out Of Memory).
+**VRAM vs "shared memory":** GPU laptop dùng trong dự án có 4GB VRAM chuyên dụng. Task Manager hiển thị số lớn hơn (~12GB) vì cộng thêm RAM hệ thống GPU "mượn tạm" — nhưng PyTorch **không dùng được phần mượn** để tính toán, chỉ dùng đúng 4GB thật (`nvidia-smi` mới cho số đúng).
 
 ### 2.6 Pipeline dịch ảnh — OCR, detection, inpainting, translation nghĩa là gì
 
-Backend xử lý 1 ảnh truyện qua 1 chuỗi bước AI nối tiếp nhau:
+Backend xử lý 1 ảnh qua 1 chuỗi bước AI nối tiếp:
 
-1. **Detector (dò vùng chữ)** — 1 model AI quét toàn bộ ảnh, tìm ra những vùng hình chữ nhật (bounding box — viết tắt **bbox**) có khả năng chứa chữ viết (thường là bóng thoại). Nó KHÔNG đọc được nội dung chữ, chỉ trả về "ở đây có chữ, tọa độ x,y,rộng,cao là..."
-2. **OCR (Optical Character Recognition — nhận dạng ký tự quang học)** — với mỗi vùng detector tìm được, 1 model khác "đọc" ảnh và chuyển thành text thật (ví dụ nhận ra pixel đó là chữ Nhật "こんにちは"). Đây là bước duy nhất "hiểu" được ký tự gốc là gì.
-3. **Translator (dịch)** — nhận text gốc từ OCR, dịch sang ngôn ngữ đích (ở đây gọi 1 LLM — ChatGPT — qua API, không dùng model dịch offline).
-4. **Inpainter (tùy chọn — xóa chữ gốc)** — 1 model AI "vẽ lại" vùng ảnh chứa chữ gốc sao cho trông như chưa từng có chữ ở đó (dựa vào việc "đoán" hình nền/nét vẽ xung quanh nên là gì) — về bản chất là kỹ thuật **image inpainting** (phục hồi ảnh) dùng để xóa vật thể không mong muốn, ở đây dùng để xóa chữ.
-5. **Renderer (tùy chọn — vẽ chữ mới lên ảnh)** — nếu bật, backend sẽ tự vẽ luôn chữ đã dịch lên ảnh đã inpaint, trả về **1 ảnh hoàn chỉnh**. Dự án này **tắt bước này** (`renderer: "none"`, xem Nguyên tắc kiến trúc #2) vì tự vẽ bằng CSS linh hoạt hơn.
+1. **Detector (dò vùng chữ)** — quét ảnh, tìm bounding box (bbox) có khả năng chứa chữ. KHÔNG đọc được nội dung, chỉ trả toạ độ.
+2. **OCR (Optical Character Recognition)** — với mỗi bbox, đọc pixel và chuyển thành text thật. Bước duy nhất "hiểu" ký tự gốc.
+3. **Translator (dịch)** — dịch text gốc sang ngôn ngữ đích (gọi 1 LLM — ChatGPT/Gemini/DeepL qua API).
+4. **Inpainter (tuỳ chọn — xóa chữ gốc)** — "vẽ lại" vùng chứa chữ gốc sao cho như chưa từng có chữ (image inpainting).
+5. **Renderer (tuỳ chọn — vẽ chữ mới lên ảnh)** — dự án **luôn tắt** (`renderer: "none"`, xem Nguyên tắc #2 ở mục 1).
 
-Dự án chỉ dùng bước 1–3 và bật riêng bước 4 (inpaint) để lấy ảnh nền đã xóa chữ, còn bước 5 luôn tắt.
+Dự án luôn dùng bước 1–3, bật bước 4 để lấy ảnh nền đã xoá chữ, luôn tắt bước 5.
+
+**Biến thể "detect-only" (mới, 2026-08-13 — dùng cho gate của boundary-stitch, xem mục 5.7):** đặt `translator.translator = "none"` chạy đúng bước 1–2 (detect + OCR) rồi **dừng lại** — trả về toạ độ bbox + text gốc (`text.src`), **không dịch** (`text.dst` rỗng), **không gọi GPT**, **không inpaint**. Rất rẻ (chỉ model local). Dùng khi chỉ cần biết "ở đây có chữ không / chữ gì" mà chưa cần bản dịch thật.
 
 ### 2.7 CSS overlay: `position: absolute`, tọa độ theo %, `pointer-events`
 
-Kỹ thuật vẽ chữ dịch đè lên ảnh, **không sửa gì trên chính thẻ `<img>`** (kể cả DOM lẫn CSS — xem lý do quan trọng ở mục 6.9):
+Kỹ thuật vẽ chữ dịch đè lên ảnh, **không sửa gì trên chính thẻ `<img>`** (kể cả DOM lẫn CSS — xem lý do quan trọng ở mục 6.10):
 
-- Tạo 1 `<div class="mot-layer" style="position: absolute">`, gắn **trực tiếp vào `document.body`** (không bọc/không di chuyển `<img>`), rồi tự tính đúng `left/top/width/height` (đơn vị px) khớp với vị trí/kích thước hiển thị thật của `<img>` bằng `img.getBoundingClientRect()` (trả toạ độ theo **viewport**) cộng thêm `window.scrollX/scrollY` (để quy về toạ độ **trang**, vì `position: absolute` — khác `position: fixed` — vẫn tự cuộn theo trang bình thường một khi đã đặt đúng toạ độ tuyệt đối 1 lần).
-- Mỗi vùng chữ được vẽ bằng 1 `<div>` con **bên trong** layer đó, định vị bằng **phần trăm** (`left: (x/naturalWidth*100)%`) thay vì pixel tuyệt đối — vì % tự động tính lại theo kích thước của chính layer cha (đã được đặt đúng bằng px ở bước trên), nên khi người dùng zoom trình duyệt hoặc resize cửa sổ (kèm 1 `ResizeObserver` theo dõi `<img>` + 1 listener `window resize`, gọi lại việc tính toạ độ layer), overlay tự "co giãn" theo mà không cần tính lại từng vùng chữ.
-- **`pointer-events: none`** trên layer cha (để không chặn việc click/scroll xuyên qua layer tới nội dung trang bên dưới nó), nhưng **`pointer-events: auto`** riêng trên từng khung chữ (để vẫn bấm được vào khung chữ đó — dùng cho tính năng "click xem chữ gốc").
+- Tạo 1 `<div class="mot-layer" style="position: absolute">`, gắn **trực tiếp vào `document.body`** (không bọc/không di chuyển `<img>`), rồi tự tính đúng `left/top/width/height` (px) khớp vị trí/kích thước hiển thị thật của `<img>` bằng `img.getBoundingClientRect()` (toạ độ viewport) cộng `window.scrollX/scrollY` (quy về toạ độ trang).
+- Mỗi vùng chữ là 1 `<div>` con định vị bằng **phần trăm** (`left: (x/naturalWidth*100)%`) — tự "co giãn" theo layer cha khi zoom/resize, nhờ `ResizeObserver` + listener `window resize` gọi lại việc tính toạ độ layer, không cần tính lại từng vùng chữ.
+- **`pointer-events: none`** trên layer cha (không chặn click/scroll xuyên qua tới trang bên dưới), nhưng **`pointer-events: auto`** riêng trên từng khung chữ (vẫn bấm được để xem chữ gốc).
 
-### 2.8 Popover API, "top layer", capture-phase event, và `@run-at document-start`
+### 2.8 [LỊCH SỬ — chỉ áp dụng cho nút nổi của userscript cũ, KHÔNG áp dụng cho popup của extension] Popover API, "top layer", capture-phase, `@run-at document-start`
 
-Đây là các khái niệm chỉ xuất hiện trong "cuộc điều tra" chống quảng cáo che nút (mục 6.7), nhưng quan trọng để hiểu vì sao thiết kế UI cuối cùng lại như vậy:
+Các khái niệm chỉ xuất hiện trong "cuộc điều tra" chống quảng cáo che nút (mục 6, toàn bộ mục đó là lịch sử userscript) — extension **không gặp lớp vấn đề này** vì popup (`action.default_popup`) là bề mặt UI riêng của trình duyệt, nằm hoàn toàn ngoài DOM/tầm với của trang từ đầu, không cần "leo thang" qua Popover/top-layer/capture-phase như nút nổi từng phải làm. Giữ lại đây để hiểu mục 6 và phòng khi có tính năng floating-UI trong-trang nào đó cần làm trong tương lai:
 
-- **`z-index`** — thuộc tính CSS quyết định phần tử nào "nằm trên" khi 2 phần tử chồng lên nhau trên màn hình. Giá trị càng lớn càng ở trên. `2147483647` là giá trị lớn nhất có thể (giới hạn của số nguyên 32-bit có dấu).
-- **Top layer** — 1 cơ chế hiển thị đặc biệt của trình duyệt, nằm "trên" toàn bộ cây DOM thông thường, bất kể `z-index` của bất kỳ phần tử thường nào. Đây là cơ chế trình duyệt dùng cho `<dialog>` (hộp thoại modal) hay chế độ toàn màn hình. **Popover API** (thuộc tính HTML `popover="manual"` + hàm JavaScript `element.showPopover()`) cho phép đưa 1 phần tử bất kỳ vào top layer này. Về lý thuyết, phần tử trong top layer không thể bị 1 phần tử z-index thường (dù lớn tới đâu) che lên.
-- **Capture phase** — khi 1 sự kiện (ví dụ `click`) xảy ra trên trang, nó không chỉ "chạy tới" đúng phần tử được bấm — nó đi qua 2 giai đoạn: **capture** (từ gốc `document` đi xuống dần tới phần tử đích) rồi **bubble** (từ phần tử đích đi ngược lên lại `document`). Bình thường các listener đăng ký bằng `addEventListener('click', fn)` chạy ở giai đoạn bubble; truyền thêm tham số `true` (`addEventListener('click', fn, true)`) sẽ khiến nó chạy ở giai đoạn **capture** — tức là chạy **trước**, ngay khi sự kiện còn đang "đi xuống" chứ chưa tới đích.
-- **`@run-at document-start`** — chỉ định userscript chạy **trước khi** trình duyệt bắt đầu phân tích (parse) mã HTML của trang, tức là trước cả các thẻ `<script>` nằm trong `<body>` của chính trang đó. Mặc định (`document-idle`) script chạy **sau khi** trang đã tải xong gần hết — quá trễ nếu muốn "đăng ký trước" 1 script khác của trang.
+- **`z-index`** — quyết định phần tử nào "nằm trên" khi chồng lấp. `2147483647` là giá trị lớn nhất (giới hạn số nguyên 32-bit có dấu).
+- **Top layer** — cơ chế hiển thị đặc biệt nằm "trên" toàn bộ cây DOM thường, bất kể `z-index`. **Popover API** (`popover="manual"` + `element.showPopover()`) cho phép đưa 1 phần tử vào đây.
+- **Capture phase** — sự kiện đi qua 2 giai đoạn: **capture** (từ `document` xuống dần tới đích) rồi **bubble** (ngược lên). `addEventListener(fn, true)` chạy ở capture — tức chạy **trước**.
+- **`@run-at document-start`** — script chạy **trước khi** trình duyệt parse HTML trang, trước cả `<script>` của chính trang.
 
 ---
 
@@ -126,65 +129,56 @@ Kỹ thuật vẽ chữ dịch đè lên ảnh, **không sửa gì trên chính 
 
 Dự án dùng lại 100% phần AI (detect/OCR/dịch/inpaint) từ 1 dự án mã nguồn mở có sẵn: **[`manga-image-translator`](https://github.com/zyddnys/manga-image-translator)** (tác giả: zyddnys), chạy dưới dạng server REST cục bộ qua Docker image `zyddnys/manga-image-translator:main`.
 
-Vì README chính thức của dự án này **không có tài liệu API rõ ràng** (tự mâu thuẫn giữa các port 5003/8000/8001, không có ví dụ request/response cụ thể), toàn bộ hợp đồng API phải **dò bằng thực nghiệm** thay vì đoán — đây là lý do có hẳn "Giai đoạn B" riêng trong spec, và các file `fixtures/*.json` được lưu lại làm bằng chứng/nguồn tham chiếu.
+Vì README chính thức của dự án này **không có tài liệu API rõ ràng**, toàn bộ hợp đồng API phải **dò bằng thực nghiệm** — các file `fixtures/*.json` là bằng chứng/nguồn tham chiếu.
 
 ### 3.1 Cách backend chạy trong dự án này
 
-Container không dùng thẳng image gốc mà build từ 1 image tùy biến (`Dockerfile`):
+Container build từ 1 image tùy biến (`Dockerfile`), vá + mở rộng bằng các file trong `patches/` (chi tiết từng patch: `README.md` mục "File trong thư mục này"):
 
 ```dockerfile
 FROM zyddnys/manga-image-translator:main
 COPY patches/to_json.py /app/server/to_json.py
 COPY patches/gpt_config-vi.yaml /app/gpt_config-vi.yaml
+COPY patches/main.py /app/server/main.py            # full-override: /fetch-image, /build-series-context,
+                                                       # /set-series-context, /set-recent-dialogue
+COPY patches/share.py /app/manga_translator/mode/share.py            # relay optimization
+COPY patches/sent_data_internal.py /app/server/sent_data_internal.py # buffer O(n)
+COPY patches/deepl.py ...                                            # engine DeepL + VIN
 ```
 
-Build 1 lần: `docker build -t manga-translator-patched:local .`, sau đó chạy bằng `run-backend.ps1` (đọc `.env`, chỉ truyền các biến môi trường thật sự có giá trị cho `docker run`, tránh Docker ghi đè mặc định bằng chuỗi rỗng).
+Build 1 lần (hoặc sau khi sửa `patches/*`): `docker build -t manga-translator-patched:local .`, chạy bằng `run-backend.ps1` (đọc `.env`). **`docker restart` KHÔNG áp dụng image mới build** — phải `docker stop` (container tự xoá, `run-backend.ps1` dùng `--rm`) rồi chạy lại `run-backend.ps1` để thực sự dùng image mới.
 
-Lệnh chạy container thực tế (rút gọn từ `run-backend.ps1`):
-```
-docker run --rm --name manga_translator
-  -p 5003:5003 -p 8000:8000 -p 8001:8001
-  --ipc=host --gpus all --entrypoint python
-  -v <thư mục hiện tại>/result:/app/result
-  -e OPENAI_API_KEY=...
-  manga-translator-patched:local
-  server/main.py --verbose --start-instance --host=0.0.0.0 --port=5003
-  --use-gpu --models-ttl 0 --nonce None
-```
+### 3.2 Các bug thật của backend đã tìm ra + vá (và 1 landmine tự gây ra, đã vá)
 
-### 3.2 4 bug thật của backend đã tìm ra và vá
+1. **`POST /translate/json` (không stream) → crash HTTP 500.** FastAPI không áp dụng đúng bộ mã hoá tuỳ biến cho field `background` (`numpy.ndarray`). **Né:** dùng `/translate/json/stream`.
+2. **Bản dịch bị thiếu trong JSON trả về.** `to_translation()` gốc đọc từ `ctx.translations` (dict luôn rỗng) thay vì `text_region.translation`. **Vá:** `patches/to_json.py`.
+3. **`gpt_config` chỉ nhận đường dẫn file, không nhận nội dung YAML trực tiếp.** `OmegaConf.load(self.gpt_config)` coi nó luôn là đường dẫn. **Cách làm đúng:** đóng gói `patches/gpt_config-vi.yaml` vào image, truyền path.
+4. **Prompt tùy chỉnh làm hỏng việc tách kết quả dịch nhiều dòng** — lỗi tự gây ra khi viết `gpt_config-vi.yaml` đầu tiên (bỏ sót chỉ dẫn giữ marker `<|N|>`). Đã vá (thêm lại chỉ dẫn + ví dụ mẫu).
+5. **LANDMINE tự gây ra (2026-08-13, Feature B — ngữ cảnh nhân vật/hội thoại): nội dung tiêm động vào prompt phải brace-escape.** `chat_system_template` được backend chạy qua Python `str.format(to_lang=...)` — bất kỳ ký tự `{`/`}` literal nào trong nội dung tiêm vào (hồ sơ nhân vật do GPT tự sinh, cửa sổ hội thoại gần nhất từ OCR thật) sẽ ném `KeyError`/`ValueError`, và vì khối bị lỗi được LƯU LẠI vào file yaml riêng của truyện, nó **brick mọi lượt dịch tiếp theo của đúng truyện đó** cho tới khi bị ghi đè. **Vá:** `_esc_braces()` (`{`→`{{`, `}`→`}}`) áp dụng **chỉ** cho nội dung tiêm động, không bao giờ áp dụng cho `{to_lang}` thật của template — xem `patches/main.py` hàm `_write_series_gpt_config`. **Bài học cho bất kỳ code tiêm nội dung động vào prompt sau này: luôn brace-escape trước khi ghép.**
 
-1. **`POST /translate/json` (không stream) → crash HTTP 500.** FastAPI (framework Python dùng để dựng API) tự động chuyển object Python thành JSON, nhưng không áp dụng đúng bộ mã hóa tùy biến cho field `background` (kiểu `numpy.ndarray` — mảng số biểu diễn ảnh) → lỗi giải mã UTF-8. **Cách né:** dùng endpoint `/translate/json/stream` thay vì `/translate/json` — endpoint stream dùng 1 hàm khác (`transform_to_json()`) gọi đúng `.model_dump_json()`, không dính bug.
-
-2. **Bản dịch bị thiếu trong JSON trả về.** Hàm `to_translation()` trong `server/to_json.py` (mã nguồn gốc) đọc dữ liệu dịch từ `ctx.translations` — một dict luôn rỗng trong pipeline hiện tại — thay vì `text_region.translation`, nơi bản dịch thật sự được lưu (nơi mà bước "renderer" của chính backend cũng đọc để vẽ chữ). Kết quả: JSON trả về có chữ gốc nhưng field chữ dịch trống rỗng. **Đã vá:** `patches/to_json.py` đọc đúng `text_region.translation`, xuất ra 2 field mới `text.src` (gốc) và `text.dst` (dịch) — patch này được "tiêm" vào image Docker qua `Dockerfile` ở trên, nên không mất khi container bị xóa/tạo lại.
-
-3. **Field `gpt_config` chỉ nhận đường dẫn file, không nhận nội dung YAML trực tiếp.** Code gốc gọi `OmegaConf.load(self.gpt_config)` — tức coi `gpt_config` luôn là 1 **đường dẫn file** trên máy chủ, không phải nội dung cấu hình. Gửi thẳng nội dung YAML qua API sẽ bị lỗi `[Errno 36] File name too long` (vì code cố mở chuỗi YAML dài đó như thể nó là 1 tên file). **Cách làm đúng:** đóng gói sẵn file `patches/gpt_config-vi.yaml` (tùy biến prompt dịch — yêu cầu La-tinh hóa mọi tên riêng/thuật ngữ tiếng Nhật, không được để sót chữ Nhật trong bản dịch) vào image qua `Dockerfile`, rồi truyền đường dẫn `/app/gpt_config-vi.yaml` đó trong request.
-
-4. **Prompt tùy chỉnh (`gpt_config-vi.yaml`) làm hỏng việc tách kết quả dịch nhiều dòng — do chính tôi gây ra, không phải bug gốc của backend.** Khi dịch nhiều dòng chữ cùng lúc, backend ghép chúng vào 1 request kiểu `<|1|>dòng một\n<|2|>dòng hai` (`CommonGPTTranslator._assemble_prompts` trong `translators/common_gpt.py`), rồi dùng regex `<\|\d+\|>` tách lại từng dòng dịch từ câu trả lời GPT (`_parse_response`). Prompt mặc định của backend (`_CHAT_SYSTEM_TEMPLATE` trong `translators/config_gpt.py`) có 1 dòng bắt buộc dạy GPT giữ nguyên marker này — bản `gpt_config-vi.yaml` đầu tiên **thay thế hoàn toàn** prompt mặc định (để thêm yêu cầu La-tinh hóa ở bug #3) và **vô tình bỏ sót đúng dòng đó**. Hệ quả: GPT trả lời tự nhiên không có marker → log báo `Found indices count (0) does not match expected count (N)` → dịch bị coi là thất bại, lọc bỏ (rỗng hoặc giữ nguyên chữ gốc). Vì `target_lang=VIN` không khớp bất kỳ ngôn ngữ nào trong `chat_sample` (ví dụ minh họa có sẵn của backend, chỉ có tiếng Trung/Anh/Hàn), GPT không có ví dụ mẫu nào để tự suy ra định dạng — càng dễ gặp lỗi này hơn các ngôn ngữ có sẵn mẫu. **Đã vá:** thêm lại chỉ dẫn giữ nguyên `<|N|>` + 1 ví dụ input/output cụ thể ngay trong prompt tùy chỉnh. Đây là bài học về rủi ro khi **thay thế hoàn toàn** 1 prompt hệ thống thay vì chỉ **bổ sung** vào nó — dễ vô tình xóa mất những chỉ dẫn kỹ thuật quan trọng mà mình không biết là chúng tồn tại.
+Chi tiết đầy đủ từng bug (log lỗi thật, số liệu đo được): `README.md` mục "Bug đã tìm ra + vá".
 
 ### 3.3 Giao thức stream — vì sao không phải JSON thuần
 
-Endpoint `/translate/json/stream` không trả về 1 khối JSON đơn giản — nó trả về 1 **luồng nhị phân (binary stream)** gồm nhiều "khung" (frame) nối tiếp nhau, để phía client có thể nhận thông tin tiến độ ("đang detect", "đang dịch"...) trước khi có kết quả cuối cùng. Mỗi khung có cấu trúc:
+`/translate/json/stream` trả về 1 **luồng nhị phân** gồm nhiều "khung" (frame) nối tiếp:
 
 ```
 [1 byte: status][4 byte: độ dài payload, big-endian][N byte: payload]
 ```
+- `status = 0`: khung cuối, `payload` là JSON UTF-8 kết quả thật.
+- `status = 2`: lỗi, `payload` là text mô tả lỗi.
+- `status = 1/3/4`: khung tiến độ trung gian — chỉ log, không xử lý gì thêm.
 
-- `status = 0`: khung cuối cùng, `payload` là chuỗi JSON UTF-8 chứa kết quả thật (`translations: [...]`)
-- `status = 2`: có lỗi, `payload` là text mô tả lỗi
-- `status = 1/3/4`: các khung tiến độ trung gian (tên bước đang chạy, vị trí trong hàng đợi...) — script chỉ log ra console để debug, không xử lý gì thêm
-
-"big-endian" nghĩa là byte có giá trị lớn nhất đứng **trước** (ngược với "little-endian" mà hầu hết CPU hiện đại dùng nội bộ) — đây là quy ước phổ biến cho dữ liệu truyền qua mạng, nên phải dùng đúng tham số khi đọc (`DataView.getUint32(offset, false)` — tham số `false` nghĩa là big-endian).
-
-Vì đây không phải là định dạng response chuẩn (JSON/XML) mà trình duyệt hiểu sẵn, script phải tự đọc "thô" bằng `ArrayBuffer`/`DataView` (2 API JavaScript cấp thấp để đọc dữ liệu nhị phân theo từng byte) thay vì chỉ gọi `response.json()`.
+`background.js`'s `normalizeResponse()` (dòng ~82) đọc "thô" bằng `DataView`/`ArrayBuffer` (`getUint32(offset, false)` — `false` = big-endian) thay vì `response.json()`.
 
 ### 3.4 Schema request/response cuối cùng (đã xác nhận thật)
 
-**Request** (JSON gửi lên `/translate/json/stream`):
+**Request:**
 ```json
 {
   "image": "data:image/png;base64,...",
   "config": {
+    "detector": { "detection_size": 2400 },
     "translator": { "translator": "chatgpt", "target_lang": "VIN", "gpt_config": "/app/gpt_config-vi.yaml" },
     "render": { "renderer": "none" },
     "inpainter": { "inpainter": "lama_mpe", "inpainting_size": 1024 }
@@ -192,320 +186,431 @@ Vì đây không phải là định dạng response chuẩn (JSON/XML) mà trìn
 }
 ```
 
-**Response** (sau khi giải mã khung `status=0`, đã tính cả 2 bug đã vá):
+**Response** (khung `status=0`, đã tính mọi bug đã vá):
 ```jsonc
 {
   "translations": [
     {
-      "minX": 459, "minY": 44, "maxX": 474, "maxY": 306, // bbox, px TUYỆT ĐỐI theo ảnh gốc
-      "text": { "src": "chữ gốc...", "dst": "chữ đã dịch..." },
-      "background": "data:image/png;base64,..." // ảnh ĐÃ INPAINT, đúng khít vùng bbox
+      "minX": 459, "minY": 44, "maxX": 474, "maxY": 306, // bbox px TUYỆT ĐỐI
+      "text": { "src": "chữ gốc...", "dst": "chữ đã dịch..." }, // dst RỖNG nếu translator="none" (detect-only, mục 2.6)
+      "background": "data:image/png;base64,..." // ảnh ĐÃ INPAINT, đúng khít bbox — chỉ có ý nghĩa khi inpainter bật (bị bỏ qua nếu detect-only)
       // ...is_bulleted_list, angle, prob, text_color — không dùng tới
     }
   ]
 }
 ```
 
-Không có field `vertical` (hướng chữ dọc/ngang) trong response thật — nên toàn bộ thiết kế không dựa vào field đó (xem mục 5 — `_reshapeForHorizontalText`).
+Không có field `vertical` (hướng chữ dọc/ngang) trong response thật — toàn bộ thiết kế `OverlayRenderer._reshapeForHorizontalText` không dựa vào field đó (mục 5.6).
+
+**3 endpoint mở rộng riêng của bản patch (không có ở backend gốc)**, dùng cho tính năng ngữ cảnh (mục 5.9):
+- `POST /fetch-image` — relay tải ảnh kèm `Referer` đúng (dùng khi cả fetch thẳng từ `background.js` lẫn không có Referer đều bị site chặn hotlink — mục 4).
+- `POST /build-series-context` — GPT tự sinh 1 "hồ sơ nhân vật" ngắn từ text OCR gom được, ghi thành 1 file `gpt_config` riêng cho từng truyện.
+- `POST /set-series-context` / `POST /set-recent-dialogue` — cập nhật 1 trong 2 khối độc lập của file `gpt_config` riêng đó (hồ sơ nhân vật TĨNH / cửa sổ hội thoại gần nhất ĐỘNG) mà không đụng khối còn lại.
 
 ---
 
 ## 4. Kiến trúc tổng thể
 
 ```
-┌─────────────────────────── Trình duyệt ───────────────────────────┐
-│  Trang web bất kỳ (HTTPS)                                          │
-│    <img src="chapter-page-1.jpg">   ← ảnh truyện thật của site     │
-│                                                                     │
-│  manga-overlay-translator.user.js  (chạy nhờ Tampermonkey)         │
-│    ImageFinder   — quét <img>, lọc ra ảnh "giống trang truyện"     │
-│    watchImages   — MutationObserver bắt ảnh lazy-load thêm sau     │
-│    Queue         — hàng đợi, giới hạn 1 ảnh xử lý cùng lúc         │
-│    Cache         — GM_setValue, key = hash bytes ảnh               │
-│    ApiAdapter    — GM_xmlhttpRequest → backend (NƠI DUY NHẤT       │
-│                     biết schema request/response)                  │
-│    OverlayRenderer — vẽ <div> đè lên <img> bằng CSS                │
-│    UI trigger    — GM_registerMenuCommand + hotkey Alt+D/Alt+T     │
-└──────────────────────────────┬──────────────────────────────────────┘
-                                │ HTTP POST (qua GM_xmlhttpRequest,
-                                │ bỏ qua CORS/mixed-content)
-                                ▼
-┌──────────────── Docker container (localhost:5003) ─────────────────┐
-│  manga-image-translator (mã nguồn mở, đã patch 2 bug)              │
-│    detector → OCR → translator (gọi OpenAI/ChatGPT qua mạng)       │
-│              → inpainter (xóa chữ gốc bằng AI)                     │
-│    trả JSON (qua binary stream): bbox + text gốc + text dịch       │
-│              + ảnh nền đã inpaint (base64 PNG)                     │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────── Trình duyệt (Chrome/Edge) ─────────────────────────────────┐
+│                                                                                                │
+│  Trang web bất kỳ (HTTPS)                    Popup (action.default_popup, popup.html/js)     │
+│    <img src="chapter-page-1.jpg">              - Nút "Dịch trang này" → TRIGGER_TRANSLATE     │
+│                                                 - backend URL, ngôn ngữ đích, engine, eager,   │
+│  content-script (content.js, ~2000 dòng)         ngữ cảnh nhân vật (chrome.storage.local)      │
+│  chạy TRONG context trang (isolated world)     - Xoá cache dịch                                │
+│    ImageFinder / watchImages / Queue                        │ chrome.tabs.sendMessage          │
+│    Cache (chrome.storage.local)                              ▼                                 │
+│    ApiAdapter — ĐÓNG GÓI request, KHÔNG tự fetch                                              │
+│    OverlayRenderer — vẽ <div> đè lên <img> bằng CSS                                            │
+│    SeriesCtx / RecentDialogue — ngữ cảnh nhân vật/hội thoại                                    │
+│    findNextSiblingImage / detectBoundaryRegions — ghép biên webtoon                            │
+│          │ chrome.runtime.sendMessage (TRANSLATE / DOWNLOAD_IMAGE / BUILD_SERIES_CONTEXT/...)  │
+│          ▼                                                                                     │
+│  background (service worker, background.js) — context RIÊNG của extension                     │
+│    NƠI DUY NHẤT thực sự fetch() ra ngoài — host_permissions bỏ qua CORS/mixed-content           │
+│    normalizeResponse() — hiểu giao thức binary stream + schema JSON thật                       │
+└───────────────────────────────────────────┬────────────────────────────────────────────────────┘
+                                             │ HTTP POST (background.js → backend, không giới hạn CORS)
+                                             ▼
+┌──────────────────── Docker container (localhost:5003, xem mục 3) ────────────────────┐
+│  manga-image-translator (mã nguồn mở, đã patch — mục 3.2) + endpoint mở rộng riêng    │
+│    detector → OCR → translator (ChatGPT/Gemini/DeepL qua API ngoài) → inpainter       │
+│    trả JSON (qua binary stream): bbox + text gốc + text dịch + ảnh nền đã inpaint     │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Toàn bộ file `manga-overlay-translator.user.js` nằm trong 1 hàm tự gọi `(function(){ ... })()` (gọi là **IIFE — Immediately Invoked Function Expression**) để các biến/hàm bên trong không "rò rỉ" ra ngoài, tránh xung đột với JavaScript của chính trang web.
+**Vì sao 3 mảnh (content-script/background/popup) thay vì 1 file:** mỗi mảnh chạy trong 1 **context bảo mật khác nhau** của trình duyệt — đây không phải chọn lựa kiến trúc tuỳ ý mà là **bắt buộc** bởi chính sách Manifest V3 (mục 2.3). `content-script` là nơi duy nhất đọc/ghi được DOM của trang thật; `background` là nơi duy nhất fetch tự do; `popup` là nơi duy nhất có UI cài đặt lâu dài (đóng khi mất focus, không giữ state — mọi setting phải qua `chrome.storage.local`, không giữ biến JS). 3 mảnh giao tiếp thuần bằng `chrome.runtime.sendMessage`/`chrome.tabs.sendMessage` — **không** chia sẻ biến JS trực tiếp.
+
+**Gotcha đã gặp thật khi port (không lộ ra qua code review, chỉ lộ khi chạy thật):**
+1. `chrome.runtime.sendMessage`/`sendResponse` **không** bảo toàn `ArrayBuffer` qua message channel như `window.postMessage` — nó về tới đầu kia dưới dạng `Object` đã bị "tước" mất kiểu nhị phân. Mọi dữ liệu nhị phân (bytes ảnh tải về) phải chuyển sang chuỗi **base64** trước khi gửi (`arrayBufferToBase64`/`base64ToBlob`).
+2. Manifest V3 content-script/background **không tự đặt được header `Referer`** khi fetch (khác `GM_xmlhttpRequest` cũ có đặc quyền này) — ảnh bị site chặn hotlink (thiếu `Referer` đúng) được xử lý bằng cách relay qua backend (`POST /fetch-image`, `patches/main.py`), dùng client HTTP Python thật (không giới hạn header) để tải kèm `Referer` đúng.
+3. Bất kỳ `chrome.runtime.onMessage` listener nào **có thể** bị gọi kèm callback (`sendMessage(msg, cb)`) phải gọi `sendResponse(...)` **đồng bộ** (hoặc `return true` rồi gọi sau) dù logic bên trong không cần trả gì — thiếu nó Chrome báo `"The message port closed before a response was received"` cho bên gọi, dù listener chạy thành công. Bug này ẩn hàng tháng (không ai gọi kèm callback) tới khi `popup.js` là caller đầu tiên dùng callback.
+4. Ảnh trên site có ancestor CSS thiết lập stacking context riêng (`z-index` khác `auto`) có thể **che khuất `.mot-layer`** dù nó gắn thẳng vào `document.body` — `z-index: auto` (mặc định) của layer thua bất kỳ `z-index` cụ thể nào của ancestor site, bất kể thứ tự DOM. Vá: `.mot-layer { z-index: 2147483647 }` trong `<style>` tiêm vào trang.
 
 ---
 
 ## 5. Đi qua từng module (theo đúng thứ tự dữ liệu chảy qua)
 
-### 5.1 `CFG` — toàn bộ tham số cấu hình ([manga-overlay-translator.user.js:51](manga-overlay-translator.user.js#L51))
+Dòng tham chiếu dưới đây là của `extension/content-script/content.js` (1971 dòng) trừ khi ghi rõ file khác.
 
-Không có giao diện cài đặt — sửa số trực tiếp trong code nhanh hơn xây UI settings (đúng tinh thần "1 người dùng duy nhất, không làm thừa" của spec). Các giá trị đáng chú ý và lý do:
+### 5.1 `CFG` — toàn bộ tham số cấu hình (content.js:4)
 
-| Tham số | Giá trị | Vì sao |
+Không có giao diện chỉnh từng hằng số này (chỉ 1 nhóm setting hay đổi mới lên popup — backend URL, ngôn ngữ đích, engine, eager, ngữ cảnh nhân vật, xem popup.js) — sửa số trực tiếp trong code cho phần còn lại vẫn nhanh hơn xây UI cho mọi tham số. Các giá trị đáng chú ý nhất hiện tại:
+
+| Tham số | Giá trị hiện tại | Vì sao |
 |---|---|---|
-| `API` | `.../translate/json/stream` | Endpoint không-stream bị crash 500 (mục 3.2) |
-| `TRANSLATOR` | `"chatgpt"` | Mặc định backend là `"sugoi"` (chỉ Nhật→Anh) |
-| `GPT_CONFIG_PATH` | `/app/gpt_config-vi.yaml` | Field chỉ nhận đường dẫn, không nhận nội dung (mục 3.2 bug #3) |
-| `INPAINTER` | `"lama_mpe"` | Đã thử `lama_large` (nhẹ tốt hơn trên ảnh mẫu nhỏ) nhưng test thật trên site không thấy khác biệt rõ — quay lại bản nhẹ hơn, an toàn VRAM hơn |
-| `FONT_DEFAULT` | `16` (không phải 1 `FONT_MAX` lớn) | Nếu để thuật toán tự-fit cỡ chữ **phồng lên tối đa** cho vừa khung, các bóng thoại to/nhỏ khác nhau sẽ có cỡ chữ rất khác nhau, trông rối mắt. Ép trần 16px, chỉ được **giảm** khi khung quá chật → toàn trang đồng nhất 1 cỡ chữ |
-| `CACHE_VERSION` | tăng dần | Đổi bất kỳ tham số nào gửi lên backend (inpainter, gpt_config...) mà không đổi số này → cache cũ (ứng với config cũ) vẫn được dùng lại, gây hiểu nhầm "sao sửa code mà không thấy đổi gì" |
-| `PREFETCH_MARGIN` | `'200% 0px'` | `IntersectionObserver` bắt đầu dịch ảnh khi nó còn cách khung nhìn 2 lần chiều cao màn hình — để kịp dịch xong trước khi người đọc cuộn tới |
-| `TILE_MAX_H` / `TILE_OVERLAP` | `4000` / `200` | Webtoon cắt lát (mục 5.9) — 4000 chứ không phải giới hạn tối đa của trình duyệt (~16384px) để có biên an toàn cho giới hạn *tổng diện tích* canvas cũng tồn tại song song |
+| `DETECTION_SIZE` | `2400` | Điểm ngọt duy nhất bắt ổn định cả chữ nhỏ (~2048 mới bắt được) lẫn chữ to/đậm (sót ở 1536-2048, bắt lại ở 1024/3072) — đo thực nghiệm, không đơn điệu theo kích thước. **Detection còn NONDETERMINISTIC run-to-run** (biến thiên tăng theo `detection_size`) — xem mục 8, chưa có fix triệt để |
+| `CACHE_VERSION` | `24` | Tăng mỗi khi đổi tham số gửi backend (hoặc đổi hành vi ảnh hưởng kết quả cache) — cache cũ tự bị bỏ qua, không cần người dùng tự xoá Storage |
+| `INPAINTER` / `INPAINTING_SIZE` | `lama_mpe` / `1024` | Test thật (render trên trang) không thấy `lama_large` khá hơn rõ rệt — `lama_mpe` nhẹ hơn, an toàn VRAM hơn (~3.4GB vs ~3.7GB/4GB) |
+| `BUSY_STD_THRESHOLD` | `25` | Ngưỡng độ lệch chuẩn độ sáng trên `r.background` (ảnh ĐÃ inpaint) để quyết định bỏ lớp nền inpaint mờ, chỉ còn chữ viền trắng (mục 5.6) |
+| `TILE_MAX_H` / `TILE_OVERLAP` | `4000` / `200` | Webtoon dài cắt lát (mục 5.5) — 4000 chừa biên an toàn dưới giới hạn canvas trình duyệt (~16384px, còn giới hạn *tổng diện tích* riêng) |
+| `BOUNDARY_BORROW_HEIGHT` | `200` | Ghép biên webtoon (mục 5.7) — bong bóng bị cắt nằm NGAY tại đường nối, đo thực nghiệm 500/300/200/150px bắt straddle y hệt nhau, 200 giảm ~60% vùng bị re-detect/re-OCR dư thừa |
+| `BOUNDARY_CONTIGUITY_TOL` | `50` (px) | Chỉ ghép biên khi ảnh kế tiếp nối liền theo chiều dọc (khoảng hở ≤ ngưỡng) — tránh ghép nhầm dải ảnh trang khác trên reader chuyển-trang |
+| `CTX_MIN_PAGES` / `CTX_MIN_CHARS` | `3` / `200` | Ngưỡng gom chữ gốc trước khi dựng hồ sơ nhân vật 1 lần/truyện (mục 5.9) |
+| `RECENT_DIALOGUE_MAX_LINES` / `_MAX_CHARS` | `20` / `600` | Cửa sổ hội thoại gần nhất (mục 5.9) — giới hạn để chi phí token thêm mỗi lượt dịch ở mức nhỏ |
+| `CONCURRENCY` | `1` | Đã xác nhận thực nghiệm backend xử lý tuần tự (1 GPU, 1 instance) — tăng song song phía client không có lợi |
+| `PREFETCH_MARGIN` | `'200% 0px'` | `IntersectionObserver` bắt đầu dịch khi ảnh còn cách khung nhìn 2 lần chiều cao màn hình |
+| `FONT_DEFAULT` | `16` (không phải `FONT_MAX`) | Ép trần, chỉ **giảm** khi khung chật — toàn trang đồng nhất 1 cỡ chữ thay vì "phồng" khác nhau tuỳ khung |
 
-### 5.2 `ImageFinder` — tìm đúng `<img>` là ảnh truyện ([manga-overlay-translator.user.js:108](manga-overlay-translator.user.js#L108))
+### 5.2 `ImageFinder` — tìm đúng `<img>` là ảnh truyện (content.js:106)
 
-`@match *://*/*` nghĩa là script "cố gắng" chạy trên **mọi trang web**, không phải danh sách site cụ thể — vì vậy nó phải tự đoán "ảnh nào trong trang này có khả năng là ảnh truyện" bằng 1 chuỗi điều kiện, thay vì phụ thuộc vào 1 danh sách site đã biết trước:
+Chạy trên **mọi trang web** (`content_scripts.matches: ["<all_urls>"]`), tự đoán "ảnh nào có khả năng là ảnh truyện" bằng 1 chuỗi điều kiện, không phụ thuộc danh sách site:
 
-1. Không phải placeholder lazy-load (`src` không phải `data:` URI — xem giải thích riêng bên dưới)
-2. Đủ lớn thật sự (`naturalWidth/Height` — kích thước gốc của ảnh, không phải kích thước hiển thị trên trang) ≥ 400×400px
-3. Đang **hiển thị to** trên trang (`clientWidth / window.innerWidth ≥ 0.3` — dùng `clientWidth`, kích thước hiển thị THẬT, chứ không dùng `naturalWidth`, để loại các thumbnail 400px nhưng bị site co nhỏ lại còn vài chục px)
-4. Không nằm trong `<header>/<nav>/<footer>/<aside>` (những vùng bố cục site, không phải nội dung chính)
-5. class/id không chứa các từ khóa gợi ý quảng cáo/logo/avatar (`/logo|avatar|icon|banner|ad|thumb|sprite/`)
-6. Tỉ lệ cao/rộng nằm trong khoảng hợp lý `[0.5, 100]` — chặn trên rất rộng (100) để **không loại webtoon dạng cuộn cực dài**
+1. Không phải placeholder lazy-load (`src` không phải `data:` URI)
+2. Đủ lớn thật (`naturalWidth/Height` ≥ 400×400px)
+3. Đang hiển thị to trên trang (`clientWidth / window.innerWidth ≥ 0.3`)
+4. Không nằm trong `<header>/<nav>/<footer>/<aside>`
+5. class/id không chứa từ khoá gợi ý quảng cáo/logo/avatar
+6. Tỉ lệ cao/rộng trong `[0.5, 100]` (chặn trên rất rộng để không loại webtoon cực dài)
 
-**Bẫy lazy-load đã gặp thực tế:** nhiều site đọc truyện hiện đại không tải ảnh thật ngay, mà đặt `src` tạm là 1 ảnh giả (thường là SVG "shimmer/loading" có kích thước cố ý khớp với ảnh thật, để không bị giật layout khi ảnh thật tải xong), rồi tự thay `src` bằng URL thật khi người đọc cuộn tới gần. Vì ảnh giả này thường được vẽ đúng kích thước ảnh thật, nó **vượt qua được** điều kiện 2–3 ở trên, khiến script tưởng nhầm đây là ảnh manga thật và gửi cho backend → backend trả lỗi HTTP 422 (không phải ảnh thật). Điều kiện 1 (loại `data:` URI) chặn đúng trường hợp này ngay từ đầu.
+**Bẫy lazy-load:** nhiều site đặt `src` tạm là ảnh giả (SVG "shimmer" khớp kích thước ảnh thật) rồi thay `src` thật khi cuộn tới — điều kiện 1 (loại `data:` URI) chặn đúng trường hợp này.
 
-### 5.3 `Cache` — không dịch lại ảnh đã dịch ([manga-overlay-translator.user.js:134](manga-overlay-translator.user.js#L134))
+### 5.3 `Cache` — không dịch lại ảnh đã dịch (content.js:139)
 
-Key cache là **hash (băm) của chính bytes ảnh** (thuật toán SHA-256, qua `crypto.subtle.digest`), **không phải URL ảnh** — vì nhiều CDN đổi URL ảnh mỗi lần tải lại trang (tham số chống cache, token hết hạn...), nếu cache theo URL sẽ luôn "miss". Băm theo nội dung byte thật thì dù URL đổi, ảnh giống nhau vẫn nhận diện được là đã dịch rồi.
+Key chính là **hash SHA-256 của chính bytes ảnh** (`crypto.subtle.digest`, fallback FNV-1a nếu `crypto.subtle` không tồn tại — trang HTTP thường, ngoài "secure context"), **không phải URL ảnh** (CDN hay đổi URL mỗi lần tải trang). Key ghép thêm `engine`/`targetLang`/`CACHE_VERSION`.
 
-**Bẫy:** `crypto.subtle` (API mã hóa của trình duyệt) chỉ tồn tại trong "secure context" — tức là trang phải chạy qua HTTPS (hoặc `localhost`). Nhiều site đọc truyện cũ vẫn chạy `http://` thường → `crypto.subtle` sẽ là `undefined`, khiến cache "chết" âm thầm nếu không xử lý. Code có fallback: tự viết 1 thuật toán băm đơn giản hơn (FNV-1a) chạy thuần bằng phép toán số học JavaScript, không cần `crypto.subtle`.
+**URL→hash fastpath (2026-08-03):** `Cache.getHashByUrl(url)`/`setUrlHash(url, hash)` — tra theo `img.src` TRƯỚC, bỏ qua việc tải+băm lại ảnh (~3.4s) nếu URL này đã được dịch từ trước (đọc/prefetch trước đó) — trang cache-hit render trong ~15ms thay vì ~3.4s.
 
-Key cuối cùng còn được ghép thêm `CFG.CACHE_VERSION` (`mot_cache_v4_<hash>`) — xem lý do ở bảng mục 5.1.
+### 5.4 Hạ tầng chung — blob/base64/message helpers (content.js:190-372)
 
-### 5.4 `ApiAdapter` — nơi duy nhất biết "hình dạng" của backend ([manga-overlay-translator.user.js:166](manga-overlay-translator.user.js#L166))
+`computeRegionComplexity`, `imageElementToBlob`, `reencodeToPng` (luôn ép ảnh tải về qua PNG trước khi gửi backend — Pillow phía backend không đọc được 1 số định dạng trình duyệt hiển thị OK, ví dụ AVIF), `base64ToBlob`, `sendMessageAsync` (wrap `chrome.runtime.sendMessage` thành Promise). Các hàm `getTargetLang`/`getTranslatorEngine`/`getCharacterContext`/`getEagerTranslate` đều **đọc `chrome.storage.local` mỗi lần gọi** (không cache vào biến cố định) để đổi setting trong popup có tác dụng ngay, không cần reload content-script.
 
-- `downloadImageBlob(img)` — lấy `img.currentSrc || img.src` (currentSrc ưu tiên hơn vì đúng ảnh thật sự đang hiển thị khi site dùng `srcset` responsive), tải về dưới dạng `Blob` qua `GM_xmlhttpRequest` kèm header `Referer` (xem bug/fix v0.35 bên dưới), kiểm tra Content-Type thực sự là ảnh, rồi **luôn** đưa qua `reencodeToPng()` trước khi trả về (xem bug/fix v0.32-v0.33).
-  - **Bug v0.32 + fix v0.33 (phát hiện qua test thật trên hitomi.la):** backend (Pillow/Python) không giải mã được 1 số định dạng ảnh trình duyệt hiển thị bình thường — xác nhận thật: ảnh `.avif` từ CDN hitomi.la luôn lỗi `HTTP 422 "cannot identify image file"`. **v0.32** vá bằng cách thêm `reencodeToPng()` — dùng `createImageBitmap(blob)` để giải mã lại thành PNG (Pillow đọc được chắc chắn) trước khi gửi backend. Nhưng test tiếp trên Coc Coc thật lại lộ ra **bug thứ 2**: `createImageBitmap()` của đúng bản Chromium trong Coc Coc báo `InvalidStateError: The source image could not be decoded` — cùng 1 file AVIF thật, `createImageBitmap()` và `<img>` đều giải mã OK trên Chromium khác (đã test riêng), chỉ Coc Coc là `createImageBitmap()` thiếu codec AVIF trong khi `<img>` vẫn có (lệch codec giữa 2 API giải mã ảnh của cùng 1 engine — từng là bug đã biết ở 1 số bản Chromium). **v0.33** đổi `reencodeToPng()` sang dùng `<img>` + canvas (giống hệt `imageElementToBlob()` đã ổn định từ C2) thay vì `createImageBitmap()` — đáng tin cậy hơn qua nhiều trình duyệt/định dạng, không chỉ riêng vụ AVIF này.
-  - **Bug v0.34-v0.35 (gốc rễ THẬT của cả vụ AVIF, tìm ra sau khi v0.33 vẫn lỗi y hệt):** cả `createImageBitmap()` (v0.32) lẫn `<img>` (v0.33) đều lỗi giải mã trên Coc Coc thật, dù là 2 API hoàn toàn khác nhau — dấu hiệu vấn đề không nằm ở việc chọn API giải mã. **v0.34** thêm log chẩn đoán tạm (kích thước + Content-Type của blob tải về), phát hiện: blob thật ra chỉ **555 byte, type `text/html`** — không phải ảnh AVIF thật (~509KB). Xác nhận qua `curl`: CDN ảnh của hitomi.la chặn hotlink khi request thiếu header `Referer` hợp lệ, trả về trang lỗi nhỏ thay vì ảnh thật; có đúng `Referer` → `HTTP 200`, đủ 508964 byte ảnh AVIF thật. **v0.35** sửa gốc: thêm `headers: { Referer: location.href }` vào `GM_xmlhttpRequest` tải ảnh (`GM_xmlhttpRequest` được phép tự đặt header `Referer` — 1 đặc quyền của nó, khác `fetch`/`XHR` thường bị trình duyệt cấm đặt header này), cộng kiểm tra sớm nếu Content-Type trả về không phải `image/*` thì báo lỗi rõ ràng ngay (kèm Content-Type + kích thước) thay vì để lỗi giải mã mù mờ. Bài học: 2 lần vá đầu (v0.32/v0.33) không sai (vẫn giữ, vẫn có ích cho định dạng Pillow thật sự không đọc được) nhưng chưa chạm gốc — luôn log/kiểm tra dữ liệu đầu vào thật trước khi đổi thuật toán xử lý nó.
-- `translateImage(blob)` — chuyển `Blob` → chuỗi base64 (`data:image/...;base64,...` qua `FileReader.readAsDataURL`) vì backend yêu cầu field `image` ở dạng đó, gửi request, rồi gọi `normalizeResponse()`.
-- `normalizeResponse(arrayBuffer)` — hàm **duy nhất** phải hiểu giao thức binary stream (mục 3.3) và schema JSON thật (mục 3.4). Đầu ra luôn là `{ regions: [{x, y, w, h, src, dst, background}] }` — mọi module khác trong file chỉ dùng đúng cấu trúc này, không biết gì về stream/binary/bug backend.
+### 5.5 `ApiAdapter` — đóng gói request, KHÔNG tự fetch (content.js:372)
 
-### 5.5 `OverlayRenderer` — vẽ chữ dịch bằng CSS ([manga-overlay-translator.user.js:372](manga-overlay-translator.user.js#L372))
+Khác hẳn userscript cũ (nơi `ApiAdapter` tự `GM_xmlhttpRequest`), `ApiAdapter` giờ chỉ **đóng gói** đúng body request rồi nhờ `background.js` gửi hộ (mục 2.3/4):
 
-Đây là module có nhiều chi tiết tinh chỉnh nhất, vì render đẹp trên **ảnh của site bất kỳ** khó hơn tưởng tượng ban đầu.
+- `downloadImageBlob(img)` — rẽ nhánh `blob:`/`data:` URL (đọc trực tiếp `<img>`, mục 2.4) vs URL thường (nhờ `background.js` qua message `DOWNLOAD_IMAGE`, luôn ép `reencodeToPng()`).
+- `translateImage(blob, gptConfigPath, detectOnly=false)` — dựng đúng `config` (detector/translator/render/inpainter theo `CFG`), gửi message `TRANSLATE`. `detectOnly=true` ép `translator:'none'`, bỏ `gpt_config`/`inpainter` khỏi request (mục 2.6) — dùng cho gate ghép-biên (mục 5.7).
+- `translateImageTiled(blob, naturalW, naturalH, img, gptConfigPath)` — webtoon dài (mục 5.5.1).
 
-**Vẽ theo 2 lớp (pass), không xen kẽ:**
-- **Pass 1 — lớp nền (`.mot-bg`)**: 1 `<div>` cho mỗi vùng chữ **không "busy"** (xem giải thích `computeRegionComplexity()` bên dưới), đặt `background-image` là ảnh **đã inpaint** (`r.background`, base64 PNG do backend trả — đã xóa sạch chữ gốc bằng AI), khít đúng bbox backend trả về (không nới/kéo giãn nữa — xem lý do bên dưới).
-- **Pass 2 — lớp chữ (`.mot-textbox`)**: vẽ **sau cùng, toàn bộ**, chứa `<span class="mot-text">` là chữ dịch, hoàn toàn trong suốt (không vẽ nền gì).
+### 5.5.1 Webtoon dài — cắt lát (content.js:477, `translateImageTiled`)
 
-**Lý do tách 2 pass thay vì vẽ nền+chữ xen kẽ từng vùng một:** phần tử nào được thêm vào DOM **sau** luôn nằm **trên cùng**, bất kể tọa độ. Nếu vẽ xen kẽ (nền vùng 1, chữ vùng 1, nền vùng 2, chữ vùng 2...), và 2 vùng nằm cạnh nhau (rất hay gặp ở cột chữ dọc tiếng Nhật sát nhau), lớp NỀN của vùng 2 (vẽ sau) có thể đè lên lớp CHỮ của vùng 1 (vẽ trước) — đây là 1 bug thực tế đã gặp và sửa bằng cách tách hẳn 2 vòng lặp riêng (vẽ hết mọi nền trước, rồi mới vẽ hết mọi chữ).
+Ảnh cao hơn `TILE_MAX_H` (4000px, chừa biên an toàn dưới giới hạn canvas ~16384px + giới hạn *tổng diện tích* riêng của trình duyệt):
 
-**`_reshapeForHorizontalText(r)`** — chữ Nhật gốc thường là 1 cột dọc rất hẹp (ví dụ rộng 14px, cao 339px), vì chữ Nhật có thể viết dọc. Nhưng bản dịch tiếng Việt luôn viết ngang (không có field `vertical` trong response — mục 3.4). Nếu giữ nguyên tỉ lệ hẹp-cao đó mà nhồi chữ Việt vào, mỗi dòng chỉ chứa được ~1 ký tự, không đọc nổi. Hàm này "định hình lại" khung **chỉ để đặt chữ** (khung này trong suốt, không liên quan tới việc che chữ gốc — việc che là của lớp nền inpaint riêng) thành hình chữ nhật cân đối hơn, giữ nguyên diện tích gốc (không "phồng" quá đà, có giới hạn tối đa `r.w * 3.5` để tránh tràn sang cột chữ bên cạnh khi trang dày đặc).
+1. `sliceImageIntoTiles()` — cắt từ `Blob` đã tải (không phải `<img>` của trang, tránh tainted canvas) thành nhiều lát chồng lấn `TILE_OVERLAP` (200px).
+2. `translateImageTiled()` gọi backend **tuần tự** từng lát, cộng offset `y` của lát vào bbox trả về.
+3. `dedupeRegions()` + `iou()` — 1 bóng thoại nằm trong vùng chồng mép bị dịch 2 lần (2 lát cạnh nhau) — `IoU > 0.5` coi là trùng, giữ bbox lớn hơn.
+4. Lát **cuối cùng** thêm được ghép-biên riêng với ảnh KẾ TIẾP trên trang (mục 5.7) — độc lập với việc dedupe nội bộ giữa các lát.
 
-**`_fitFontSize` / `_fitTextboxFont`** — tìm cỡ chữ lớn nhất vừa khít khung bằng **binary search** (tìm kiếm nhị phân — thử giá trị giữa khoảng, thu hẹp dần khoảng tìm dựa vào việc "còn thừa chỗ" hay "đã tràn", để tìm ra đáp án đúng trong ít bước hơn nhiều so với thử tuần tự từng giá trị một) trong khoảng `[FONT_MIN=8, FONT_DEFAULT=16]`. Đo độ dài chữ bằng `CanvasRenderingContext2D.measureText()` (đo trên canvas ẩn, không đụng vào DOM thật) để tránh **layout thrashing** (hiện tượng trình duyệt phải tính lại bố cục trang liên tục, rất tốn hiệu năng, nếu đo kích thước bằng cách chèn/đọc DOM thật lặp lại nhiều lần).
+Cache vẫn hoạt động xuyên suốt: hash tính trên Blob gốc chưa cắt, kết quả lưu là region đã ghép+dedupe xong — tiling vô hình với `Cache`.
 
-**`.mot-overflow`** — nếu cỡ chữ nhỏ nhất (8px) vẫn tràn khung, chấp nhận tràn và (chỉ khi bật `DEBUG`) viền đỏ cảnh báo, thay vì cố ép chữ nhỏ tới mức không đọc được.
+**Chưa test với ảnh webtoon thật >10.000px** (kế thừa từ trước khi port sang extension — chưa có bằng chứng mới xác nhận lại trên bản extension).
 
-**Click xem chữ gốc** — mỗi khung chữ có `r.src` (chữ gốc) sẽ có sự kiện click: bấm vào thì đổi nội dung hiển thị từ `r.dst` (dịch) sang `r.src` (gốc), bấm lại thì đổi về — tiện đối chiếu bản dịch.
+### 5.6 `OverlayRenderer` — vẽ chữ dịch bằng CSS (content.js:644)
 
-**`ResizeObserver`** — theo dõi `<img>`; mỗi khi nó đổi kích thước hiển thị (zoom/resize/site tự đổi layout), gọi lại **cả** `positionLayer()` (layer không còn tự bám theo `<img>` qua DOM nữa — xem đoạn dưới) **lẫn** `_fitTextboxFont` (cỡ chữ tính bằng px cần tính lại theo kích thước khung mới; vị trí/kích thước % của từng vùng chữ bên trong layer thì tự đúng vì tính theo kích thước layer, không cần code riêng).
+Module nhiều chi tiết tinh chỉnh nhất — render đẹp trên ảnh của site bất kỳ khó hơn tưởng tượng ban đầu.
 
-**`imgLayers` (Map) + `positionLayer()` — không còn bọc `<img>` trong `<span>`.** Thiết kế ban đầu (đến v0.26) bọc `<img>` trong `<span class="mot-wrap" style="position:relative">` để làm điểm neo toạ độ %. Cách này **đã gây lỗi thật** trên 1 site dùng viewer JS phức tạp (React/Webpack) — thêm 1 `<span>` cha mới quanh `<img>` làm thay đổi cây DOM đủ để kích hoạt nhầm 1 resize/mutation listener nội bộ của viewer đó, khiến chính hệ thống chuyển trang (fade in/out) của site tự vỡ (`Uncaught (in promise) undefined` từ code của site, không phải từ userscript). Từ v0.27, layer được gắn **thẳng vào `document.body`**, hoàn toàn không đụng đến DOM/CSS của `<img>` gốc — vị trí được tính lại bằng `getBoundingClientRect()` (xem mục 2.7), lưu quan hệ ảnh↔layer trong 1 `Map` (`imgLayers`) thay vì tìm qua `.closest('.mot-wrap')` như trước.
+**Vẽ theo 2 lớp (pass), không xen kẽ:** Pass 1 — lớp nền (`.mot-bg`, ảnh đã inpaint, khít bbox) cho vùng không "busy"; Pass 2 — lớp chữ (`.mot-textbox`), vẽ **sau cùng, toàn bộ**. Lý do tách: phần tử thêm vào DOM sau luôn nằm trên — nếu vẽ xen kẽ, lớp nền của vùng 2 (vẽ sau) có thể đè lên lớp chữ của vùng 1 (vẽ trước), hay gặp ở cột chữ dọc CJK sát nhau.
 
-**Bug v0.36 (phát hiện qua test thật trên hitomi.la):** site dạng "reader" (nút Prev/Next/chọn số trang) giữ `<img>` của **nhiều trang cùng lúc** trong DOM, chỉ **ẩn** (kích thước co về 0) trang không phải trang đang xem thay vì xoá khỏi DOM. Nếu 1 `<img>` như vậy đã được dịch xong (có overlay gắn vào `<body>`) rồi mới bị ẩn, lần `positionLayer()` chạy lại kế tiếp (`window resize` listener, hoặc chính `ResizeObserver` của `<img>` đó khi nó tự co về 0×0) tính ra `rect = {0,0,0,0}` — layer bị đặt đúng vào góc `(0,0)` của trang. Nhiều trang cũ dồn lại **chồng lên đúng 1 điểm** ở góc trái, hiện ra như chữ dịch "nhảy" dồn vào góc màn hình (đúng như ảnh chụp thực tế). **Đã vá:** `rect` suy biến (`width===0` hoặc `height===0`) → đẩy layer ra hẳn ngoài màn hình (`left/top: -99999px`) thay vì để nó rơi về `(0,0)`. Cố tình **không** dùng `layer.style.display` ở đây vì thuộc tính đó đã dành riêng cho Alt+T (bật/tắt so sánh gốc/dịch) — đổi ở đây sẽ vô tình ghi đè trạng thái người dùng đã chọn.
+**`_computeSafeBounds()` (Feature A, 2026-08-13) — clamp reshape theo MIDPOINT giữa các vùng lân cận.** Text CJK gốc thường là cột dọc rất hẹp; bản dịch tiếng Việt luôn viết ngang (không có field `vertical` — mục 3.4). `_reshapeForHorizontalText()` "định hình lại" khung đặt chữ thành hình chữ nhật cân đối hơn, giữ nguyên diện tích gốc — nhưng nếu 2 vùng CJK dọc nằm sát nhau, reshape độc lập từng vùng có thể khiến 2 khung mới **chồng lên nhau**. `_computeSafeBounds()` tính điểm giữa (midpoint) giữa mép ĐỐI DIỆN GỐC của 2 vùng lân cận làm ranh giới chung, clamp reshape không bao giờ vượt qua ranh giới đó — đảm bảo 2 khung đã reshape không bao giờ va chạm. Chi tiết đầy đủ + review tìm ra bug (rule area-ratio ban đầu là no-op toán học vì reshape bảo toàn diện tích): `docs/superpowers/specs/2026-08-12-overlay-safe-layout-and-boundary-detection-design.md`.
 
-**`computeRegionComplexity()` — bỏ lớp nền inpaint ở vùng "khó" (v0.29, vá bug ở v0.31).** AI inpaint (`lama_mpe`) xoá chữ rất sạch trên bóng thoại trắng phẳng, nhưng để lại vệt mờ/nhoè rõ rệt trên nền nhiều màu/chi tiết (tóc, gradient, nét vẽ dày) — giới hạn của chính model, không sửa được bằng code (đã thử cả `lama_large`, không khá hơn — xem mục "Inpaint that" trong `README.md`). Trước khi vẽ overlay, hàm này đo **độ lệch chuẩn (standard deviation)** của độ sáng (luminance) trong từng bbox để đoán "vùng này có phức tạp không". Vượt ngưỡng `CFG.BUSY_STD_THRESHOLD` thì bị đánh dấu `r.busy = true`, và `OverlayRenderer.render()` **bỏ hẳn lớp nền `.mot-bg`** cho vùng đó — chỉ còn chữ có viền trắng dày đè trực tiếp lên tranh gốc (không bị nhoè, nhưng chữ gốc có thể còn lộ mờ phía sau).
+**`_fitFontSize`/`_fitTextboxFont`** — binary search cỡ chữ lớn nhất vừa khít khung trong `[FONT_MIN=8, FONT_DEFAULT=16]`, đo bằng `CanvasRenderingContext2D.measureText()` (canvas ẩn, tránh layout thrashing).
 
-**Bug v0.29 + fix v0.31 (phát hiện qua test end-to-end với backend thật):** bản v0.29 đo độ lệch chuẩn trên **ảnh gốc** (trước inpaint) với lý do "muốn đoán độ phức tạp của nền, không phải đoán AI đã xoá sạch chưa" — nhưng bbox gốc **luôn chứa chính chữ cần dịch** (đó là lý do nó được detect ra), nên chữ đen/trắng tương phản cao tự nó luôn đẩy độ lệch chuẩn lên rất cao, bất kể nền có "phức tạp" hay không. Test thật (ảnh manga trắng đen thường, bong bóng thoại phẳng hoàn toàn điển hình) cho kết quả **12/12 rồi 21/21 vùng đều bị gán `busy=true`** — tức là lớp nền inpaint (dù đã tốn GPU tính ra và tốt) **gần như không bao giờ được dùng tới**, luôn rơi vào chế độ dự phòng (chữ viền trắng đè lên tranh gốc, còn lộ chữ gốc mờ phía sau) kể cả với bóng thoại phẳng lý tưởng. Đo trực tiếp: 65/65 vùng chữ thật có độ lệch chuẩn ~85–118 (bbox gốc chứa chữ), trong khi đúng những vùng đó đo trên ảnh **đã inpaint** chỉ 0.4–2.8 — chênh nhau hơn 30 lần, xác nhận ngưỡng 25 luôn bị vượt bởi ảnh gốc bất kể nền thật sự sạch hay không.
+**`computeRegionComplexity()`** — đo độ lệch chuẩn độ sáng trên `r.background` (ảnh ĐÃ inpaint, không phải ảnh gốc — ảnh gốc luôn chứa chính chữ cần dịch nên tương phản cao giả tạo, đã từng là 1 bug thật). Vượt `BUSY_STD_THRESHOLD=25` → bỏ hẳn lớp nền inpaint, chỉ còn chữ viền trắng dày đè trực tiếp lên tranh gốc (`.mot-busy`: nền trắng mờ + đổ bóng để tách bạch khỏi tranh nền).
 
-**Fix (v0.31):** đổi hẳn sang đo độ lệch chuẩn trên **`r.background`** (ảnh backend đã trả sẵn, đã inpaint, khít bbox) thay vì crop lại ảnh gốc qua `createImageBitmap(blob, x, y, w, h)`. Đo đúng thứ cần biết ("nền sau inpaint có sạch không") thay vì đo gián tiếp qua ảnh còn chữ gốc, đồng thời đơn giản hoá code (không cần `blob`/`naturalWidth`/`naturalHeight` nữa, chỉ cần giải mã `data:` URL nhỏ backend đã cắt sẵn — không tainted vì `data:` URL luôn same-origin). Test lại với cùng ảnh: 20/21 vùng nay đúng dùng lớp nền inpaint sạch, chỉ 1 vùng thật sự bị đánh dấu busy. Ngưỡng `BUSY_STD_THRESHOLD=25` giữ nguyên (chiều "sạch" đã xác nhận đúng: 0.4–2.8, còn rất xa ngưỡng) nhưng **chưa có ví dụ thật của nền "còn nhoè sau inpaint"** để xác nhận chiều còn lại của ngưỡng — cần chỉnh lại nếu gặp trường hợp đó trong thực tế (ví dụ webtoon màu có tóc/gradient dày).
+**`imgLayers` (Map) + `positionLayer()`** — layer gắn thẳng vào `document.body` (KHÔNG bọc `<img>` trong `<span>`, dù đây là cách làm ban đầu — bọc từng phá layout của 1 số site có viewer JS tự quản lý DOM chặt, mục 6.10), tính toạ độ qua `getBoundingClientRect()`, quan hệ ảnh↔layer lưu trong `Map`. `ResizeObserver` theo dõi `<img>`, gọi lại `positionLayer()` + `_fitTextboxFont` khi kích thước hiển thị đổi (zoom/resize).
 
-Để tránh chạm giới hạn kích thước canvas của trình duyệt với webtoon dài (như đã né ở mục webtoon tiling), hàm này dùng `createImageBitmap(blob, x, y, w, h)` **cắt trực tiếp đúng bbox ngay lúc giải mã** — không bao giờ dựng 1 canvas full-trang.
+### 5.7 Ghép biên webtoon — bong bóng bị cắt ngang giữa 2 ảnh liền kề
 
-**`.mot-busy` — nền trắng mờ + đổ bóng cho vùng "busy" (v0.30).** Vì vùng busy không còn lớp nền inpaint (ở trên), chữ dịch ban đầu chỉ có viền trắng (`-webkit-text-stroke`) nổi trần trên tranh gốc nhiều màu — đọc được nhưng chưa thật rõ ràng. `.mot-textbox` của vùng busy được gắn thêm class `.mot-busy` (nền `rgba(255,255,255,.85)` + `border-radius` + `box-shadow`) để rõ ràng là 1 lớp caption dịch, tách bạch khỏi tranh nền, không cần đọc kỹ mới nhận ra là chữ chèn thêm. Vùng có nền inpaint sạch (không busy) vẫn giữ trong suốt như cũ — thêm nền ở đây sẽ đè lên chính nền inpaint đã sạch, thừa và có thể lệch mép.
+**Vấn đề gốc:** webtoon dài được site chia thành nhiều file `<img>` riêng biệt xếp chồng liên tục — 1 bong bóng thoại có thể nằm vắt ngang đúng đường nối giữa 2 file, khiến detector của mỗi ảnh riêng chỉ thấy 1 nửa (hoặc bỏ sót hẳn nếu nửa đó quá nhỏ).
 
-### 5.6 `Queue` — giới hạn xử lý tuần tự ([manga-overlay-translator.user.js:599](manga-overlay-translator.user.js#L599))
+**Cơ chế hiện tại (2026-08-13, đã qua 3 lần lặp trong cùng ngày — xem lịch sử dưới):**
+1. `findNextSiblingImage(img)` (content.js:1021) — tìm ảnh kế tiếp theo vị trí Y tuyệt đối trên trang, **tự động gate**: bỏ qua ảnh ngang (`naturalHeight ≤ naturalWidth` — không phải webtoon strip), bỏ qua ảnh không liền mạch (khoảng hở > `BOUNDARY_CONTIGUITY_TOL=50px`).
+2. `getStripFromNextImage()` mượn `BOUNDARY_BORROW_HEIGHT=200`px đầu ảnh kế tiếp, ghép với 200px cuối ảnh hiện tại thành 1 ảnh crop nhỏ RIÊNG BIỆT (không nối vào ảnh chính — làm vậy sẽ co hẹp độ phân giải detect của CẢ ảnh chính).
+3. `detectBoundaryRegions()` (content.js:1082) — **detect-first**: chạy crop này với `translator:'none'` (mục 2.6, rẻ, không GPT) TRƯỚC; nếu **không** có vùng nào vắt qua đường nối (`r.y < ownStripH < r.y+r.h`) thì dừng ngay, không tốn GPT (đúng ~91% trường hợp thực đo). Chỉ khi có vùng vắt-biên thật mới gọi lại crop đó với `translator` thật (chatgpt/gemini/deepl) để lấy bản dịch, rồi lọc CHỈ giữ vùng vắt-biên (bỏ vùng nằm hẳn 1 phía — phía đó detect chính của ảnh tương ứng đã/sẽ tự bắt đủ).
+4. `mergeBoundaryRegions()` (content.js:1237) — hợp nhất vùng vắt-biên vào kết quả detect chính bằng `overlapRatio` (giao/diện-tích-nhỏ-hơn, KHÔNG phải IoU chuẩn — 1 vùng ghép-biên đầy đủ và 1 vùng detect-lại-1-phần của ảnh chính rất chênh kích thước, IoU chuẩn sẽ đánh giá thấp dù 1 vùng nằm gọn trong vùng kia), giữ bản DÀI HƠN khi chồng lấp > 0.5.
 
-`CONCURRENCY: 1` — đã test thực nghiệm ở Giai đoạn B: gửi 2 request cùng lúc, backend (chỉ có 1 instance GPU) xử lý **tuần tự** (request 2 đợi request 1 gần xong), nên tăng số job song song ở phía script không có lợi ích gì, chỉ tổ phức tạp thêm. `Queue.cancel()` hủy các job **chưa bắt đầu chạy** khi người đọc cuộn lướt qua nhanh (tránh lãng phí gọi backend cho ảnh không còn cần); job **đã** gọi backend rồi thì luôn chạy tới cùng, không hủy giữa chừng (tránh lãng phí công đã làm + tránh phức tạp hủy 1 request HTTP đang bay giữa đường).
+**Lịch sử 3 lần lặp trong ngày 2026-08-13 (bài học, đừng lặp lại lần 2):**
+- **Trước đó:** có 1 toggle bật/tắt thủ công trong popup, mặc định TẮT.
+- **Lần 1 — hợp nhất:** bỏ toggle, luôn bật (tự gate bởi `findNextSiblingImage`).
+- **Lần 2 — edge-gate (ĐÃ REVERT, đừng thử lại):** thử chỉ chạy crop khi detect CHÍNH của ảnh hiện tại có 1 vùng chạm mép dưới (tiết kiệm gọi crop). **Thất bại thật trên browser** (mất chữ "I SEE" + vài đoạn khác) — vì detect chính là **nondeterministic**, với bong bóng chỉ để lại 1 mẩu nhỏ ở mép dưới ảnh, có lần detect chính bắt được mẩu đó, có lần không — khi không, gate tắt luôn, bỏ mất CẢ bong bóng vắt-biên. **Bài học: không được gate dựa trên detect SLIVER (mẩu nhỏ) của ảnh chính — nondeterministic.**
+- **Lần 3 — detect-first (hiện tại):** khác về bản chất với lần 2 — gate dựa trên detect NGUYÊN BONG BÓNG ĐÃ GHÉP trong chính crop (không phải sliver của ảnh chính), dùng CÙNG detector mà bước dịch thật cũng dùng để tìm vắt-biên → không thể tệ hơn always-run. Đã kiểm chứng thực nghiệm (12 seam thật + 15 ca vắt-biên tổng hợp cắt xuyên từng bong bóng đã biết + lặp lại 6 lần): 0 lần thua always-run, tiết kiệm ~91% lượt gọi GPT thừa.
 
-**Điều tra hiệu năng v0.37-v0.39 (người dùng báo UI hiện chữ dịch chậm):** test end-to-end với 1 ảnh riêng lẻ (không tranh chấp) + đối chiếu trực tiếp log Docker (có timestamp từng bước): tổng backend thật ~7.6s cho 1 ảnh (detect ~0.5s, OCR ~1.5s, **dịch GPT chỉ ~2.3-3.6s — thực sự nhanh**, mask+inpaint ~0.8s, mã hoá response + truyền mạng ~0.5s). Xử lý phía trình duyệt SAU KHI backend trả lời (hash, cache, `computeRegionComplexity`, vẽ DOM) tổng chỉ ~30-50ms — không phải điểm nghẽn (đã xác nhận qua v0.37 song song hoá `computeRegionComplexity`). Con số "18 giây" quan sát được ở 1 lần test trước đó là do **tranh chấp hàng đợi** (`CONCURRENCY:1` — backend chỉ xử lý đúng 1 ảnh 1 lúc) khi nhiều request chạy chồng lên nhau (nhiều script test chạy song song lúc đó), không phải bug hiển thị hay đặc tính chậm cố hữu của 1 lần dịch đơn lẻ.
+**Đánh đổi còn giữ nguyên có chủ đích (2026-08-13, người dùng đã xem log backend và chọn giữ):**
+- Vẫn có **1 lượt detect-only mỗi trang liền mạch** (bước 3, rẻ nhưng không miễn phí — thêm ~1 lượt detect+OCR local cho mỗi ảnh).
+- Ở seam vắt-biên **thật** (hiếm — 0/146 seam đo được trên 1 chương thử nghiệm), bong bóng bị GPT dịch **2 lần** (1 lần một phần bởi ảnh chính, 1 lần đầy đủ bởi crop) — `mergeBoundaryRegions` dedupe đúng phần RENDER (đã verify: chỉ 1 vùng cuối cùng, không vẽ trùng), nhưng backend vẫn tốn công dịch thừa lần đó.
+- Chưa browser-verify trên nội dung CJK (chỉ mới verify trên webtoon tiếng Anh) — cơ chế độc lập ngôn ngữ nên dự kiến vẫn đúng, nhưng chưa có bằng chứng thật.
 
-**Kết luận:** không thể rút ngắn thêm thời gian AI thật (detect/OCR/inpaint là suy luận GPU cục bộ, dịch là gọi API OpenAI ngoài — cả 2 đều ngoài tầm với của code trình duyệt). Điểm **có thể** cải thiện thật: tránh để nhiều ảnh bị kích hoạt dịch cùng lúc gây xếp hàng thật sự (thay vì mỗi ảnh 7-8s độc lập, ảnh sau phải cộng dồn chờ ảnh trước) — cách giảm là tăng `PREFETCH_MARGIN` để việc dịch bắt đầu sớm hơn, giấu thời gian chờ vào lúc người đọc còn đang xem trang trước đó.
+Chi tiết đầy đủ + số liệu từng bước: `docs/superpowers/specs/2026-07-23-cross-image-boundary-stitching-design.md` (thiết kế gốc) và `2026-08-12-overlay-safe-layout-and-boundary-detection-design.md` (rearchitect tách crop riêng); tiến trình detect-first/borrow-200 chỉ có trong memory phiên làm việc + commit message (`git log` trên các commit boundary-stitch ngày 2026-08-13), chưa có file spec riêng vì thực hiện trực tiếp trên `main` sau khi test thực nghiệm thay vì qua chu trình brainstorm/spec đầy đủ.
 
-**Log chẩn đoán thêm ở v0.39** (để người dùng tự kiểm tra trực tiếp trong console Coc Coc, không cần truy cập log Docker):
-- `Queue._drain()` log thời gian 1 ảnh phải **chờ trong hàng đợi** trước khi bắt đầu xử lý + số ảnh khác còn xếp hàng phía sau — số này cao nghĩa là đang bị dịch nhiều ảnh đồng thời thật sự.
-- `ApiAdapter.translateImage()` dùng `onprogress` của `GM_xmlhttpRequest` để log thời điểm byte đầu tiên của response về tới — phân biệt "đang chờ backend xử lý xong" (chưa có byte nào) với "backend xong rồi, đang truyền response lớn về" (đã có byte). **Cố tình không** đọc nội dung tăng dần qua `responseType:'text'` để hiện tên từng bước AI real-time — giao thức nhị phân có phần header là số nguyên thô (status byte + độ dài 4 byte), ép qua giải mã UTF-8 tăng dần có rủi ro hỏng dữ liệu thật nếu 1 chunk mạng cắt ngay giữa 1 byte nhị phân.
+**Registry dedup xuyên-ảnh (content.js:1186-1263):** `renderedPageBBoxes`/`isDuplicateOfRendered`/`registerRenderedRegion` — chỉ đăng ký vùng STRIP-ZONE (`r.y+r.h > naturalHeight`) để không dedup nhầm giữa 2 ảnh không liên quan trên reader chuyển-trang (bug đã vá 2026-08-03, gated cùng `BOUNDARY_CONTIGUITY_TOL`).
 
-### 5.7 Tự động dò ảnh + prefetch khi cuộn — `watchImages`/`registerImage`/`startAutoMode` ([manga-overlay-translator.user.js:646](manga-overlay-translator.user.js#L646))
+### 5.8 `translateAndRenderImage` — job chính (content.js:1396)
 
-- `watchImages()` chạy **ngay từ khi trang tải xong** (không đợi người dùng kích hoạt dịch) — quét toàn bộ `<img>` có sẵn, và dùng `MutationObserver` (API trình duyệt cho phép "theo dõi" khi DOM thay đổi — thêm/xóa phần tử) để bắt các `<img>` được site tự thêm vào sau này (lazy-load khi cuộn, "tải thêm" khi hết trang...).
-- Mỗi ảnh hợp lệ được thêm vào `registeredImages` (1 `Set` — cấu trúc dữ liệu chỉ chứa giá trị duy nhất, không trùng lặp, và có thể duyệt lại toàn bộ phần tử, khác với `WeakSet` không duyệt lại được).
-- Khi người dùng **kích hoạt dịch** (menu/hotkey), `startAutoMode()` mới tạo `IntersectionObserver` (API trình duyệt cho biết 1 phần tử có đang "giao" với khung nhìn hay không, và còn cách bao xa) với `rootMargin: '200% 0px'` — nghĩa là nó coi 1 ảnh là "đã vào vùng cần xử lý" ngay khi ảnh còn cách khung nhìn thật 2 lần chiều cao màn hình, để `Queue` kịp dịch xong trước khi người đọc thật sự cuộn tới nơi.
+Chu trình xử lý 1 ảnh: tải blob → hash → tra `Cache` → (miss) xác định `seriesId` (mục 5.9) → gọi `ApiAdapter` (nhánh tile hay không) → ghép biên (mục 5.7, chỉ nhánh không-tile — nhánh tile tự ghép biên ở lát cuối) → `Cache.set` → `OverlayRenderer.render()` → cập nhật `state.done`/`state.errors`. Lỗi gộp vào `errorLog[]`, không crash trang.
 
-### 5.8 Job chính — `translateAndRenderImage` ([manga-overlay-translator.user.js:570](manga-overlay-translator.user.js#L570))
+### 5.9 Ngữ cảnh dịch xuyên-trang (Option C) — nhất quán ngôi xưng/đại từ tiếng Việt
 
-Hàm gói toàn bộ chu trình xử lý 1 ảnh: tải blob → tính hash → tra cache → (nếu miss) gọi `ApiAdapter` (chọn nhánh tile hay không, xem mục 5.9) → gọi `OverlayRenderer.render()` → cập nhật số liệu tiến độ (`state.done`/`state.errors`). Lỗi được bắt và gộp vào `errorLog[]` để hiện tóm tắt sau (mục 6.6), không làm crash cả trang.
+**Vấn đề gốc:** mỗi ảnh được dịch **độc lập** (GPT không nhớ ảnh trước) → cùng 1 nhân vật/mối quan hệ có thể được dịch với ngôi xưng khác nhau giữa các trang (tôi/bạn ↔ tao/mày ↔ ta/ngươi), đọc rời rạc như nhiều người dịch khác nhau.
 
-### 5.9 Webtoon dài — cắt lát ([manga-overlay-translator.user.js:289](manga-overlay-translator.user.js#L289), [:323](manga-overlay-translator.user.js#L323))
+**2 lớp bổ sung nhau, không tốn thêm lượt gọi GPT ngoài kế hoạch (trừ 1 lần dựng hồ sơ):**
 
-Webtoon Hàn thường là **1 ảnh duy nhất cực dài** (cả chương truyện dồn vào 1 file, có thể hơn 10.000px chiều cao). Gửi thẳng ảnh này cho backend/canvas có 2 rủi ro:
-- Trình duyệt giới hạn kích thước tối đa của `<canvas>` (~16.384px 1 chiều, và còn **giới hạn tổng diện tích** riêng, thấp hơn nữa) — vượt quá sẽ fail **âm thầm** (ra ảnh đen, không báo lỗi gì).
-- Ảnh quá lớn tốn nhiều VRAM hơn khi backend inpaint, dễ tràn bộ nhớ GPU (mục 2.5).
+1. **`SeriesCtx` (content.js:1272) — hồ sơ nhân vật TĨNH.** Gom text gốc (OCR) của ~3 trang đầu (`CTX_MIN_PAGES`) hoặc đủ 200 ký tự (`CTX_MIN_CHARS`), gọi 1 lần `/build-series-context` để GPT tự sinh hồ sơ (tên, giới tính, tuổi/vai vế, quan hệ, đại từ tiếng Việt tương ứng), ghi thành 1 file `gpt_config` riêng cho `seriesId` (host + 2 đoạn path đầu, hoặc gallery id với hitomi — `getSeriesId()`). Các lượt dịch sau của truyện đó dùng path riêng này thay vì `CFG.GPT_CONFIG_PATH` mặc định — hồ sơ được đóng khung là **default-binding** (đoạn ngắn/mơ hồ PHẢI theo mặc định hồ sơ, không tự đoán mới).
+2. **`RecentDialogue` (content.js:1347) — cửa sổ hội thoại GẦN NHẤT, động, mở rộng thêm 2026-08-12.** Bổ sung lớp tĩnh trên bằng: danh sách tối đa 20 dòng đã dịch gần nhất (`src -> dst`, đúng thứ tự đọc), gửi `/set-recent-dialogue` sau MỖI trang (fire-and-forget, không `await` — không được chặn render). Không tốn thêm lượt GPT (chỉ dump text đã có sẵn, không tóm tắt bằng AI). Bắt đầu tích luỹ từ ảnh ĐẦU TIÊN (không đợi ngưỡng như hồ sơ tĩnh) — vá "khoảng trống đóng vòng" (loop-closure): trước khi hồ sơ tĩnh dựng xong, `SeriesCtx.resolvePath()` trả `null`, nên `translateAndRenderImage` dùng `RecentDialogue.path` (backend trả về từ `/set-recent-dialogue`) làm fallback — cửa sổ có hiệu lực ngay từ ~ảnh thứ 2 thay vì phải đợi tới khi hồ sơ tĩnh xây xong (~trang 4).
 
-**Giải pháp — cắt thành nhiều lát chồng mép:**
-1. `sliceImageIntoTiles(blob, naturalW, naturalH)` — dựng `<canvas>` từ chính `Blob` đã tải (không phải từ thẻ `<img>` của trang, để tránh tainted canvas — mục 2.4), cắt ảnh gốc thành nhiều lát cao `TILE_MAX_H` (4000px), **chồng lấn** `TILE_OVERLAP` (200px) giữa 2 lát liên tiếp (để 1 bóng thoại vô tình nằm vắt ngang đường cắt vẫn xuất hiện trọn vẹn trong ít nhất 1 lát).
-2. `translateImageTiled()` gọi backend **tuần tự** cho từng lát riêng (đối xử mỗi lát như 1 ảnh độc lập), rồi **cộng lại offset `y`** của từng lát vào bbox trả về, để quy mọi tọa độ về đúng hệ quy chiếu của ảnh gốc ban đầu.
-3. **`dedupeRegions()` + `iou()`** — vì 1 bóng thoại nằm trong vùng chồng mép sẽ bị dịch **2 lần** (xuất hiện ở cả 2 lát cạnh nhau), cần loại bỏ bản trùng. `iou()` tính **IoU (Intersection over Union — tỉ lệ diện tích giao nhau / diện tích hợp nhất)** giữa 2 bbox: 2 vùng chồng nhau > 50% diện tích (`IoU > 0.5`) bị coi là "cùng 1 bóng thoại bị phát hiện 2 lần", giữ lại bbox **lớn hơn** (thường chính xác hơn vì bao trọn cả 2 phần bị cắt rời).
+**`gpt_config-vi.yaml`** cũng được chỉnh riêng cho bài toán này: `temperature: 0.15` (mặc định backend 0.5 — model bám ví dụ/quy tắc chặt hơn ở nhiệt độ thấp, đặc biệt quan trọng để giữ hành vi ổn định cả trên `gpt-4o-mini` rẻ hơn), thêm ví dụ few-shot theo từng cặp xưng-hô (bạn bè→tớ-cậu, độc thoại→mình, thù địch→tao-mày, quyền lực→ta-ngươi), quy tắc chuẩn hoá viết hoa (OCR ALL-CAPS không nên khiến bản dịch cũng ALL-CAPS).
 
-Cache vẫn hoạt động xuyên suốt cơ chế tiling: hash được tính trên **Blob gốc chưa cắt**, và kết quả lưu vào cache là danh sách region **đã ghép + dedupe xong** — tiling hoàn toàn là chi tiết nội bộ, vô hình với `Cache`.
+**Đã browser-verify (2026-08-13):** ngôi xưng nhất quán rõ rệt hơn qua nhiều trang (trước: lặp "tôi/tao/ta" lẫn lộn cho cùng 1 nhân vật độc thoại; sau: "mình" giữ nhất quán từ trang 5 tới 13). Người dùng xác nhận "khá hơn một chút nhưng vẫn hơi kém" — chưa hoàn hảo, chưa có kế hoạch cải thiện tiếp theo cụ thể.
+
+Chi tiết đầy đủ (nghiên cứu framework dịch tiếng Việt, lý do chọn temperature/few-shot thay vì giải pháp khác): `docs/superpowers/specs/2026-08-09-per-series-character-context-design.md` và `2026-08-12-vietnamese-translation-pronoun-consistency-design.md`.
+
+### 5.10 Eager mode — dịch trước toàn bộ, không đợi cuộn tới
+
+Mặc định (`mot_eager_translate` = false trong popup): `startAutoMode()` (content.js:1823) dùng `IntersectionObserver` với `PREFETCH_MARGIN`, chỉ enqueue ảnh khi gần vào khung nhìn.
+
+Bật eager: `forceLoadLazyImages()` (content.js:1690) copy URL thật từ `data-url`/`data-src`/`data-original`/`data-lazy-src` vào `img.src` cho MỌI `<img>` trên trang (nhiều site webtoon để `<img>` chưa cuộn tới mang `src` placeholder, URL thật giấu trong `data-*`) — ảnh tải xong tự đăng ký + enqueue qua listener `load` có sẵn. Bỏ qua `IntersectionObserver` hoàn toàn, enqueue TRỰC TIẾP toàn bộ ảnh đã biết, dựa vào `Queue._pending` tự sort theo vị trí Y để vẫn xử lý đúng thứ tự đọc.
+
+**Vấn đề đã biết, CHƯA xử lý (quan sát log thật, ~146 ảnh 1 chương):** eager dồn CẢ CHƯƠNG vào 1 hàng đợi backend tuần tự (`CONCURRENCY:1`) — ảnh cuối chương phải chờ tới **7–16 phút** mới tới lượt xử lý. Hướng khắc phục khả dĩ (chưa quyết định/implement): giới hạn eager prefetch quanh viewport thay vì toàn bộ, hoặc ưu tiên hẳn ảnh đang xem giữa hàng đợi eager.
+
+### 5.11 Hitomi gallery prefetch (2026-08-03)
+
+Hitomi.la dùng reader chuyển-trang (chỉ giữ ~1 ảnh trong DOM, chuyển trang bằng URL hash `#N`, không cuộn dài như webtoon). `isHitomiReader()`/`getSeriesId()`/`getHitomiGalleryUrls()` (content.js:1699-1738): background chạy `chrome.scripting.executeScript({world:'MAIN'})` đọc biến toàn cục `galleryinfo` + gọi hàm dựng URL của chính hitomi (`url_from_url_from_hash`) — content-script (isolated world) không đọc được biến toàn cục của trang, cần chạy trong MAIN world (script bị serialize + tiêm vào trang, chỉ được dùng biến cục bộ của chính nó).
+
+`prefetchHitomiGallery()` (content.js:1771) dịch nền TUẦN TỰ từng trang vào `Cache` (không cần chuyển màn hình), pipeline hoá (tải trang kế tiếp trong lúc dịch trang hiện tại — ẩn hoàn toàn độ trễ tải ~3s trong lúc backend xử lý ~7s), NHƯỜNG hàng đợi ảnh đang xem thật (`Queue._active`/`_pending`) để không làm trang đang đọc bị kẹt sau prefetch.
+
+### 5.12 `Queue` — giới hạn xử lý tuần tự (content.js:1509)
+
+`CONCURRENCY: 1` — đã xác nhận thực nghiệm backend xử lý tuần tự (1 GPU, 1 instance), tăng song song phía client không lợi ích. `Queue.cancel()` huỷ job **chưa bắt đầu chạy** khi người đọc cuộn lướt qua nhanh; job đã gọi backend luôn chạy tới cùng (tránh lãng phí công đã làm + tránh phức tạp huỷ 1 request HTTP đang bay).
+
+### 5.13 `watchImages`/`registerImage`/`init` — vòng đời khởi động (content.js:1651-1971)
+
+`watchImages()` chạy ngay khi trang tải xong (không đợi kích hoạt dịch), `MutationObserver` bắt ảnh thêm sau (lazy-load/infinite-scroll). `init()` (1948) đăng ký listener bàn phím (`Alt+D`/`Alt+T`) + listener `TRIGGER_TRANSLATE` từ popup (**phải** gọi `sendResponse()` đồng bộ — mục 4, gotcha #3).
 
 ---
 
-## 6. UI kích hoạt dịch — một "cuộc điều tra" nhiều vòng
+## 6. [LỊCH SỬ — chỉ áp dụng cho nút nổi trong-trang của userscript cũ] UI kích hoạt dịch — một "cuộc điều tra" nhiều vòng
 
-Đây là phần trải qua nhiều lần thử-sai nhất trong dự án, đáng kể riêng vì lý do đằng sau quan trọng hơn code cuối cùng.
+**Toàn bộ mục này thuộc về userscript cũ (`manga-overlay-translator.user.js`, deprecated).** Extension hiện tại dùng `manifest.json` → `action.default_popup` (bề mặt UI riêng của trình duyệt, ngoài DOM trang từ đầu — xem mục 2.1/2.2) nên **không gặp lớp vấn đề này chút nào**: không cần nút nổi trong trang, không có gì để quảng cáo/JS của trang can thiệp vào. Giữ lại nguyên văn vì kết luận cuối ("bước hẳn ra ngoài sân chơi của trang") là đúng chính bản chất của việc chọn popup thay vì nút nổi — và phòng khi 1 tính năng floating-UI trong-trang nào đó cần làm trong tương lai.
+
+Đây là phần trải qua nhiều lần thử-sai nhất trong lịch sử dự án, đáng kể riêng vì lý do đằng sau quan trọng hơn code cuối cùng.
 
 ### 6.1 Thiết kế ban đầu (theo spec)
 
-Spec gốc (mục 5.8) đề xuất 1 **nút nổi** (`position: fixed`, góc phải dưới màn hình, `z-index` tối đa) với các trạng thái hiển thị `Dịch` → `Đang dịch (3/12)` → `Xong ✓` → `Lỗi — click xem`.
+Spec gốc đề xuất 1 **nút nổi** (`position: fixed`, góc phải dưới màn hình, `z-index` tối đa) với các trạng thái hiển thị `Dịch` → `Đang dịch (3/12)` → `Xong ✓` → `Lỗi — click xem`.
 
 ### 6.2 Vấn đề phát sinh: quảng cáo che nút
 
-Test thực tế trên site đọc truyện, người dùng phát hiện: nhiều site có quảng cáo (đặc biệt kiểu popunder/pop-up) khiến nút "Dịch" không bấm được — mọi click đều rơi vào quảng cáo.
+Test thực tế trên site đọc truyện: nhiều site có quảng cáo (popunder/pop-up) khiến nút "Dịch" không bấm được — mọi click rơi vào quảng cáo.
 
 ### 6.3 Vòng 1 — Popover API / top layer
 
-Giả thuyết ban đầu: quảng cáo dùng `z-index` cực lớn hoặc chèn phần tử **sau** trong DOM (khi 2 phần tử cùng `z-index`, phần tử đứng sau trong DOM luôn thắng). Giải pháp: đưa nút vào **top layer** (mục 2.8) bằng Popover API — về lý thuyết, phần tử trong top layer luôn ở trên mọi phần tử z-index thường.
+Giả thuyết: quảng cáo dùng `z-index` cực lớn hoặc chèn phần tử sau trong DOM. Giải pháp: đưa nút vào **top layer** (mục 2.8) bằng Popover API.
 
 ### 6.4 Vòng 2 — sửa cách kiểm tra hỗ trợ Popover
 
-Lần thử đầu dùng `'popover' in HTMLElement.prototype` để kiểm tra trình duyệt có hỗ trợ Popover API không — nhưng Tampermonkey chạy userscript trong 1 "sandbox" JavaScript riêng (không hoàn toàn chung 1 thế giới JS với trang), khiến phép kiểm tra trên **prototype trừu tượng** trả về sai. Sửa bằng cách kiểm tra trực tiếp trên **chính phần tử `<button>` vừa tạo** (`typeof btn.showPopover === 'function'`) — phần tử DOM thật luôn phản ánh đúng khả năng thật của trình duyệt.
+`'popover' in HTMLElement.prototype` trả sai trong sandbox JS của Tampermonkey — sửa bằng kiểm tra trực tiếp trên chính phần tử `<button>` (`typeof btn.showPopover === 'function'`).
 
 ### 6.5 Vòng 3 — top layer cũng là 1 "ngăn xếp"
 
-Vẫn còn hiện tượng: "lúc đầu bấm được, để 1 thời gian lại bị đè". Nguyên nhân: **top layer hoạt động như 1 ngăn xếp** — phần tử được đưa vào **sau** nằm **trên** phần tử vào trước, dù cả 2 đều ở top layer. Một số quảng cáo tự mở modal/dialog riêng của chúng **sau** khi nút đã hiển thị (kiểu quảng cáo "delay-load", xuất hiện sau vài giây hoặc khi cuộn) → modal đó (cũng vào top layer) đè lên nút. Vá tạm bằng cách định kỳ (2 giây) đóng-mở lại popover của nút để liên tục "giành lại" vị trí trên cùng ngăn xếp.
+Top layer hoạt động như ngăn xếp — phần tử vào SAU nằm TRÊN. Quảng cáo "delay-load" tự mở modal riêng (cũng vào top layer) sau khi nút đã hiển thị → đè lên nút. Vá tạm: định kỳ đóng-mở lại popover để giành lại vị trí trên cùng.
 
 ### 6.6 Vòng 4 — nghi ngờ "click-hijack" bằng JavaScript
 
-Thêm 1 lớp phòng thủ khác hẳn: một số quảng cáo không che bằng hình ảnh mà **chặn sự kiện click bằng JavaScript** — gắn 1 listener ở `document`, capture phase (mục 2.8), bắt **mọi** click trên toàn trang và redirect sang quảng cáo, bất kể vị trí bấm. Thêm 1 listener capture-phase riêng, và đổi `@run-at` sang `document-start` để đăng ký **trước cả script của trang** (2 listener cùng phase trên cùng 1 node thì ai đăng ký trước chạy trước).
+Một số quảng cáo chặn sự kiện click bằng JS (listener capture-phase ở `document`, bắt mọi click redirect sang quảng cáo). Thêm listener capture-phase riêng + đổi `@run-at` sang `document-start` để đăng ký trước cả script trang.
 
 ### 6.7 Bằng chứng thật + kết luận cuối cùng
 
-Người dùng cung cấp ảnh chụp DevTools thật: nút `#mot-btn` **đã** vào đúng top layer (tag `top-layer` hiển thị trong tab Elements), và div "che cả trang" của quảng cáo (`data-network="Monetag"`) có `pointer-events: none` — tức **không** chặn bằng CSS. Nghi phạm thật là 1 `<script src="https://llvpn.com/tag.min.js" data-zone="...">` — mẫu hình rất điển hình của mạng quảng cáo popunder/redirect, chạy đồng bộ ngay trong `<body>`, gắn listener của nó **rất sớm** trong lúc HTML còn đang được phân tích — vẫn sớm hơn được, dù đã cố đăng ký sớm ở vòng 4.
+Ảnh chụp DevTools thật: nút đã vào đúng top layer, div che trang của quảng cáo có `pointer-events: none` (không chặn bằng CSS). Nghi phạm thật: 1 `<script>` mạng quảng cáo popunder/redirect chạy đồng bộ ngay trong `<body>`, gắn listener rất sớm — vẫn sớm hơn được dù đã cố đăng ký sớm ở vòng 4.
 
-**Kết luận:** không có cách nào **sống trong DOM của chính trang web** đảm bảo 100% không bị chính trang đó can thiệp — vì trang có toàn quyền với DOM/JS của nó, có thể nghĩ ra vô số cách hijack khác trong tương lai. Quyết định cuối: **bỏ hẳn nút nổi trong trang.**
+**Kết luận:** không có cách nào **sống trong DOM của chính trang** đảm bảo 100% không bị trang đó can thiệp. Quyết định cuối: **bỏ hẳn nút nổi trong trang.**
 
-### 6.8 Giải pháp cuối cùng — `GM_registerMenuCommand` + hotkey
+### 6.8 Giải pháp cuối cùng (của userscript) — `GM_registerMenuCommand` + hotkey
 
-Thay bằng **`GM_registerMenuCommand`** — thêm 1 mục "Dịch trang này (Alt+D)" vào **menu popup của chính Tampermonkey** (bấm icon extension trên thanh công cụ trình duyệt). Vì đây là giao diện do **trình duyệt/extension vẽ ra**, nằm hoàn toàn ngoài DOM của trang web, **trang web không có bất kỳ cách nào chạm tới hay can thiệp được**. Kèm thêm hotkey `Alt+D` (kích hoạt dịch) song song `Alt+T` (đã có sẵn từ C4 — bật/tắt overlay để so gốc/dịch nhanh).
+Menu Tampermonkey + hotkey `Alt+D`/`Alt+T` — giao diện do trình duyệt/extension vẽ ra, hoàn toàn ngoài DOM trang, trang không có cách nào chạm tới. **Đây là tiền thân trực tiếp của popup hiện tại** — cùng nguyên lý ("bước ra ngoài sân chơi của trang"), chỉ khác popup là bề mặt UI mạnh hơn (có thể chứa form/dropdown/nhiều nút) thay vì chỉ 1 mục menu.
 
-Đây là bài học chính của cả "cuộc điều tra": khi đối đầu với 1 trang web chủ động phá hoại (chứ không chỉ vô tình xung đột CSS), giải pháp bền vững không phải là "leo thang" kỹ thuật trong cùng 1 sân chơi (DOM/CSS/JS của trang), mà là **bước hẳn ra ngoài sân chơi đó**.
+### 6.9 Cái đuôi còn sót — `@run-at document-start` quên đổi về
 
-### 6.9 Cái đuôi còn sót lại — `@run-at document-start` quên đổi về
-
-Sau khi bỏ nút nổi, `@run-at document-start` (thêm ở vòng 4 để thắng cuộc đua đăng ký listener) **không còn được sửa lại** — dù lý do dùng nó (nút nổi) đã không còn tồn tại. Hệ quả xuất hiện ở 1 site khác (không liên quan quảng cáo): `GM_addStyle()` được gọi ở đầu file, **chạy ngay khi `document-start` kích hoạt** — tức là **trước khi `<head>` của trang được tạo ra**. CSS định vị các lớp `.mot-wrap/.mot-layer/.mot-bg/.mot-textbox` không được áp dụng vào trang thật, khiến toàn bộ khung chữ dịch mất hết `position: absolute`, rơi về flow văn bản bình thường của trình duyệt — chồng chéo, cỡ chữ tí hin, màu sắc lộn xộn (kế thừa style mặc định thay vì CSS của script).
-
-**Sửa:** đổi lại `@run-at document-idle` (mặc định). `GM_registerMenuCommand` không phụ thuộc thời điểm trang tải — không còn lý do gì để chạy sớm nữa.
+Sau khi bỏ nút nổi, `@run-at document-start` không được sửa lại. Hệ quả ở 1 site khác: `GM_addStyle()` chạy trước cả khi `<head>` được tạo → CSS định vị các lớp `.mot-*` không áp dụng, khung chữ dịch mất `position: absolute`, rơi về flow văn bản bình thường. Sửa: đổi lại `document-idle`.
 
 ### 6.10 Vòng cuối (thật) — bọc `<img>` phá cả 1 site khác, không phải do ads lần này
 
-Sau khi vá xong 6.9, 1 site tiếng Nhật khác (`mangaz.com`, dùng viewer riêng dạng React/Webpack — `bundle.js`/`chunk.js`) gặp lỗi mới: ảnh dịch quay vòng "loading" vĩnh viễn, console báo `Uncaught (in promise) undefined` — nhưng lần này stack trace trỏ thẳng vào code của **chính site** (`rejectPreviousTransition`, `fadeOut`, `fadeIn`, `onResize`...), không phải userscript.
+Sau khi vá 6.9, `mangaz.com` (viewer React/Webpack riêng) gặp lỗi mới: ảnh dịch loading vĩnh viễn, stack trace trỏ vào code của chính site (`fadeOut`/`fadeIn`/`onResize`). Nguyên nhân: bọc `<img>` trong `<span class="mot-wrap">` chèn thêm 1 phần tử cha, thay đổi cây DOM đủ để kích hoạt nhầm logic theo dõi resize/DOM nội bộ của viewer, huỷ giữa chừng animation chuyển trang của chính site.
 
-Nguyên nhân: kỹ thuật "bọc `<img>` trong `<span class="mot-wrap">`" (dùng từ C2 tới v0.26) chèn thêm 1 phần tử cha mới vào giữa `<img>` và cha cũ của nó — thay đổi cây DOM mà viewer của site đang tự quản lý rất chặt chẽ (site có hệ thống chuyển trang bằng animation fade, và có vẻ theo dõi resize/thay đổi DOM để đồng bộ animation đó). Việc chèn `<span>` vô tình kích hoạt nhầm logic nội bộ này, khiến animation chuyển trang của chính site bị hủy giữa chừng — **đúng như rủi ro đã cảnh báo trước trong spec 5.7** ("bọc `<img>` bằng `<span>` có thể phá CSS/layout của site phức tạp"), chỉ là lần này là 1 site thật, không phải giả định.
-
-**Sửa (v0.27):** bỏ hẳn kỹ thuật bọc `<span>`, áp dụng đúng phương án fallback mà spec đã dự phòng — nhưng làm nó thành **cách làm mặc định duy nhất** thay vì "chỉ dùng khi phát hiện vỡ layout" (không có cách đáng tin cậy nào để tự động phát hiện "site có bị vỡ không"). Layer overlay giờ gắn thẳng vào `document.body`, tự tính toạ độ bằng `getBoundingClientRect()`, không đụng một chút nào tới DOM hay CSS của `<img>` gốc — an toàn tuyệt đối với mọi site, kể cả site có viewer JS tự quản lý DOM chặt chẽ nhất.
+**Sửa:** bỏ hẳn kỹ thuật bọc `<span>` — layer gắn thẳng vào `document.body`, tự tính toạ độ bằng `getBoundingClientRect()`, không đụng chút nào tới DOM/CSS của `<img>` gốc. **Extension hiện tại thừa hưởng nguyên cách làm này** (`imgLayers` Map + `positionLayer()`, mục 5.6) — không cần phát hiện lại vấn đề vì đã biết trước từ userscript.
 
 ---
 
 ## 7. Luồng dữ liệu đầu-cuối (sequence)
 
+### 7.1 Luồng thường (bấm nút/Alt+D, không eager)
+
 ```mermaid
 sequenceDiagram
     participant U as Người dùng
-    participant TM as Tampermonkey Menu / Alt+D
-    participant S as Userscript
+    participant P as Popup / Alt+D
+    participant CS as content-script
     participant IO as IntersectionObserver
     participant Q as Queue
-    participant C as Cache (GM_setValue)
-    participant A as ApiAdapter
+    participant C as Cache (chrome.storage.local)
+    participant BG as background (service worker)
     participant B as Backend Docker (localhost:5003)
 
-    Note over S: watchImages() chạy ngay khi trang load,<br/>độc lập với việc đã kích hoạt dịch hay chưa
-    S->>S: ImageFinder quét <img>, đăng ký ảnh hợp lệ
+    Note over CS: watchImages() chạy ngay khi trang load,<br/>độc lập với việc đã kích hoạt dịch hay chưa
+    CS->>CS: ImageFinder quét <img>, đăng ký ảnh hợp lệ
 
-    U->>TM: Bấm menu / Alt+D
-    TM->>S: onTriggerTranslate()
-    S->>IO: startAutoMode() — observe mọi ảnh đã đăng ký
+    U->>P: Bấm "Dịch trang này" / Alt+D
+    P->>CS: chrome.tabs.sendMessage(TRIGGER_TRANSLATE)
+    CS->>IO: startAutoMode() — observe mọi ảnh đã đăng ký
 
     Note over IO: Người dùng cuộn trang xuống
     IO-->>Q: ảnh cách khung nhìn < 200% chiều cao → enqueue
 
-    Q->>A: downloadImageBlob(img) qua GM_xmlhttpRequest
-    A->>C: hashBlob(blob) rồi Cache.get(hash)
+    Q->>BG: sendMessage(DOWNLOAD_IMAGE, url)
+    BG->>BG: fetch (không giới hạn CORS, host_permissions)
+    BG-->>Q: base64 blob
+    Q->>C: hashBlob(blob) rồi Cache.get(hash)
     alt Cache HIT
-        C-->>S: trả kết quả cũ ngay lập tức
+        C-->>CS: trả kết quả cũ ngay lập tức
     else Cache MISS
-        A->>B: POST /translate/json/stream (ảnh base64 + config)
-        B->>B: detector → OCR → translator (ChatGPT) → inpainter
-        B-->>A: binary stream, frame status=0 chứa JSON kết quả
-        A->>A: normalizeResponse() → {regions: [{x,y,w,h,src,dst,background}]}
-        A->>C: Cache.set(hash, result)
+        Q->>BG: sendMessage(TRANSLATE, body)
+        BG->>B: POST /translate/json/stream (ảnh base64 + config)
+        B->>B: detector → OCR → translator → inpainter
+        B-->>BG: binary stream, frame status=0 chứa JSON kết quả
+        BG->>BG: normalizeResponse() → {regions: [...]}
+        BG-->>Q: regions
+        Q->>Q: (nếu ảnh còn ảnh kế tiếp liền mạch) ghép biên — xem 7.2
+        Q->>C: Cache.set(hash, result)
     end
-    S->>S: OverlayRenderer.render(img, regions) — vẽ nền inpaint + chữ dịch
-    S-->>U: Thấy bản dịch tiếng Việt đè lên bóng thoại
+    CS->>CS: OverlayRenderer.render(img, regions)
+    CS-->>U: Thấy bản dịch tiếng Việt đè lên bóng thoại
 ```
+
+### 7.2 Ghép biên (detect-first, mục 5.7) — chạy lồng vào bước "Cache MISS" ở trên
+
+```mermaid
+sequenceDiagram
+    participant CS as content-script
+    participant BG as background
+    participant B as Backend
+
+    CS->>CS: findNextSiblingImage(imgN) — có ảnh kế tiếp liền mạch không?
+    alt Không có / không liền mạch
+        CS->>CS: bỏ qua, dùng nguyên kết quả detect chính
+    else Có
+        CS->>CS: getStripFromNextImage() — mượn 200px đầu ảnh kế tiếp,<br/>ghép 200px cuối ảnh hiện tại thành 1 crop nhỏ
+        CS->>BG: sendMessage(TRANSLATE, translator:'none') — detect-only, KHÔNG GPT
+        BG->>B: POST /translate/json/stream
+        B-->>BG: regions (toạ độ + text gốc, KHÔNG có bản dịch)
+        BG-->>CS: regions
+        alt Không có vùng nào vắt qua đường nối
+            CS->>CS: dừng, KHÔNG tốn GPT (~91% trường hợp thực đo)
+        else Có vùng vắt-biên thật
+            CS->>BG: sendMessage(TRANSLATE, translator thật) — dịch crop đầy đủ
+            BG->>B: POST /translate/json/stream
+            B-->>BG: regions (có bản dịch)
+            BG-->>CS: regions
+            CS->>CS: lọc CHỈ giữ vùng vắt-biên, mergeBoundaryRegions() vào kết quả chính
+        end
+    end
+```
+
+### 7.3 Eager mode — bỏ qua chờ cuộn
+
+Khác luồng 7.1 ở đúng 2 điểm: (1) `forceLoadLazyImages()` chạy trước để mọi `<img>` (kể cả chưa cuộn tới) đều có `src` thật, (2) `startAutoMode()` bỏ qua `IntersectionObserver`, enqueue trực tiếp TOÀN BỘ ảnh đã biết vào `Queue` (tự sort theo vị trí Y). Phần còn lại (tải/cache/dịch/render mỗi ảnh) giống hệt 7.1.
 
 ---
 
-## 8. Trạng thái hiện tại so với checklist nghiệm thu (Phần 6 của spec)
+## 8. Trạng thái hiện tại
 
-| # | Tiêu chí | Trạng thái |
+**Đã ship + browser-verify (theo thứ tự thời gian, chi tiết ở spec tương ứng — mục 11):**
+
+| Tính năng | Ngày | Verify |
 |---|---|---|
-| 1 | Không tìm thấy ảnh → im lặng, không hiện gì | Đã đổi ý nghĩa: không còn "nút" để ẩn/hiện — menu Tampermonkey luôn có sẵn, nhưng bấm trên trang không có ảnh sẽ không có tác dụng gì (an toàn, không lỗi) |
-| 2 | Bản dịch tiếng Việt đủ dấu, đúng bóng thoại | ✅ Đã xác nhận qua test C2 |
-| 3 | Prefetch khi cuộn, dịch xong trước khi tới nơi | ✅ Đã xác nhận qua test C3 |
-| 4 | Alt+T bật/tắt tức thì, không giật | Đã code, **chưa test lại** sau khi bỏ nút (v0.22) |
-| 5 | Zoom trình duyệt → overlay vẫn khớp | ✅ Test tự động (Playwright, xem dưới): `ResizeObserver` bắt đúng thay đổi kích thước `<img>` do zoom gây ra, layer tự resize theo. **Lưu ý:** test dùng CSS `zoom` (không chuẩn) để giả lập vì Playwright không có API zoom trang thật — quan sát được 1 sai lệch tỉ lệ giữa `getBoundingClientRect()` của layer và `<img>` đặc thù của kỹ thuật giả lập này (không thấy trong resize/window-resize thật). Khuyến nghị tự bấm Ctrl+/- trên Chrome thật 1 lần để chốt cuối, nhưng cơ chế lõi (ResizeObserver) đã xác nhận hoạt động |
-| 6 | Resize cửa sổ → overlay vẫn khớp | ✅ Test tự động: cả 2 đường (`ResizeObserver` khi đổi kích thước hiển thị `<img>`, và `window resize` listener khi đổi viewport khiến ảnh tự canh giữa lại) đều giữ `.mot-layer` khớp đúng `getBoundingClientRect()` của `<img>` (lệch ≤1px) và khung chữ neo đúng tỉ lệ (lệch <0.01%) |
-| 7 | F5 → dịch lại tức thì (cache hit) | Đã code từ C1, **chưa test lại gần đây** (ngoài phạm vi đợt kiểm tra này) |
-| 8 | Webtoon dài: không dịch trùng ở đường cắt | ✅ Test tự động với ảnh thật 800×12.400px (>10.000px, sinh bằng canvas) qua backend giả lập (mock 4 request/lát đúng tuần tự, 1 vùng chữ cố tình đặt trùng ở vùng chồng lấp lát 0/1): xác nhận đúng 4 lát kích thước [4000,4000,4000,1200]px đúng offset, `dedupeRegions()` gộp đúng 1 vùng trùng ở đường cắt (5 khung cuối cùng thay vì 6), toạ độ tuyệt đối từng khung sau khi cộng offset lát đều khớp kỳ vọng — xác nhận bằng ảnh chụp tại đường cắt (chỉ 1 khung, không chồng lặp) |
-| 9 | Layout site không vỡ khi bọc `<img>` | ✅ Đã đổi hẳn cách làm (v0.27) — không còn bọc `<img>` nữa (gây vỡ viewer JS ở 1 site thật), layer gắn thẳng vào `document.body`, hoàn toàn không đụng DOM/CSS gốc |
-| 10 | Tắt docker → lỗi thân thiện, không crash | ✅ Test tự động với backend thật sự không chạy (không mock — xác nhận trước đó bằng `curl` không kết nối được cổng 5003): cả 2 ảnh lỗi riêng biệt được log console (không crash trang), bấm Alt+D lần 2 hiện đúng `alert` tóm tắt với thông điệp đã phân loại `"Backend chua bat? Kiem tra docker ps"` |
+| Port extension MV3 (thay userscript) | 2026-07-21/22 | ✅ Browser thật, đã trở thành cách cài đặt chính thức |
+| Popup settings (backend URL, ngôn ngữ, engine) | 2026-07-22 | ✅ |
+| Ghép biên webtoon (nhiều lần lặp — mục 5.7) | 2026-07-23, hoàn thiện 2026-08-13 | ✅ Verify qua browser thật + 27+ ca thực nghiệm qua backend |
+| Engine picker (ChatGPT/Gemini/DeepL) | 2026-07-23 | ⚠️ Chỉ review tĩnh — **CHƯA từng chạy thử thật với `GEMINI_API_KEY`/`DEEPL_AUTH_KEY` thật** (người dùng cố tình hoãn tới khi đóng gói sản phẩm hoàn chỉnh) |
+| Eager mode, hitomi prefetch, URL-cache | 2026-08-02/03 | ✅ Browser thật (Cốc Cốc) |
+| Backend relay optimization (108.5MB→108KB pickle) | 2026-08-09 | ✅ Đo trực tiếp qua instrument + browser |
+| Ngữ cảnh nhân vật + cửa sổ hội thoại gần nhất (Option C) | 2026-08-09/12 | ✅ Browser thật — "khá hơn 1 chút nhưng vẫn hơi kém" (nhận xét người dùng, chưa hoàn hảo) |
+| Overlay safe-layout (CJK vertical không chồng lấp) | 2026-08-12 | ✅ Browser thật |
+| Boundary-stitch detect-first + borrow 200px | 2026-08-13 | ✅ 27+ ca thực nghiệm qua backend thật + browser; **chỉ verify trên text tiếng Anh**, chưa test CJK |
 
-**Phương pháp test tự động (mục 5,6,8,10):** dùng Playwright điều khiển Chromium thật, polyfill `GM_addStyle/GM_setValue/GM_getValue/GM_registerMenuCommand/GM_xmlhttpRequest` (bản polyfill dùng `fetch()` thật của trang — với mục 10 để nguyên fetch thật tới backend đã tắt, với mục 5/6/8 dùng `page.route()` chặn đúng URL backend để trả về response giả theo đúng giao thức frame nhị phân), nạp thẳng `manga-overlay-translator.user.js` thật (không sửa/không mock nội bộ), rồi lái qua đúng giao diện thật (dispatch phím Alt+D, đổi kích thước/zoom DOM thật, đọc `getBoundingClientRect()`/số lượng `.mot-textbox` thật). Không dùng Docker/GPU/OpenAI thật. Script harness nằm ngoài repo này (thư mục scratch tạm của phiên làm việc), có thể viết lại nếu cần test tương tự sau này.
-
-**Mục 8 (spec 5.7)** đã code xong nhưng cần 1 ảnh webtoon thật rất cao để test — nếu chưa có sẵn, có thể dựng test giả lập tương tự `test-page.html` (đã dùng ở C3).
+**Chưa verify / còn treo:**
+- **Webtoon tiling >10.000px** — code từ thời userscript, verify tự động (Playwright, mock backend) từ trước khi port; chưa có bằng chứng mới verify lại trên extension với ảnh thật.
+- **Eager mode dồn cả chương vào 1 hàng đợi tuần tự** — ảnh cuối chương chờ 7–16 phút (mục 5.10), chưa có kế hoạch khắc phục cụ thể.
+- **Detection nondeterministic + non-monotonic theo kích thước chữ** (OPEN PROBLEM 2026-08-11) — không có 1 giá trị `DETECTION_SIZE` nào bắt được mọi trường hợp; cùng 1 ảnh, cùng config, số lượng vùng bắt được dao động giữa các lần chạy. `DETECTION_SIZE=2400` là điểm ngọt tốt nhất đo được, không phải fix triệt để. Hướng khả dĩ (chưa quyết định): multi-scale/2-pass detection.
+- **Detect-first (boundary-stitch) chưa verify trên nội dung CJK** — chỉ có bằng chứng thực nghiệm trên webtoon tiếng Anh.
+- **Additional translator engines** (deepseek/groq/youdao/baidu/caiyun, spec 2026-07-24) — nằm trên 1 worktree riêng, chưa merge vào `main`.
 
 ---
 
 ## 9. Giới hạn đã biết / đánh đổi chấp nhận
 
-- **AI inpaint không thể xóa sạch chữ đè lên nét vẽ minh họa phức tạp** — bài toán mơ hồ ngay từ gốc (model không phân biệt được đâu là chữ, đâu là nét vẽ). Cả `lama_mpe` và `lama_large` đều không xử lý được trường hợp này — chấp nhận là giới hạn cố hữu của MVP.
-- **Không có cơ chế retry khi 1 ảnh dịch lỗi** — lỗi được ghi nhận và gộp vào tóm tắt (`errorLog`), người dùng phải tự kích hoạt lại thủ công.
-- **`CONCURRENCY: 1` cố định** — đã xác nhận thực nghiệm backend xử lý tuần tự, tăng số job song song phía script không có lợi ích.
+- **AI inpaint không thể xóa sạch chữ đè lên nét vẽ minh họa phức tạp** — giới hạn cố hữu của model (đã thử cả `lama_mpe`/`lama_large`).
+- **Không có cơ chế retry khi 1 ảnh dịch lỗi** — lỗi gộp vào `errorLog`, người dùng tự kích hoạt lại thủ công.
+- **`CONCURRENCY: 1` cố định** — đã xác nhận thực nghiệm backend xử lý tuần tự.
 - **Chỉ chạy 1 người dùng, 1 máy, backend local** — không có xác thực, không nên mở port ra internet.
-- **⚠️ Bảo mật:** có báo cáo lỗ hổng SSRF (Server-Side Request Forgery — kẻ tấn công lừa server tự gửi request tới nơi không mong muốn) trong bản beta của `manga-image-translator` — chạy đúng `127.0.0.1` (chỉ máy mình gọi được) thì an toàn; **tuyệt đối không expose port ra internet.**
-- **VRAM 4GB là giới hạn cứng** — ảnh quá lớn/nhiều tile cùng lúc có rủi ro OOM, đã né bằng `inpainting_size` vừa phải và xử lý tuần tự từng ảnh/tile.
-- **Bật Cloudflare WARP (1.1.1.1) có thể làm GPT báo lỗi "country, region, or territory not supported"** — đây là chặn theo IP ở phía OpenAI, không phải bug của dự án. Backend chạy trên máy tự gọi thẳng `api.openai.com`; khi WARP bật, request thoát ra internet qua 1 PoP của Cloudflare thay vì IP thật của bạn, và bản WARP miễn phí không cho chọn điểm thoát — đôi khi rơi vào IP bị OpenAI xếp vào vùng không hỗ trợ. **Cách xử lý:** tắt WARP khi dùng app, hoặc bật Split Tunnel/Exclude trong WARP và loại trừ domain `openai.com`/`api.openai.com` để traffic tới OpenAI đi thẳng bằng IP thật.
-- **Không hoạt động trên site vẽ trang truyện bằng `<canvas>` bị "tainted" (vd shonenjumpplus.com)** — `ImageFinder` chỉ quét `<img>` (`document.querySelectorAll('img')`), nhưng 1 số site đọc truyện chính thức (chống chôm ảnh) vẽ ảnh trang lên `<canvas class="page-image">` từ dữ liệu cross-origin không CORS, khiến canvas bị trình duyệt đánh dấu "tainted". Đã xác nhận thực tế trên shonenjumpplus.com: `canvas.toDataURL()` ném `SecurityError: Tainted canvases may not be exported`. Đây là giới hạn bảo mật ở tầng trình duyệt (chặn MỌI JS đọc pixel ra khỏi canvas tainted, kể cả userscript có toàn quyền GM_*) — **không có cách nào vượt qua được, chấp nhận là giới hạn cố hữu**, khác hẳn nhóm site "viewer JS phức tạp" nhưng vẫn dùng `<img>` thường (vd mangaz.com, xem changelog v0.27) mà script vẫn xử lý được.
+- **⚠️ Bảo mật:** báo cáo lỗ hổng SSRF trong bản beta `manga-image-translator` — chạy đúng `127.0.0.1` thì an toàn; **tuyệt đối không expose port ra internet.**
+- **VRAM 4GB là giới hạn cứng** — né bằng `inpainting_size` vừa phải + xử lý tuần tự.
+- **Cloudflare WARP bật có thể làm GPT báo lỗi "country not supported"** — chặn theo IP phía OpenAI, tắt WARP hoặc exclude domain `openai.com` khi dùng app.
+- **Không hoạt động trên site vẽ trang bằng `<canvas>` tainted** (vd shonenjumpplus.com) — `ImageFinder` chỉ quét `<img>`; canvas tainted chặn MỌI JS đọc pixel, kể cả extension có `host_permissions` toàn quyền. Giới hạn bảo mật tầng trình duyệt, không vượt qua được.
+- **Ghép biên webtoon vẫn còn 1 lượt detect-only mỗi trang + rất hiếm khi 1 bong bóng bị GPT dịch 2 lần** (mục 5.7) — đã tối ưu tối đa mà không hy sinh chất lượng (đánh đổi đã cân nhắc kỹ, người dùng chọn giữ nguyên sau khi xem log thật).
+- **Eager mode không giới hạn phạm vi prefetch** — dồn cả chương vào 1 hàng đợi tuần tự, tail có thể chờ rất lâu trên chương dài (mục 5.10/8).
+- **Ngôi xưng/đại từ tiếng Việt chưa hoàn hảo** dù đã có ngữ cảnh nhân vật + cửa sổ hội thoại gần nhất — cải thiện rõ rệt so với trước nhưng chưa "như người dịch thật" hoàn toàn (mục 5.9).
 
 ---
 
 ## 10. Bảng tham chiếu file trong `manga/`
 
-| File | Vai trò |
+| File/thư mục | Vai trò |
 |---|---|
-| `manga-overlay-translator.user.js` | Deliverable chính — toàn bộ userscript |
-| `README.md` | Nhật ký kỹ thuật backend (Giai đoạn A+B): port thật, bug đã vá, schema, so sánh inpainter |
-| `docs.md` | File này — bức tranh toàn cảnh dự án |
-| `Dockerfile` | Build image đã vá 2 bug từ `zyddnys/manga-image-translator:main` |
-| `patches/to_json.py` | Bản vá bug #2 (bản dịch bị thiếu trong response) |
-| `patches/gpt_config-vi.yaml` | Prompt dịch tùy biến (La-tinh hóa tên riêng/thuật ngữ) |
-| `run-backend.ps1` | Script chạy container, đọc `.env`, chỉ truyền biến thật sự có giá trị |
-| `.env` / `.env.example` | Config bí mật (API key OpenAI, model, port) |
-| `fixtures/openapi.json` | OpenAPI spec thật, dò được ở Giai đoạn B |
-| `fixtures/response-that.json` | Response thật (sau khi vá) — nguồn chân lý cho `normalizeResponse()` |
-| `fixtures/config-info.json` | Dump `config-help` — toàn bộ tham số config hợp lệ |
-| `fixtures/request-test.json` | Request mẫu dùng để dò response ở Giai đoạn B |
-| `test-page.html` | Trang test C3 — nhiều ảnh manga thật + giả lập lazy-load bằng `setTimeout` |
-| `result/` | Ảnh debug backend tự lưu ra mỗi lần dịch (gitignore, không phải nguồn thật) |
-| `spec-manga-overlay-translator.md` | Spec gốc đưa cho agent lúc bắt đầu dự án |
+| `extension/manifest.json` | Khai báo MV3: permissions, content-script, background, popup |
+| `extension/content-script/content.js` | Toàn bộ logic DOM/dịch/overlay (~2000 dòng) — xem mục 5 |
+| `extension/background/background.js` | Service worker — nơi DUY NHẤT fetch mạng thật (backend + CDN ảnh) |
+| `extension/popup/popup.html` + `popup.js` | UI cài đặt: backend URL, ngôn ngữ, engine, eager, ngữ cảnh nhân vật, xoá cache |
+| `manga-overlay-translator.user.js` | **Deprecated** — userscript cũ, giữ tham khảo lịch sử (mục 2.1, 6) |
+| `README.md` | Nhật ký kỹ thuật backend: API thật, bug đã vá, schema, endpoint mở rộng, so sánh inpainter |
+| `docs.md` | File này — bức tranh toàn cảnh, chủ yếu phía frontend/kiến trúc |
+| `Dockerfile` | Build image đã vá từ `zyddnys/manga-image-translator:main` |
+| `patches/to_json.py` | Vá bug bản dịch thiếu trong response |
+| `patches/gpt_config-vi.yaml` | Prompt dịch tùy biến (La-tinh hoá tên riêng + ngữ cảnh ngôi xưng — mục 5.9) |
+| `patches/main.py` | Full-override `server/main.py`: `/fetch-image`, `/build-series-context`, `/set-series-context`, `/set-recent-dialogue` |
+| `patches/share.py` + `patches/sent_data_internal.py` | Tối ưu relay 108.5MB→108KB pickle + buffer O(n) |
+| `patches/deepl.py` | Engine DeepL + `VIN` (chưa test thật — mục 8) |
+| `run-backend.ps1` | Script chạy container, đọc `.env` |
+| `.env` / `.env.example` | Config bí mật (API key, model, port) |
+| `fixtures/*.json` | OpenAPI spec/response/request thật — nguồn tham chiếu cho schema (mục 3.4) |
+| `result/` | Ảnh debug backend tự lưu ra (gitignore) |
+| `spec-manga-overlay-translator.md` | Spec gốc đưa cho agent lúc bắt đầu dự án (mô tả userscript — lịch sử) |
+| `docs/superpowers/specs/*.md` + `docs/superpowers/plans/*.md` | Spec + plan chi tiết từng tính năng, theo ngày — xem mục 11 |
+
+---
+
+## 11. Danh sách spec/plan theo tính năng (để đào sâu 1 tính năng cụ thể)
+
+Mỗi tính năng lớn có 1 cặp file `docs/superpowers/{specs,plans}/YYYY-MM-DD-<tên>-{design,plan}.md` — spec giải thích ĐẦY ĐỦ lý do/thiết kế/phương án đã cân nhắc, plan là kế hoạch implement từng bước. Danh sách theo thời gian:
+
+- `2026-07-19` distribution-installer — **tạm dừng** (nhắm vào userscript cũ, cần re-scope lại cho extension trước khi tiếp tục — xem memory `manga_distribution_installer`)
+- `2026-07-21` browser-extension-port — chuyển từ userscript sang extension (mục 2.1)
+- `2026-07-22` extension-popup-settings — popup UI đầu tiên
+- `2026-07-23` cross-image-boundary-stitching — ghép biên webtoon, thiết kế gốc (mục 5.7)
+- `2026-07-23` translator-engine-picker — ChatGPT/Gemini/DeepL (⚠️ chưa test thật — mục 8)
+- `2026-07-24` additional-translator-engines — deepseek/groq/youdao/baidu/caiyun (chưa merge vào `main`)
+- `2026-08-02` eager-webtoon-pretranslate — dịch trước toàn bộ (mục 5.10)
+- `2026-08-03` eager-force-load-lazy-images, hitomi-gallery-prefetch, url-cache-fastpath
+- `2026-08-09` backend-context-relay-optimization (mục 3.1/7), per-series-character-context (mục 5.9), translation-quality-prompt-model
+- `2026-08-12` overlay-safe-layout-and-boundary-detection (mục 5.6/5.7), vietnamese-translation-pronoun-consistency (mục 5.9)
+
+**Boundary-stitch detect-first + borrow-200px (2026-08-13, phần cuối mục 5.7)** không có file spec riêng — thực hiện trực tiếp trên `main` qua vòng lặp test-thực-nghiệm-trước-khi-quyết-định (không qua brainstorm/spec đầy đủ vì mỗi bước đều được đo bằng backend thật trước khi implement). Chi tiết đầy đủ: `git log` các commit boundary-stitch ngày 2026-08-13 (`git log --oneline --grep=boundary` hoặc `--grep=ghep-bien`) + memory dự án.

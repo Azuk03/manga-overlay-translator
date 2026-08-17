@@ -109,6 +109,8 @@ Các field khác giữ mặc định (xem `fixtures/openapi.json` → `Translate
 
 **Lưu ý:** enum `translator` thật sự **có cả `gemini`** (không chỉ `chatgpt` như spec suy đoán ban đầu) — xem `fixtures/openapi.json` → `components.schemas.Translator.enum`.
 
+**`translator: "none"` — detect-only, không tốn GPT (xác nhận 2026-08-13).** Đặt `translator.translator = "none"` chạy đúng detect + OCR rồi dừng: response vẫn có đầy đủ `minX/minY/maxX/maxY` + `text.src` (chữ gốc OCR), nhưng `text.dst` rỗng và **không có lượt gọi GPT/OpenAI nào** (không tốn tiền, không tốn thời gian chờ API ngoài — chỉ model local). Trước đây có ghi chú sai là "translator:none trả translations rỗng" — không đúng với build hiện tại, đã kiểm chứng lại bằng request thật. Dùng cho gate "detect-first" của tính năng ghép biên webtoon (xem `docs.md` mục 5.7): probe rẻ trước, chỉ trả tiền dịch thật khi thực sự cần.
+
 ### `gpt_config` — chỉnh prompt dịch (La-tinh hóa tên riêng/thuật ngữ)
 
 Field `gpt_config` **chỉ nhận đường dẫn file YAML có sẵn trên server** (`OmegaConf.load(self.gpt_config)`), **không nhận nội dung YAML trực tiếp** qua API — gửi thẳng nội dung sẽ lỗi `[Errno 36] File name too long` vì code cố `open()` chuỗi đó như 1 filename.
@@ -125,6 +127,12 @@ Bản `gpt_config-vi.yaml` đầu tiên bỏ sót dòng chỉ dẫn này → GPT
 
 **Đã vá:** thêm lại chỉ dẫn giữ nguyên marker `<|N|>` + 1 ví dụ input/output cụ thể ngay trong prompt tùy chỉnh. **Cần rebuild image + restart container** để áp dụng (đây là thay đổi phía backend, không phải userscript) — và bump `CACHE_VERSION` trong `CFG` (userscript) vì các kết quả dịch rỗng/sai đã bị cache lại.
 
+### Bug #5 — landmine tự gây ra (2026-08-13): nội dung tiêm động vào prompt phải brace-escape
+
+Tính năng ngữ cảnh nhân vật/hội thoại (mục "Endpoint mở rộng" bên dưới) tiêm nội dung ĐỘNG (hồ sơ nhân vật do GPT tự sinh, cửa sổ hội thoại gần nhất lấy trực tiếp từ text OCR thật) vào `chat_system_template` của file `gpt_config` riêng từng truyện. Backend chạy `chat_system_template` qua Python `str.format(to_lang=...)` — bất kỳ ký tự `{` hoặc `}` literal nào lọt vào nội dung tiêm (rất dễ xảy ra: tên nhân vật/lời thoại thật đôi khi chứa ngoặc nhọn) sẽ ném `KeyError`/`ValueError` ngay khi backend nạp file. Vì khối lỗi được **lưu lại** vào file yaml riêng của truyện đó, nó **brick mọi lượt dịch tiếp theo của đúng truyện đó** cho tới khi bị ghi đè bởi 1 lượt cập nhật hồ sơ/hội thoại mới — tái hiện được thật trong container (không phải giả thuyết).
+
+**Đã vá:** `patches/main.py` hàm `_write_series_gpt_config` chạy `_esc_braces()` (`s.replace("{","{{").replace("}","}}")`) lên nội dung tiêm động **TRƯỚC KHI** ghép vào template — áp dụng đúng cho phần tiêm, **không bao giờ** áp dụng cho `{to_lang}` thật của chính template (nếu escape luôn cả `{to_lang}`, `str.format` sẽ không thay thế được nó nữa). Bài học cho bất kỳ code tiêm nội dung động vào prompt sau này: **luôn brace-escape nội dung tiêm trước khi ghép**, không escape phần khung template.
+
 ### `inpainter` — xóa chữ gốc thật (không chỉ che bằng màu)
 
 Bật `inpainter` để backend **thực sự xóa chữ** bằng AI thay vì chỉ trả bbox. Kết quả: field `background` trong response giờ là ảnh đã xóa chữ (không phải ảnh gốc/placeholder), dùng làm `background-image` cho overlay thay vì tự sample 1 màu phẳng.
@@ -139,6 +147,22 @@ Vùng chữ chồng lên chi tiết tranh vẽ (bài toán mơ hồ ngay từ đ
 1. Giảm `inpainting_size` trước (1024 → 768 → 512)
 2. Đang dùng `lama_mpe` (nhẹ hơn, an toàn VRAM hơn) — không cần đổi thêm
 3. Bỏ `--models-ttl 0` trong `run-backend.ps1` để giải phóng VRAM giữa các lần dịch (đổi lại chậm hơn vì phải load lại model)
+
+## Endpoint mở rộng riêng của bản patch (không có ở backend gốc)
+
+Tất cả 4 endpoint dưới đây nằm trong `patches/main.py` (full-override `server/main.py`, không phải patch từng dòng).
+
+### `POST /fetch-image` — relay tải ảnh kèm `Referer` đúng
+
+Extension MV3 (`background.js`) **không tự đặt được header `Referer`** khi `fetch()` (khác `GM_xmlhttpRequest` cũ của userscript, vốn có đặc quyền đặt header này). Một số CDN ảnh chặn hotlink khi thiếu `Referer` hợp lệ. `background.js` fetch thẳng trước; nếu HTTP lỗi hoặc Content-Type không phải ảnh, relay request này sang backend kèm `{url, referer}` — backend dùng client HTTP Python thật (không giới hạn header) tải kèm `Referer` đúng rồi trả lại bytes ảnh.
+
+### `POST /build-series-context` — dựng hồ sơ nhân vật 1 lần/truyện
+
+Body: `{series_id, text, target_lang}` (`text` = text gốc OCR gom từ vài trang đầu). Gọi GPT 1 lần để tự sinh 1 đoạn hồ sơ ngắn (tên, giới tính, tuổi/vai vế, quan hệ, đại từ tiếng Việt tương ứng), ghi thành 1 file `gpt_config` riêng cho `series_id` (dựa trên `gpt_config-vi.yaml` gốc + thêm khối "CHARACTER CONTEXT"), trả về `{sheet, gpt_config_path}`. Dùng cho tính năng ngữ cảnh dịch xuyên-trang (`docs.md` mục 5.9).
+
+### `POST /set-series-context` / `POST /set-recent-dialogue` — cập nhật độc lập 2 khối của file riêng đó
+
+`_write_series_gpt_config(series_id, sheet=None, recent=None)` giữ **2 khối độc lập, cập nhật riêng biệt** trong cùng 1 file `gpt_config` per-truyện: khối "CHARACTER CONTEXT" (hồ sơ nhân vật tĩnh, cập nhật qua `/set-series-context`, thường chỉ 1 lần) và khối "RECENT DIALOGUE" (cửa sổ hội thoại gần nhất, cập nhật qua `/set-recent-dialogue` sau MỖI trang). Gọi 1 trong 2 endpoint chỉ ghi đè đúng khối tương ứng, khối còn lại giữ nguyên (đọc lại từ file cũ trước khi ghi). Cả 2 đều trả `{gpt_config_path}`. Nội dung tiêm vào cả 2 khối đều đi qua `_esc_braces()` (xem Bug #5 ở trên) trước khi ghi.
 
 ## Concurrency
 
@@ -164,33 +188,18 @@ Vùng chữ chồng lên chi tiết tranh vẽ (bài toán mơ hồ ngay từ đ
 |---|---|
 | `.env` / `.env.example` | Config bí mật (API key, model, port) |
 | `Dockerfile` + `patches/to_json.py` | Image đã vá bug #2 ở trên (+ `.copy()` mẩu nền cho fast-path json) |
-| `patches/gpt_config-vi.yaml` | Prompt dịch tùy chỉnh (La-tinh hóa tên riêng) — xem mục `gpt_config` |
+| `patches/gpt_config-vi.yaml` | Prompt dịch tùy chỉnh (La-tinh hóa tên riêng + ngữ cảnh ngôi xưng) — xem mục `gpt_config` |
+| `patches/main.py` | Full-override `server/main.py`: `/fetch-image`, `/build-series-context`, `/set-series-context`, `/set-recent-dialogue` — xem mục "Endpoint mở rộng riêng của bản patch" |
 | `patches/share.py` + `patches/sent_data_internal.py` | Tối ưu relay 108.5MB → 108KB + buffer O(n) — xem mục "Tối ưu relay giữa 2 tiến trình" |
+| `patches/deepl.py` | Engine DeepL + `VIN` (⚠️ chưa test thật với API key thật — xem `docs.md` mục 8) |
 | `run-backend.ps1` | Script chạy container, đọc `.env` |
 | `fixtures/openapi.json` | OpenAPI spec thật, dò ở Giai đoạn B |
 | `fixtures/response-that.json` | Response thật (sau khi vá) — nguồn chân lý cho `normalizeResponse()` |
 | `fixtures/config-info.json` | Dump `config-help` — toàn bộ tham số config hợp lệ |
 | `result/` | Ảnh debug backend lưu ra (gitignore) |
 
-## Giai đoạn C — Userscript (đã xong C1–C4)
+## Giai đoạn C — Userscript (lịch sử, đã deprecated) → Extension (hiện tại)
 
-Viết userscript (`ApiAdapter`, `OverlayRenderer`...) theo `spec-manga-overlay-translator.md` phần 5, dùng đúng endpoint + schema đã xác nhận ở trên.
+Giai đoạn C ban đầu viết **userscript** (`manga-overlay-translator.user.js`, C1–C4: dịch 1 ảnh → `OverlayRenderer` vẽ CSS → tự động dò ảnh/hàng đợi theo cuộn → UI hotkey `Alt+D`/`Alt+T` qua menu Tampermonkey, kể cả webtoon tiling `sliceImageIntoTiles`/`dedupeRegions`). Toàn bộ phần này **đã deprecated từ 2026-07-21/22**, thay bằng **extension MV3** (`extension/`) — cùng nguyên lý (`ApiAdapter`/`OverlayRenderer`/`Queue`/webtoon tiling vẫn tồn tại y hệt, chỉ khác cách gọi mạng: `GM_xmlhttpRequest` → `background.js` fetch qua `host_permissions`; xem `docs.md` mục 2.1/2.3).
 
-- **C1** — dịch 1 ảnh, log JSON console. ✅
-- **C2** — `OverlayRenderer` vẽ chữ dịch đè lên ảnh bằng CSS (inpaint thật + font tự co giãn). ✅
-- **C3** — tự động dò ảnh toàn trang (`MutationObserver`) + hàng đợi ưu tiên theo cuộn (`IntersectionObserver` + `Queue`). ✅
-- **C4** — hoàn thiện UI: ✅
-  - `Alt+T`: bật/tắt toàn bộ overlay trên trang để so gốc/dịch nhanh.
-  - `Alt+D` hoặc menu Tampermonkey ("Dịch trang này") — kích hoạt dịch.
-  - Bấm vào 1 khung chữ: xem chữ gốc, bấm lại quay về bản dịch.
-  - Lỗi từng ảnh được gộp lại; kích hoạt lại (Alt+D/menu) sau khi đã chạy sẽ hiện tóm tắt lỗi nếu có (nguyên nhân đã phân loại sẵn: backend chưa bật, timeout...).
-
-  **Vì sao không dùng nút nổi trong trang:** đã thử nhiều cách (z-index tối đa, Popover API/top layer, định kỳ giành lại vị trí, chặn click ở capture phase đăng ký sớm nhất có thể qua `@run-at document-start`) nhưng một số site quảng cáo vẫn có cách can thiệp — vì trang có toàn quyền với DOM/JS của chính nó, không có cách nào *trong DOM của trang* đảm bảo 100%. `GM_registerMenuCommand` (menu Tampermonkey) là cơ chế duy nhất nằm ngoài DOM trang, trang web không thể chạm tới.
-
-- **Webtoon tiling (spec 5.7)** — ảnh cao hơn `TILE_MAX_H` (4000px, có biên an toàn so với giới hạn canvas ~16.384px/tổng diện tích của trình duyệt): ✅
-  - `sliceImageIntoTiles()` cắt ảnh thành nhiều lát chồng lấn `TILE_OVERLAP` (200px) bằng canvas dựng từ **Blob đã tải qua `GM_xmlhttpRequest`** (không phải `<img>` của trang) — tránh tainted canvas.
-  - `ApiAdapter.translateImageTiled()` gọi backend **tuần tự** cho từng lát (giữ đúng giả định 1 request/1 lúc đã xác nhận ở Giai đoạn B), cộng offset `y` của lát vào bbox trả về để quy về tọa độ ảnh gốc.
-  - `dedupeRegions()` loại bóng thoại vắt qua đường cắt bị dịch 2 lần (IoU > 0.5, giữ bbox lớn hơn — đúng spec 5.7 mục 4).
-  - Cache vẫn hoạt động bình thường (hash trên Blob gốc trước khi cắt, lưu kết quả đã ghép — tiling là chi tiết nội bộ, trong suốt với `Cache`).
-
-Còn lại theo spec (chưa làm): checklist nghiệm thu đầy đủ ở Phần 6 (webtoon tiling đã xong ở trên, cần test với ảnh webtoon thật >10.000px).
+**Mọi tính năng ship SAU khi port sang extension** (ghép biên webtoon, eager mode, hitomi prefetch, URL-cache, tối ưu relay backend, ngữ cảnh nhân vật/hội thoại, overlay safe-layout cho chữ CJK dọc) **được tài liệu hoá đầy đủ trong `docs.md`, không lặp lại ở đây** — README này tập trung vào backend (bug đã vá, schema, endpoint). Xem `docs.md` mục 5 (module walkthrough), mục 8 (trạng thái hiện tại từng tính năng), mục 11 (danh sách spec/plan theo ngày).
