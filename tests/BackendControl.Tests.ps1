@@ -1,0 +1,56 @@
+﻿BeforeAll { . "$PSScriptRoot/../lib/BackendControl.ps1" }
+
+Describe 'Build-DockerRunArgs' {
+    BeforeAll {
+        $script:base = @{ OPENAI_API_KEY = 'sk-abc' }
+    }
+    It 'adds --gpus all when HasGpu is true' {
+        $a = Build-DockerRunArgs -EnvVars $base -HasGpu $true -ContainerName 'c' -ResultDir 'D:\r'
+        ($a -join ' ') | Should -BeLike '*--gpus all*'
+    }
+    It 'does not add --gpus when HasGpu is false' {
+        $a = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r'
+        ($a -join ' ') | Should -Not -BeLike '*--gpus*'
+    }
+    It 'includes --use-gpu only when HasGpu is true' {
+        $g = Build-DockerRunArgs -EnvVars $base -HasGpu $true  -ContainerName 'c' -ResultDir 'D:\r'
+        $c = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r'
+        $g | Should -Contain '--use-gpu'
+        $c | Should -Not -Contain '--use-gpu'
+    }
+    It 'skips optional variables when they have no value' {
+        $a = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r'
+        ($a -join ' ') | Should -Not -BeLike '*GEMINI_API_KEY*'
+    }
+    It 'passes all 5 variables when env has all of them' {
+        $full = @{
+            OPENAI_API_KEY = 'sk-abc'; OPENAI_MODEL = 'gpt-4o'
+            OPENAI_API_BASE = 'https://x/v1'; GEMINI_API_KEY = 'gk'; DEEPL_AUTH_KEY = 'dk'
+        }
+        $s = (Build-DockerRunArgs -EnvVars $full -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r') -join ' '
+        foreach ($k in $full.Keys) { $s | Should -BeLike "*$k=*" }
+    }
+    It 'preserves paths with spaces as single array element' {
+        $a = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'C:\Program Files\r'
+        $a | Should -Contain 'C:\Program Files\r:/app/result'
+    }
+}
+
+Describe 'Hide-Secrets' {
+    It 'redacts OPENAI_API_KEY' {
+        (Hide-Secrets -Args @('-e', 'OPENAI_API_KEY=sk-abc')) | Should -Contain 'OPENAI_API_KEY=***'
+    }
+    It 'redacts both GEMINI_API_KEY and DEEPL_AUTH_KEY' {
+        $r = Hide-Secrets -Args @('-e', 'GEMINI_API_KEY=gk', '-e', 'DEEPL_AUTH_KEY=dk')
+        $r | Should -Contain 'GEMINI_API_KEY=***'
+        $r | Should -Contain 'DEEPL_AUTH_KEY=***'
+        ($r -join ' ') | Should -Not -BeLike '*gk*'
+        ($r -join ' ') | Should -Not -BeLike '*dk*'
+    }
+    It 'does not redact non-secret variables' {
+        (Hide-Secrets -Args @('-e', 'OPENAI_MODEL=gpt-4o')) | Should -Contain 'OPENAI_MODEL=gpt-4o'
+    }
+    It 'does not touch regular arguments' {
+        (Hide-Secrets -Args @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
+    }
+}
