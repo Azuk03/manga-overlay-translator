@@ -22,10 +22,17 @@ Describe 'Build-DockerRunArgs' {
         $a = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r'
         ($a -join ' ') | Should -Not -BeLike '*GEMINI_API_KEY*'
     }
-    It 'passes all 5 variables when env has all of them' {
+    It 'does not pass variables that are present but empty (empty overrides app default)' {
+        $withEmpty = @{ OPENAI_API_KEY = 'sk-abc'; GEMINI_API_KEY = ''; DEEPL_AUTH_KEY = '' }
+        $s = (Build-DockerRunArgs -EnvVars $withEmpty -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r') -join ' '
+        $s | Should -Not -BeLike '*GEMINI_API_KEY*'
+        $s | Should -Not -BeLike '*DEEPL_AUTH_KEY*'
+        $s | Should -BeLike '*OPENAI_API_KEY=sk-abc*'
+    }
+    It 'passes all 6 variables when env has all of them' {
         $full = @{
             OPENAI_API_KEY = 'sk-abc'; OPENAI_MODEL = 'gpt-4o'
-            OPENAI_API_BASE = 'https://x/v1'; GEMINI_API_KEY = 'gk'; DEEPL_AUTH_KEY = 'dk'
+            OPENAI_API_BASE = 'https://x/v1'; GEMINI_API_KEY = 'gk'; GEMINI_MODEL = 'gemini-pro'; DEEPL_AUTH_KEY = 'dk'
         }
         $s = (Build-DockerRunArgs -EnvVars $full -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r') -join ' '
         foreach ($k in $full.Keys) { $s | Should -BeLike "*$k=*" }
