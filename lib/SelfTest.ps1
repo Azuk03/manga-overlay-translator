@@ -1,4 +1,4 @@
-function Read-StreamFrames {
+﻿function Read-StreamFrames {
     param([byte[]]$Bytes)
     $frames = @()
     $i = 0

@@ -1,4 +1,4 @@
-BeforeAll { . "$PSScriptRoot/../lib/Preflight.ps1" }
+﻿BeforeAll { . "$PSScriptRoot/../lib/Preflight.ps1" }
 
 Describe 'Test-EnoughDisk' {
     It 'enough when free is greater than required' { Test-EnoughDisk -FreeGb 25.0 -RequiredGb 20.0 | Should -BeTrue }

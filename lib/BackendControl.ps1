@@ -1,4 +1,4 @@
-$script:SecretPattern = 'KEY|TOKEN|AUTH|SECRET'
+﻿$script:SecretPattern = 'KEY|TOKEN|AUTH|SECRET'
 
 function Build-DockerRunArgs {
     param([hashtable]$EnvVars, [bool]$HasGpu, [string]$ContainerName, [string]$ResultDir)

@@ -1,4 +1,4 @@
-function Get-FreeSpaceGb {
+﻿function Get-FreeSpaceGb {
     param([string]$Path)
     $qualifier = Split-Path -Qualifier $Path -ErrorAction SilentlyContinue
     if (-not $qualifier) {
