@@ -26,8 +26,12 @@ function Test-NeedsRebuild {
 
 function Test-DockerImageExists {
     param([string]$ImageName)
-    docker image inspect $ImageName 2>$null | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    try {
+        docker image inspect $ImageName 2>$null | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
 }
 
 function Invoke-ImageBuild {

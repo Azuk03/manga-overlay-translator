@@ -1,7 +1,10 @@
 function Get-FreeSpaceGb {
     param([string]$Path)
-    $drive = (Split-Path -Qualifier $Path).TrimEnd(':')
-    $d = Get-PSDrive -Name $drive
+    $qualifier = Split-Path -Qualifier $Path -ErrorAction SilentlyContinue
+    if (-not $qualifier) {
+        throw "Không xác định được ổ đĩa từ đường dẫn: $Path"
+    }
+    $d = Get-PSDrive -Name $qualifier.TrimEnd(':')
     return [math]::Round($d.Free / 1GB, 1)
 }
 
@@ -12,18 +15,32 @@ function Test-EnoughDisk {
 
 function Get-VramMbFromSmiOutput {
     param([string]$Text)
-    if ($Text -match '(\d+)\s*MiB') { return [int]$Matches[1] }
-    return 0
+    $found = [regex]::Matches($Text, '(\d+)\s*MiB')
+    if ($found.Count -eq 0) { return 0 }
+    $best = 0
+    foreach ($m in $found) {
+        $v = [int]$m.Groups[1].Value
+        if ($v -gt $best) { $best = $v }
+    }
+    return $best
 }
 
 function Test-DockerDaemonReady {
-    docker version 2>$null | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    try {
+        docker version 2>$null | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
 }
 
 function Test-NvidiaGpu {
-    nvidia-smi 2>$null | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    try {
+        nvidia-smi 2>$null | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    }
 }
 
 function Test-WingetAvailable {
