@@ -302,7 +302,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `Read-EnvFile` (Task 2)
-- Produces: `Build-DockerRunArgs [hashtable]$EnvVars [bool]$HasGpu [string]$ContainerName [string]$ResultDir` (trả `[string[]]`), `Hide-Secrets [string[]]$Args` (trả `[string[]]`), `Stop-Backend [string]$ContainerName`, `Start-Backend [string[]]$DockerArgs`
+- Produces: `Build-DockerRunArgs [hashtable]$EnvVars [bool]$HasGpu [string]$ContainerName [string]$ResultDir` (trả `[string[]]`), `Hide-Secrets [string[]]$Arguments` (trả `[string[]]`), `Stop-Backend [string]$ContainerName`, `Start-Backend [string[]]$DockerArgs`
 
 Task này sửa luôn một lỗi có thật: `run-backend.ps1` dòng 84 chỉ che `OPENAI_API_KEY`, nên `GEMINI_API_KEY` và `DEEPL_AUTH_KEY` bị in nguyên văn ra console.
 
@@ -350,20 +350,20 @@ Describe 'Build-DockerRunArgs' {
 
 Describe 'Hide-Secrets' {
     It 'che OPENAI_API_KEY' {
-        (Hide-Secrets -Args @('-e', 'OPENAI_API_KEY=sk-abc')) | Should -Contain 'OPENAI_API_KEY=***'
+        (Hide-Secrets -Arguments @('-e', 'OPENAI_API_KEY=sk-abc')) | Should -Contain 'OPENAI_API_KEY=***'
     }
     It 'che CẢ GEMINI_API_KEY và DEEPL_AUTH_KEY (lỗi cũ chỉ che OpenAI)' {
-        $r = Hide-Secrets -Args @('-e', 'GEMINI_API_KEY=gk', '-e', 'DEEPL_AUTH_KEY=dk')
+        $r = Hide-Secrets -Arguments @('-e', 'GEMINI_API_KEY=gk', '-e', 'DEEPL_AUTH_KEY=dk')
         $r | Should -Contain 'GEMINI_API_KEY=***'
         $r | Should -Contain 'DEEPL_AUTH_KEY=***'
         ($r -join ' ') | Should -Not -BeLike '*gk*'
         ($r -join ' ') | Should -Not -BeLike '*dk*'
     }
     It 'KHÔNG che biến không phải secret' {
-        (Hide-Secrets -Args @('-e', 'OPENAI_MODEL=gpt-4o')) | Should -Contain 'OPENAI_MODEL=gpt-4o'
+        (Hide-Secrets -Arguments @('-e', 'OPENAI_MODEL=gpt-4o')) | Should -Contain 'OPENAI_MODEL=gpt-4o'
     }
     It 'không đụng tới tham số thường' {
-        (Hide-Secrets -Args @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
+        (Hide-Secrets -Arguments @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
     }
 }
 ```
@@ -400,8 +400,8 @@ function Build-DockerRunArgs {
 }
 
 function Hide-Secrets {
-    param([string[]]$Args)
-    return @($Args | ForEach-Object {
+    param([string[]]$Arguments)
+    return @($Arguments | ForEach-Object {
         $idx = $_.IndexOf('=')
         if ($idx -gt 0) {
             $name = $_.Substring(0, $idx)
@@ -1597,7 +1597,7 @@ function Invoke-Setup {
         Stop-Backend -ContainerName 'manga_translator'
         # KHÔNG đặt tên biến là $args — đó là biến tự động của PowerShell.
         $dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu $hasGpu -ContainerName 'manga_translator' -ResultDir $resultDir
-        Write-Host "  docker $((Hide-Secrets -Args $dockerArgs) -join ' ')"
+        Write-Host "  docker $((Hide-Secrets -Arguments $dockerArgs) -join ' ')"
         # Truyền MẢNG qua Start-Job, không nối chuỗi: đường dẫn result/ có thể
         # chứa dấu cách (tên tài khoản Windows), nối chuỗi sẽ tách sai tham số.
         # Dấu phẩy trước $dockerArgs để ArgumentList nhận nguyên mảng làm MỘT
@@ -1704,7 +1704,7 @@ $resultDir = Join-Path $root 'result'
 New-Item -ItemType Directory $resultDir -Force | Out-Null
 Stop-Backend -ContainerName 'manga_translator'
 $dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu (Test-NvidiaGpu) -ContainerName 'manga_translator' -ResultDir $resultDir
-Write-Host "  docker $((Hide-Secrets -Args $dockerArgs) -join ' ')"
+Write-Host "  docker $((Hide-Secrets -Arguments $dockerArgs) -join ' ')"
 
 $job = Start-Job -ScriptBlock { param($a) docker @a } -ArgumentList (, $dockerArgs)
 Write-Warn 'ĐANG KHỞI ĐỘNG… (lần đầu trong phiên có thể mất 1-2 phút để nạp model)'
@@ -2189,7 +2189,7 @@ $resultDir = Join-Path $root 'result'
 New-Item -ItemType Directory $resultDir -Force | Out-Null
 
 $dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu (Test-NvidiaGpu) -ContainerName $containerName -ResultDir $resultDir
-Write-Host "Chạy: docker $((Hide-Secrets -Args $dockerArgs) -join ' ')"
+Write-Host "Chạy: docker $((Hide-Secrets -Arguments $dockerArgs) -join ' ')"
 Start-Backend -DockerArgs $dockerArgs
 ```
 
