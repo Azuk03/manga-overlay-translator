@@ -32,10 +32,13 @@ function Set-EnvValue {
     $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
     $encoding = New-Object System.Text.UTF8Encoding($false)
     $writer = New-Object System.IO.StreamWriter($full, $false, $encoding)
-    foreach ($line in $out) {
-        $writer.WriteLine($line)
+    try {
+        foreach ($line in $out) {
+            $writer.WriteLine($line)
+        }
+    } finally {
+        $writer.Close()
     }
-    $writer.Close()
 }
 
 function Initialize-EnvFile {
