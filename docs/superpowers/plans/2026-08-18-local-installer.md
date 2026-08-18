@@ -18,6 +18,7 @@ Mọi task đều ngầm bao gồm các ràng buộc dưới đây.
 - **Pester phải import tường minh bản ≥ 5**: máy có sẵn cả Pester 3.4.0 (kèm Windows) lẫn 6.0.1. Lệnh chạy test luôn là:
   `Import-Module Pester -MinimumVersion 5.0 -Force; Invoke-Pester -Path tests -Output Detailed`
 - **Mọi script gốc bắt đầu bằng** `. lib/Ui.ps1` rồi `Initialize-Ui` (bật UTF-8). Văn bản cho người dùng viết **tiếng Việt có dấu**.
+- **MỌI file `.ps1` phải được lưu dưới dạng UTF-8 CÓ BOM.** Đây là ràng buộc bắt buộc, không phải sở thích: Windows PowerShell 5.1 đọc file nguồn phi-ASCII **không có BOM** bằng codepage ANSI, nên mọi chuỗi tiếng Việt trong file đó biến thành mojibake lúc chạy. Đã đo: cùng một file, không BOM in ra `KhÃ´ng xÃ¡c Ä‘á»‹nh...`, có BOM in ra `Không xác định được...`. Lưu ý đây là tầng KHÁC với `Initialize-Ui` — hàm đó sửa encoding của *đầu ra console*, còn BOM sửa encoding của *mã nguồn*; cần cả hai. Ghi file bằng `[System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($true)))`. `tests/Encoding.Tests.ps1` canh ràng buộc này cho mọi file.
 - **Không yêu cầu quyền Admin** ở bất kỳ bước nào (ngoại lệ duy nhất: chính winget tự bật UAC khi cài Docker).
 - Thư mục cài: `%LOCALAPPDATA%\MangaTranslator`.
 - Hằng số hạ tầng: image `manga-translator-patched:local`, container `manga_translator`, port REST `5003`.
