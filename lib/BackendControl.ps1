@@ -21,10 +21,9 @@ function Build-DockerRunArgs {
 }
 
 function Hide-Secrets {
-    [CmdletBinding()]
-    param([Parameter(Mandatory=$true, Position=0)][string[]]$Args)
+    param([string[]]$Arguments)
     $result = @()
-    foreach ($arg in $Args) {
+    foreach ($arg in $Arguments) {
         $idx = $arg.IndexOf('=')
         if ($idx -gt 0) {
             $name = $arg.Substring(0, $idx)

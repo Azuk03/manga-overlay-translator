@@ -38,19 +38,19 @@ Describe 'Build-DockerRunArgs' {
 
 Describe 'Hide-Secrets' {
     It 'redacts OPENAI_API_KEY' {
-        (Hide-Secrets -Args @('-e', 'OPENAI_API_KEY=sk-abc')) | Should -Contain 'OPENAI_API_KEY=***'
+        (Hide-Secrets -Arguments @('-e', 'OPENAI_API_KEY=sk-abc')) | Should -Contain 'OPENAI_API_KEY=***'
     }
     It 'redacts both GEMINI_API_KEY and DEEPL_AUTH_KEY' {
-        $r = Hide-Secrets -Args @('-e', 'GEMINI_API_KEY=gk', '-e', 'DEEPL_AUTH_KEY=dk')
+        $r = Hide-Secrets -Arguments @('-e', 'GEMINI_API_KEY=gk', '-e', 'DEEPL_AUTH_KEY=dk')
         $r | Should -Contain 'GEMINI_API_KEY=***'
         $r | Should -Contain 'DEEPL_AUTH_KEY=***'
         ($r -join ' ') | Should -Not -BeLike '*gk*'
         ($r -join ' ') | Should -Not -BeLike '*dk*'
     }
     It 'does not redact non-secret variables' {
-        (Hide-Secrets -Args @('-e', 'OPENAI_MODEL=gpt-4o')) | Should -Contain 'OPENAI_MODEL=gpt-4o'
+        (Hide-Secrets -Arguments @('-e', 'OPENAI_MODEL=gpt-4o')) | Should -Contain 'OPENAI_MODEL=gpt-4o'
     }
     It 'does not touch regular arguments' {
-        (Hide-Secrets -Args @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
+        (Hide-Secrets -Arguments @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
     }
 }
