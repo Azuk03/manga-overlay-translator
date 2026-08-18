@@ -29,7 +29,13 @@ function Set-EnvValue {
         }
     }
     if (-not $found) { $out = @($out) + "$Key=$Value" }
-    Set-Content -Path $Path -Value $out -Encoding UTF8
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    $writer = New-Object System.IO.StreamWriter($full, $false, $encoding)
+    foreach ($line in $out) {
+        $writer.WriteLine($line)
+    }
+    $writer.Close()
 }
 
 function Initialize-EnvFile {

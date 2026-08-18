@@ -25,7 +25,7 @@ Describe 'Set-EnvValue' {
         $p = Join-Path $TestDrive 'c.env'
         Set-Content $p @('# đầu file', 'OPENAI_API_KEY=cu', '# giữa', 'OPENAI_MODEL=gpt-4o') -Encoding UTF8
         Set-EnvValue -Path $p -Key 'OPENAI_API_KEY' -Value 'moi'
-        $lines = Get-Content $p
+        $lines = Get-Content $p -Encoding UTF8
         $lines[0] | Should -Be '# đầu file'
         $lines[1] | Should -Be 'OPENAI_API_KEY=moi'
         $lines[2] | Should -Be '# giữa'
@@ -42,5 +42,13 @@ Describe 'Set-EnvValue' {
         Set-Content $p @('GEMINI_API_KEY=cu') -Encoding UTF8
         Set-EnvValue -Path $p -Key 'GEMINI_API_KEY' -Value ''
         @(Get-Content $p)[0] | Should -Be 'GEMINI_API_KEY='
+    }
+    It 'ghi file KHÔNG có BOM (giữ nguyên định dạng file gốc của người dùng)' {
+        $p = Join-Path $TestDrive 'g.env'
+        Set-Content $p @('OPENAI_API_KEY=x') -Encoding UTF8
+        Set-EnvValue -Path $p -Key 'OPENAI_API_KEY' -Value 'y'
+        $bytes = [System.IO.File]::ReadAllBytes($p)
+        # EF BB BF là BOM UTF-8
+        ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
     }
 }
