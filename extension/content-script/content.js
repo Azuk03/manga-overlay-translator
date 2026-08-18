@@ -174,8 +174,13 @@
     // noi dung anh, doc lap ngon ngu). Cho phep tra cache MA KHONG phai tai +
     // hash lai anh (~3.4s) khi da biet hash tu lan truoc (xem spec
     // 2026-08-03-url-cache-fastpath-design.md).
+    // URL duoc CHUAN HOA truoc khi lam khoa: mot so CDN (hitomi) nhung 1 doan
+    // unix timestamp quay vong ~28h vao path, khien khoa theo URL tho chet sach
+    // sau moi lan quay vong (do that: 1963 khoa tan ra >10 moc, moc moi nhat
+    // chi 32.7%) -> fast path khong bao gio trung, moi trang da dich van phai
+    // tai lai anh + bam (~2-3.4s). Xem url-cache-key.js va tests/.
     _urlKey(url) {
-      return `mot_urlhash_v${CFG.CACHE_VERSION}_${url}`;
+      return `mot_urlhash_v${CFG.CACHE_VERSION}_${motNormalizeUrlForCacheKey(url)}`;
     },
     async getHashByUrl(url) {
       const key = this._urlKey(url);
@@ -186,6 +191,16 @@
       await chrome.storage.local.set({ [this._urlKey(url)]: hash });
     },
   };
+
+  // Chuyen chi muc URL->hash cu (khoa theo URL THO) sang dang chuan hoa.
+  // KHONG phai chi don dep: vi chuan hoa bo dung doan timestamp da lam chung
+  // chet, moi khoa cu duoc HOI SINH thanh 1 khoa dung -> ca kho anh da dich
+  // tu truoc lai vao duoc fast path ma khong phai tai lai byte nao.
+  // Chay 1 lan (co co danh dau). Chay lai vo hai: motNormalizeUrlForCacheKey()
+  // idempotent (co test) va khoa cu/moi dung chung tien to nen khong the phan
+  // biet - dieu kien `newKey === oldKey` bo qua khoa da chuan hoa.
+  const URLHASH_PREFIX = `mot_urlhash_v${CFG.CACHE_VERSION}_`;
+  const URLHASH_MIGRATED_FLAG = `mot_urlhash_normalized_v${CFG.CACHE_VERSION}`;
 
   async function computeRegionComplexity(regions) {
     return Promise.all(
@@ -1779,12 +1794,31 @@
     const seriesId = ctxOn && targetLang === 'VIN' && engine !== 'deepl' ? getSeriesId() : null;
     const st = seriesId ? await SeriesCtx.load(seriesId) : null;
     let done = 0;
+
+    // Bo qua han viec tai neu URL da co san ban dich. Truoc day vong lap nay
+    // chi GHI chi muc URL->hash (cuoi vong) ma khong bao gio DOC no, nen mo
+    // lai mot gallery da dich xong 100% van tai lai TUNG anh mot - qua dung
+    // duong 404->relay cham - chi de tinh lai cai hash da ghi san. Viec do
+    // chay nen va tranh mang voi chinh trang nguoi dung dang xem, la mot
+    // nguyen nhan cua trieu chung "lat nhanh thi overlay bi do".
+    const CACHED = Symbol('cached');
+    const blobIfNeeded = async (url) => {
+      if (!url) return null;
+      const fully = await motIsUrlFullyCached(
+        chrome.storage.local,
+        url,
+        (u) => Cache._urlKey(u),
+        (h) => Cache._key(h, targetLang, engine)
+      );
+      if (fully) return CACHED;
+      return downloadBlobFromUrl(url).catch(() => null);
+    };
+
     // Pipeline: tai truoc blob cua trang KE TIEP trong luc backend dich trang
     // hien tai. Backend (~7s) >> tai anh (~3s) nen viec tai bi GIAU HOAN TOAN
     // trong luc dich -> throughput prefetch ~7s/trang thay vi ~10s (tai la
     // I/O, khong tranh GPU voi dich). Xem investigation 2026-08-08.
-    let nextBlobP =
-      urls.length > 0 ? downloadBlobFromUrl(urls[0]).catch(() => null) : Promise.resolve(null);
+    let nextBlobP = blobIfNeeded(urls[0]);
     for (let i = 0; i < urls.length; i++) {
       // A: NHUONG trang dang xem. Backend chi 1 executor - neu prefetch va
       // hang doi anh (dich trang dang xem de ve overlay) dap cung luc thi
@@ -1797,12 +1831,32 @@
       const blob = await nextBlobP;
       // Bat dau tai trang KE TIEP ngay bay gio -> chay song song voi phan dich
       // trang hien tai ben duoi (giau do tre tai).
-      nextBlobP =
-        i + 1 < urls.length ? downloadBlobFromUrl(urls[i + 1]).catch(() => null) : Promise.resolve(null);
+      nextBlobP = i + 1 < urls.length ? blobIfNeeded(urls[i + 1]) : Promise.resolve(null);
+      if (blob === CACHED) {
+        done++;
+        updatePrefetchToast(done, urls.length);
+        continue;
+      }
       try {
         if (blob) {
           const hash = await Cache.hashBlob(blob);
-          const cached = await Cache.get(hash, targetLang, engine);
+          let cached = await Cache.get(hash, targetLang, engine);
+          if (!cached) {
+            // NHUONG LAN NUA, ngay truoc khi gui lenh dich di. Vong `while` o
+            // dau vong lap chi chan luc BAT DAU; tu do toi day da co viec tai
+            // anh (~3s) xen vao, thua du de nguoi doc lat sang trang khac. Mot
+            // khi translateImage() da bay thi KHONG gi dung duoc no, ma backend
+            // chi co 1 executor -> trang dang xem phai xep hang sau tron mot
+            // luot dich prefetch (~7-16s). Do chinh la trieu chung "lat nhanh
+            // thi overlay do mot luc moi hien".
+            while (Queue._active > 0 || Queue._pending.length > 0) {
+              await new Promise((r) => setTimeout(r, 300));
+            }
+            // Trong luc cho o tren, chinh trang dang xem co the da dich xong
+            // dung anh nay va ghi vao cache - tra lai de khoi ton mot luot
+            // backend trung lap (~7-16s).
+            cached = await Cache.get(hash, targetLang, engine);
+          }
           if (!cached) {
             const gptConfigPath = (st ? await SeriesCtx.resolvePath(st) : null) || RecentDialogue.path;
             const result = await ApiAdapter.translateImage(blob, gptConfigPath);
@@ -1960,6 +2014,10 @@
       }
     });
     watchImages();
+    // Khong await: migration chi anh huong toc do, khong duoc chan viec dich.
+    motMigrateUrlHashKeys(chrome.storage.local, URLHASH_PREFIX, URLHASH_MIGRATED_FLAG, log).catch((e) =>
+      log('Bo qua migration chi muc URL:', e)
+    );
     log('San sang. Bam icon extension hoac Alt+D de dich, Alt+T de bat/tat overlay.');
   }
 
