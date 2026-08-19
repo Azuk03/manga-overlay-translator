@@ -2289,6 +2289,10 @@ Expected: đi hết 8 bước, self-test báo số vùng chữ, ba shortcut xu�
 - [ ] Nhập khoá API sai → hộp thoại báo "Khoá bị từ chối (401)" **trước** khi build
 - [ ] Tắt mạng rồi bấm "Kiểm tra khoá" → báo lỗi mạng, **không** báo khoá sai
 - [ ] Tắt Docker Desktop rồi bấm shortcut "Bật" → tự mở Docker và chờ
+- [ ] **Máy CHƯA cài Docker** (máy khác, hoặc gỡ Docker Desktop trước) → wizard đề nghị
+      `winget install`, cài xong nhận biết trạng thái cần khởi động lại, và chạy lại
+      `install.bat` sau reboot thì đi tiếp được. Đây là nhánh DUY NHẤT chưa có bất kỳ
+      lớp test nào phủ, mà lại là thứ đầu tiên người dùng mới gặp.
 
 - [ ] **Step 4: Chạy lại setup lần hai (kiểm chứng tính idempotent)**
 
