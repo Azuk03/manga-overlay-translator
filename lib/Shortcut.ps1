@@ -39,6 +39,12 @@ function Install-Shortcuts {
 function Remove-AppShortcuts {
     $desktop = [Environment]::GetFolderPath('Desktop')
     $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) $script:StartMenuFolderName
-    Remove-Item (Join-Path $desktop 'Bật Manga Translator.lnk') -ErrorAction SilentlyContinue
+    # Lấy tên từ Get-ShortcutPlan thay vì lặp lại chuỗi: đổi tên ở một chỗ
+    # là đủ, không để uninstall bỏ sót shortcut Desktop.
+    foreach ($item in (Get-ShortcutPlan -Root '')) {
+        if ($item.OnDesktop) {
+            Remove-Item (Join-Path $desktop ($item.Name + '.lnk')) -ErrorAction SilentlyContinue
+        }
+    }
     Remove-Item $startMenu -Recurse -Force -ErrorAction SilentlyContinue
 }

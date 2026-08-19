@@ -17,6 +17,13 @@ Describe 'Get-ShortcutPlan' {
     It 'trỏ tới đúng script dưới thư mục gốc' {
         ($plan | Where-Object { $_.Name -eq 'Bật Manga Translator' }).Script | Should -Be 'C:\app\start.ps1'
     }
+    It 'tên shortcut Desktop mà uninstall xoá phải khớp Get-ShortcutPlan' {
+        $desktopItem = @(Get-ShortcutPlan -Root 'C:\app' | Where-Object { $_.OnDesktop })
+        $desktopItem.Count | Should -Be 1
+        # Nếu đổi tên trong Get-ShortcutPlan thì assertion này đỏ ngay, buộc
+        # người sửa nhìn lại Remove-AppShortcuts.
+        $desktopItem[0].Name | Should -Be 'Bật Manga Translator'
+    }
 }
 
 Describe 'New-AppShortcut' {
