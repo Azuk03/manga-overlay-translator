@@ -1788,6 +1788,12 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: (không có — `bootstrap.ps1` phải chạy được khi máy CHƯA có gì)
+
+> **Bổ sung sau khi lập kế hoạch (2026-08-19):** `bootstrap.ps1` nhận thêm tham số
+> `-InstallDir` để người dùng có ổ C: chật cài sang ổ khác; mặc định vẫn là
+> `%LOCALAPPDATA%\MangaTranslator`. Lý do: trên chính máy phát triển, C: chỉ còn
+> 13 GB trong khi D: còn 114 GB và E: còn 185 GB. Người dùng đã dời chỗ lưu Docker
+> sang ổ khác là chuyện phổ biến, và họ cũng sẽ muốn đặt thư mục cài cùng chỗ.
 - Produces: `Get-PreservedNames` (trả `[string[]]`), `Copy-ReleaseTree [string]$SourceDir [string]$TargetDir [string[]]$PreserveNames`, `Invoke-Bootstrap [string]$ZipUrl [string]$InstallDir`
 
 `bootstrap.ps1` là **updater**: giữ lại `.env`, `.docker-image-hash`, `result`, `logs` khi ghi đè.
@@ -2289,6 +2295,10 @@ Expected: đi hết 8 bước, self-test báo số vùng chữ, ba shortcut xu�
 - [ ] Nhập khoá API sai → hộp thoại báo "Khoá bị từ chối (401)" **trước** khi build
 - [ ] Tắt mạng rồi bấm "Kiểm tra khoá" → báo lỗi mạng, **không** báo khoá sai
 - [ ] Tắt Docker Desktop rồi bấm shortcut "Bật" → tự mở Docker và chờ
+- [ ] **Đóng cửa sổ launcher rồi chạy `docker ps`** → xác nhận container đã dừng.
+      `start.ps1` có `finally` gọi `Stop-Backend`, nhưng PowerShell KHÔNG trap được
+      nút X, nên đây là thứ duy nhất chứng minh được lời nhắc trên màn hình có đúng
+      hay không. Nếu container vẫn chạy, sửa lời nhắc chứ đừng hứa điều không làm được.
 - [ ] **Máy CHƯA cài Docker** (máy khác, hoặc gỡ Docker Desktop trước) → wizard đề nghị
       `winget install`, cài xong nhận biết trạng thái cần khởi động lại, và chạy lại
       `install.bat` sau reboot thì đi tiếp được. Đây là nhánh DUY NHẤT chưa có bất kỳ
