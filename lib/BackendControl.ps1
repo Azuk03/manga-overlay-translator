@@ -41,7 +41,11 @@ function Hide-Secrets {
 
 function Stop-Backend {
     param([string]$ContainerName)
-    docker stop $ContainerName 2>$null | Out-Null
+    # docker co the da bi go khoi may (nhat la khi chay uninstall) - loi
+    # phan giai lenh khong bi 2>$null chan lai, phai bat bang try/catch.
+    try {
+        docker stop $ContainerName 2>$null | Out-Null
+    } catch { }
 }
 
 function Start-Backend {
