@@ -4,7 +4,7 @@ foreach ($m in @('Ui', 'Shortcut', 'BackendControl')) { . (Join-Path $root "lib/
 Initialize-Ui
 
 Write-Step 'Gỡ cài đặt Manga Translator'
-$answer = Read-Host 'Xoá container, image (16 GB) và toàn bộ thư mục cài? (c/k)'
+$answer = Read-Host 'Xoá container và image (khoảng 16 GB), gỡ shortcut? Thư mục cài sẽ được giữ lại. (c/k)'
 if ($answer -ne 'c') { exit 0 }
 
 Stop-Backend -ContainerName 'manga_translator'

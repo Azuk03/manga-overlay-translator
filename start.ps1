@@ -29,5 +29,12 @@ if (Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath (Join-Path $ro
 } else {
     Write-Err 'Backend không sẵn sàng. Xem log: docker logs manga_translator'
 }
-Write-Warn 'Đóng cửa sổ này là tắt backend.'
-Wait-Job $job | Out-Null
+Write-Warn 'Nhấn Ctrl+C hoặc đóng cửa sổ này để dừng backend.'
+Write-Warn 'Nếu backend vẫn còn chạy sau đó, dừng bằng lệnh: docker stop manga_translator'
+try {
+    Wait-Job $job | Out-Null
+} finally {
+    # Chay khi Ctrl+C hoac khi script ket thuc binh thuong. Nut X dong cua
+    # so thi PowerShell khong trap duoc, nen van giu cau nhac lenh o tren.
+    Stop-Backend -ContainerName 'manga_translator'
+}
