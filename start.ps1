@@ -29,7 +29,7 @@ if (Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath (Join-Path $ro
 } else {
     Write-Err 'Backend không sẵn sàng. Xem log: docker logs manga_translator'
 }
-Write-Warn 'Nhấn Ctrl+C hoặc đóng cửa sổ này để dừng backend.'
+Write-Warn 'Nhấn Ctrl+C để dừng backend.'
 Write-Warn 'Nếu backend vẫn còn chạy sau đó, dừng bằng lệnh: docker stop manga_translator'
 try {
     Wait-Job $job | Out-Null
