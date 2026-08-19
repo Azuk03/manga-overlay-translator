@@ -20,9 +20,11 @@ Describe 'Get-ShortcutPlan' {
     It 'tên shortcut Desktop mà uninstall xoá phải khớp Get-ShortcutPlan' {
         $desktopItem = @(Get-ShortcutPlan -Root 'C:\app' | Where-Object { $_.OnDesktop })
         $desktopItem.Count | Should -Be 1
-        # Nếu đổi tên trong Get-ShortcutPlan thì assertion này đỏ ngay, buộc
-        # người sửa nhìn lại Remove-AppShortcuts.
+        # Tên Desktop lấy từ hằng số chung, nên hai hàm không thể lệch nhau.
         $desktopItem[0].Name | Should -Be 'Bật Manga Translator'
+        # Bảo đảm Get-ShortcutPlan không ném với đường dẫn tương đối/ngắn — lỗi cũ
+        # là gọi nó với chuỗi rỗng và Join-Path từ chối.
+        { Get-ShortcutPlan -Root '.' } | Should -Not -Throw
     }
 }
 
