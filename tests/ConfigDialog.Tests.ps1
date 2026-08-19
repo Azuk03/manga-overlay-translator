@@ -31,6 +31,20 @@ Describe 'Test-OpenAiKey' {
     }
 }
 
+Describe 'Get-StatusCodeFromWebException' {
+    It 'lấy được mã HTTP khi server có trả lời' {
+        $fake = [pscustomobject]@{ Response = [pscustomobject]@{ StatusCode = 401 } }
+        Get-StatusCodeFromWebException -Exception $fake | Should -Be 401
+    }
+    It 'trả 0 khi không có phản hồi nào (lỗi mạng thật)' {
+        $fake = [pscustomobject]@{ Response = $null }
+        Get-StatusCodeFromWebException -Exception $fake | Should -Be 0
+    }
+    It 'trả 0 khi exception là null' {
+        Get-StatusCodeFromWebException -Exception $null | Should -Be 0
+    }
+}
+
 Describe 'Save-ConfigToEnv' {
     It 'ghi mọi khoá và giữ nguyên comment sẵn có' {
         $p = Join-Path $TestDrive 'f.env'

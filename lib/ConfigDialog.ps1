@@ -26,11 +26,27 @@ function Test-OpenAiKey {
     return Get-KeyCheckVerdict -StatusCode ([int]$code) -NetworkFailed $false
 }
 
+# Tra ve ma HTTP lay tu WebException, hoac 0 neu khong he co phan hoi
+# (tuc la loi mang that su, khong phai server tra loi loi).
+function Get-StatusCodeFromWebException {
+    param([object]$Exception)
+    if ($null -eq $Exception) { return 0 }
+    $resp = $Exception.Response
+    if ($null -eq $resp) { return 0 }
+    return [int]$resp.StatusCode
+}
+
 function Invoke-OpenAiModelsCall {
     param([string]$Key, [string]$BaseUrl)
     $url = "$BaseUrl/models"
-    $r = Invoke-WebRequest -Uri $url -Headers @{ Authorization = "Bearer $Key" } -UseBasicParsing -TimeoutSec 20
-    return [int]$r.StatusCode
+    try {
+        $r = Invoke-WebRequest -Uri $url -Headers @{ Authorization = "Bearer $Key" } -UseBasicParsing -TimeoutSec 20
+        return [int]$r.StatusCode
+    } catch [System.Net.WebException] {
+        $code = Get-StatusCodeFromWebException -Exception $_.Exception
+        if ($code -gt 0) { return $code }
+        throw
+    }
 }
 
 function Save-ConfigToEnv {
