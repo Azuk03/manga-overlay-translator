@@ -13,6 +13,38 @@ function Test-EnoughDisk {
     return ($FreeGb -ge $RequiredGb)
 }
 
+# Bo tien to \\?\ ma WSL them vao BasePath trong registry.
+function ConvertFrom-WslBasePath {
+    param([string]$BasePath)
+    if ([string]::IsNullOrWhiteSpace($BasePath)) { return '' }
+    return ($BasePath -replace '^\\\\\?\\', '')
+}
+
+# Tra ve thu muc Docker Desktop THAT SU dung de chua du lieu (anh ~16GB
+# nam trong file .vhdx o day). KHONG duoc gia dinh %LOCALAPPDATA%: Docker
+# Desktop cho phep doi cho, va nguoi dung o C: chat thuong doi that.
+function Get-DockerDataPath {
+    try {
+        $lxss = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss' -ErrorAction SilentlyContinue
+        foreach ($k in $lxss) {
+            $p = Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue
+            if ($p.DistributionName -like 'docker-desktop*' -and $p.BasePath) {
+                return (ConvertFrom-WslBasePath -BasePath $p.BasePath)
+            }
+        }
+    } catch { }
+    try {
+        $f = Join-Path $env:APPDATA 'Docker\settings-store.json'
+        if (Test-Path $f) {
+            $j = Get-Content $f -Raw | ConvertFrom-Json
+            if ($j.PSObject.Properties.Name -contains 'CustomWslDistroDir' -and $j.CustomWslDistroDir) {
+                return $j.CustomWslDistroDir
+            }
+        }
+    } catch { }
+    return (Join-Path $env:LOCALAPPDATA 'Docker')
+}
+
 function Get-VramMbFromSmiOutput {
     param([string]$Text)
     $found = [regex]::Matches($Text, '(\d+)\s*MiB')

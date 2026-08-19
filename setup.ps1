@@ -31,13 +31,15 @@ function Invoke-Setup {
     if ($DryRun) { Write-Warn 'Chế độ thử: sẽ không build, không ghi .env, không tạo shortcut.' }
 
     Write-Step (Format-StepLine 1 $total $steps[0])
-    $freeGb = Get-FreeSpaceGb -Path $env:LOCALAPPDATA
+    $dockerData = Get-DockerDataPath
+    $freeGb = Get-FreeSpaceGb -Path $dockerData
     if (-not (Test-EnoughDisk -FreeGb $freeGb -RequiredGb 20.0)) {
-        Write-Err "Cần ít nhất 20 GB trống, ổ đĩa hiện còn $freeGb GB."
-        Write-Err 'Chỗ tốn dung lượng là file vhdx của WSL2, không phải thư mục cài.'
+        Write-Err "Cần ít nhất 20 GB trống trên ổ chứa dữ liệu Docker, hiện chỉ còn $freeGb GB."
+        Write-Err "Thư mục đó là: $dockerData"
+        Write-Err 'Dọn bớt ổ đó, hoặc đổi chỗ lưu trong Docker Desktop > Settings > Resources > Advanced.'
         return 1
     }
-    Write-Ok "Còn trống $freeGb GB."
+    Write-Ok "Ổ chứa dữ liệu Docker còn trống $freeGb GB ($dockerData)."
 
     Write-Step (Format-StepLine 2 $total $steps[1])
     if (-not (Test-DockerDaemonReady)) {

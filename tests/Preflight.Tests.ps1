@@ -15,6 +15,18 @@ Describe 'Get-FreeSpaceGb' {
     }
 }
 
+Describe 'ConvertFrom-WslBasePath' {
+    It 'bỏ tiền tố \\?\ mà WSL thêm vào' {
+        ConvertFrom-WslBasePath -BasePath '\\?\D:\Programs\docker\DockerDesktopWSL\main' | Should -Be 'D:\Programs\docker\DockerDesktopWSL\main'
+    }
+    It 'giữ nguyên đường dẫn không có tiền tố' {
+        ConvertFrom-WslBasePath -BasePath 'C:\Users\x\AppData\Local\Docker' | Should -Be 'C:\Users\x\AppData\Local\Docker'
+    }
+    It 'trả chuỗi rỗng khi đầu vào rỗng' {
+        ConvertFrom-WslBasePath -BasePath '' | Should -Be ''
+    }
+}
+
 Describe 'Get-VramMbFromSmiOutput' {
     It 'reads total VRAM from nvidia-smi line' {
         Get-VramMbFromSmiOutput -Text '4096 MiB' | Should -Be 4096
