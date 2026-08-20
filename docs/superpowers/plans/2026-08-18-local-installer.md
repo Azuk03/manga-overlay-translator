@@ -2284,6 +2284,13 @@ Không có bước nào ở đây tự động hoá được. Dự án này đã
 Run: `powershell -NoProfile -ExecutionPolicy Bypass -File setup.ps1 -DryRun`
 Expected: in đủ 8 bước, không build, không tạo shortcut, không mở hộp thoại
 
+> **CHẶN TRƯỚC KHI CHẠY STEP 2:** `install.bat` và `bootstrap.ps1` đều trỏ URL vào nhánh
+> `main`, mà toàn bộ công việc này đang ở `feature/local-installer`. Chạy `install.bat` bây
+> giờ sẽ tải ZIP của `main` — trong đó KHÔNG có `setup.ps1` — và `bootstrap.ps1` sẽ ném lỗi.
+> Phải merge trước, HOẶC sửa tạm hai URL đó trỏ vào nhánh rồi mới chạy. Kèm theo: `INSTALL.md`
+> bảo người dùng tải `install.bat` "ở mục Releases", mà chưa có release nào được tạo — phải
+> tạo release, hoặc sửa lại câu đó.
+
 - [ ] **Step 2: Cài sạch từ đầu**
 
 Đổi tên `%LOCALAPPDATA%\MangaTranslator` thành `...-backup`, xoá image
@@ -2335,6 +2342,43 @@ entry `'VIN': 'VI'` với hạng tài khoản đang dùng hay không.
 
 Expected: shortcut biến mất, container và image bị xoá, thư mục còn lại kèm lời
 nhắc xoá tay
+
+- [ ] **Step 3b: Nhánh build hỏng.** Đổi tạm `Dockerfile` thành lệnh sai (vd `FROM khong-ton-tai`)
+      rồi chạy setup. Kỳ vọng: log build HIỆN RA trên màn hình trong lúc chạy, setup DỪNG với
+      thông báo lỗi, và `.docker-image-hash` KHÔNG được ghi. Đây là nhánh từng bị lỗi
+      im lặng (build hỏng bị coi là thành công), nên phải nhìn tận mắt một lần.
+
+- [ ] **Step 3c: Cài vào ổ khác và cập nhật.** `install.bat -InstallDir "D:\Manga Translator"`
+      (cố ý có DẤU CÁCH trong tên). Cài xong bấm "Cập nhật Manga Translator" trong Start Menu.
+      Kỳ vọng: cập nhật ghi đè ĐÚNG thư mục D: đó, KHÔNG đẻ ra bản thứ hai ở
+      `%LOCALAPPDATA%`, và `.env` còn nguyên khoá.
+
+- [ ] **Step 3d: Đổi cấu hình.** Start Menu → "Cài đặt Manga Translator" → đổi model từ
+      `gpt-4o` sang `gpt-4o-mini` → Lưu. Bật lại backend rồi chạy
+      `docker inspect manga_translator --format '{{range .Config.Env}}{{println .}}{{end}}' | findstr OPENAI_MODEL`.
+      Kỳ vọng: thấy model MỚI. Đây là thứ quy tắc "tạo lại container chứ không restart" sinh ra để bảo đảm.
+
+- [ ] **Step 3e: Mở launcher lần thứ hai** trong khi đã có một cửa sổ đang chạy. Ghi lại
+      chuyện gì xảy ra với cả hai. Giới hạn đã biết: mỗi lần chỉ một backend (cùng bind cổng 5003).
+
+- [ ] **Step 3f: Backend chạy nhưng không dịch được.** Trong lúc launcher đang chờ, chạy
+      `docker exec manga_translator pkill -f "manga_translator shared"` để giết executor mà giữ
+      container sống. Kỳ vọng: launcher báo lỗi kèm hướng dẫn xem log. GHI CHÚ ĐÃ BIẾT:
+      `start.ps1` chỉ in câu nhắc lệnh `docker logs`, KHÔNG tự in log như `setup.ps1` làm —
+      đây là chỗ đã park có chủ đích, xác nhận nó không phải ngõ cụt là đủ.
+
+- [ ] **Step 8b: Xác minh bản sửa 502 với VPN.** BẬT WARP (hoặc VPN đang dùng), đọc một
+      chương trên nguồn truyện, xem `docker logs manga_translator | findstr 502`. Kỳ vọng:
+      KHÔNG còn dòng 502 nào, hoặc ít hơn hẳn mức ~4% đã đo trước đây. Đây là bài nghiệm thu
+      DUY NHẤT cho thay đổi backend của nhánh này (Task 14).
+
+- [ ] **Step 9b: Nhật ký không lộ secret.** Sau một lượt cài thật, chạy
+      `findstr /i "sk- Bearer" logs\*.log`. Kỳ vọng: KHÔNG khớp dòng nào. Spec mục 8.3 hứa điều này.
+
+- [ ] **Step 9c: Cảnh báo SmartScreen.** Chỉ hiện với file THỰC SỰ tải từ Internet (có
+      Mark-of-the-Web); chạy `install.bat` có sẵn trên máy sẽ KHÔNG hiện. Muốn kiểm đúng thứ
+      người dùng gặp thì phải tải file qua trình duyệt rồi mới bấm đúp. Nếu bỏ qua bước này,
+      phải sửa ảnh minh hoạ trong `INSTALL.md` cho khớp thực tế.
 
 - [ ] **Step 10: Ghi kết quả**
 
