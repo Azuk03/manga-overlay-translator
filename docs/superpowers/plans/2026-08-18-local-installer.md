@@ -18,6 +18,7 @@ Mọi task đều ngầm bao gồm các ràng buộc dưới đây.
 - **Pester phải import tường minh bản ≥ 5**: máy có sẵn cả Pester 3.4.0 (kèm Windows) lẫn 6.0.1. Lệnh chạy test luôn là:
   `Import-Module Pester -MinimumVersion 5.0 -Force; Invoke-Pester -Path tests -Output Detailed`
 - **Mọi script gốc bắt đầu bằng** `. lib/Ui.ps1` rồi `Initialize-Ui` (bật UTF-8). Văn bản cho người dùng viết **tiếng Việt có dấu**.
+- **MỌI file `.ps1` phải được lưu dưới dạng UTF-8 CÓ BOM.** Đây là ràng buộc bắt buộc, không phải sở thích: Windows PowerShell 5.1 đọc file nguồn phi-ASCII **không có BOM** bằng codepage ANSI, nên mọi chuỗi tiếng Việt trong file đó biến thành mojibake lúc chạy. Đã đo: cùng một file, không BOM in ra `KhÃ´ng xÃ¡c Ä‘á»‹nh...`, có BOM in ra `Không xác định được...`. Lưu ý đây là tầng KHÁC với `Initialize-Ui` — hàm đó sửa encoding của *đầu ra console*, còn BOM sửa encoding của *mã nguồn*; cần cả hai. Ghi file bằng `[System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($true)))`. `tests/Encoding.Tests.ps1` canh ràng buộc này cho mọi file.
 - **Không yêu cầu quyền Admin** ở bất kỳ bước nào (ngoại lệ duy nhất: chính winget tự bật UAC khi cài Docker).
 - Thư mục cài: `%LOCALAPPDATA%\MangaTranslator`.
 - Hằng số hạ tầng: image `manga-translator-patched:local`, container `manga_translator`, port REST `5003`.
@@ -302,7 +303,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `Read-EnvFile` (Task 2)
-- Produces: `Build-DockerRunArgs [hashtable]$EnvVars [bool]$HasGpu [string]$ContainerName [string]$ResultDir` (trả `[string[]]`), `Hide-Secrets [string[]]$Args` (trả `[string[]]`), `Stop-Backend [string]$ContainerName`, `Start-Backend [string[]]$DockerArgs`
+- Produces: `Build-DockerRunArgs [hashtable]$EnvVars [bool]$HasGpu [string]$ContainerName [string]$ResultDir` (trả `[string[]]`), `Hide-Secrets [string[]]$Arguments` (trả `[string[]]`), `Stop-Backend [string]$ContainerName`, `Start-Backend [string[]]$DockerArgs`
 
 Task này sửa luôn một lỗi có thật: `run-backend.ps1` dòng 84 chỉ che `OPENAI_API_KEY`, nên `GEMINI_API_KEY` và `DEEPL_AUTH_KEY` bị in nguyên văn ra console.
 
@@ -350,20 +351,20 @@ Describe 'Build-DockerRunArgs' {
 
 Describe 'Hide-Secrets' {
     It 'che OPENAI_API_KEY' {
-        (Hide-Secrets -Args @('-e', 'OPENAI_API_KEY=sk-abc')) | Should -Contain 'OPENAI_API_KEY=***'
+        (Hide-Secrets -Arguments @('-e', 'OPENAI_API_KEY=sk-abc')) | Should -Contain 'OPENAI_API_KEY=***'
     }
     It 'che CẢ GEMINI_API_KEY và DEEPL_AUTH_KEY (lỗi cũ chỉ che OpenAI)' {
-        $r = Hide-Secrets -Args @('-e', 'GEMINI_API_KEY=gk', '-e', 'DEEPL_AUTH_KEY=dk')
+        $r = Hide-Secrets -Arguments @('-e', 'GEMINI_API_KEY=gk', '-e', 'DEEPL_AUTH_KEY=dk')
         $r | Should -Contain 'GEMINI_API_KEY=***'
         $r | Should -Contain 'DEEPL_AUTH_KEY=***'
         ($r -join ' ') | Should -Not -BeLike '*gk*'
         ($r -join ' ') | Should -Not -BeLike '*dk*'
     }
     It 'KHÔNG che biến không phải secret' {
-        (Hide-Secrets -Args @('-e', 'OPENAI_MODEL=gpt-4o')) | Should -Contain 'OPENAI_MODEL=gpt-4o'
+        (Hide-Secrets -Arguments @('-e', 'OPENAI_MODEL=gpt-4o')) | Should -Contain 'OPENAI_MODEL=gpt-4o'
     }
     It 'không đụng tới tham số thường' {
-        (Hide-Secrets -Args @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
+        (Hide-Secrets -Arguments @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
     }
 }
 ```
@@ -400,8 +401,8 @@ function Build-DockerRunArgs {
 }
 
 function Hide-Secrets {
-    param([string[]]$Args)
-    return @($Args | ForEach-Object {
+    param([string[]]$Arguments)
+    return @($Arguments | ForEach-Object {
         $idx = $_.IndexOf('=')
         if ($idx -gt 0) {
             $name = $_.Substring(0, $idx)
@@ -1597,7 +1598,7 @@ function Invoke-Setup {
         Stop-Backend -ContainerName 'manga_translator'
         # KHÔNG đặt tên biến là $args — đó là biến tự động của PowerShell.
         $dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu $hasGpu -ContainerName 'manga_translator' -ResultDir $resultDir
-        Write-Host "  docker $((Hide-Secrets -Args $dockerArgs) -join ' ')"
+        Write-Host "  docker $((Hide-Secrets -Arguments $dockerArgs) -join ' ')"
         # Truyền MẢNG qua Start-Job, không nối chuỗi: đường dẫn result/ có thể
         # chứa dấu cách (tên tài khoản Windows), nối chuỗi sẽ tách sai tham số.
         # Dấu phẩy trước $dockerArgs để ArgumentList nhận nguyên mảng làm MỘT
@@ -1704,7 +1705,7 @@ $resultDir = Join-Path $root 'result'
 New-Item -ItemType Directory $resultDir -Force | Out-Null
 Stop-Backend -ContainerName 'manga_translator'
 $dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu (Test-NvidiaGpu) -ContainerName 'manga_translator' -ResultDir $resultDir
-Write-Host "  docker $((Hide-Secrets -Args $dockerArgs) -join ' ')"
+Write-Host "  docker $((Hide-Secrets -Arguments $dockerArgs) -join ' ')"
 
 $job = Start-Job -ScriptBlock { param($a) docker @a } -ArgumentList (, $dockerArgs)
 Write-Warn 'ĐANG KHỞI ĐỘNG… (lần đầu trong phiên có thể mất 1-2 phút để nạp model)'
@@ -1787,6 +1788,12 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: (không có — `bootstrap.ps1` phải chạy được khi máy CHƯA có gì)
+
+> **Bổ sung sau khi lập kế hoạch (2026-08-19):** `bootstrap.ps1` nhận thêm tham số
+> `-InstallDir` để người dùng có ổ C: chật cài sang ổ khác; mặc định vẫn là
+> `%LOCALAPPDATA%\MangaTranslator`. Lý do: trên chính máy phát triển, C: chỉ còn
+> 13 GB trong khi D: còn 114 GB và E: còn 185 GB. Người dùng đã dời chỗ lưu Docker
+> sang ổ khác là chuyện phổ biến, và họ cũng sẽ muốn đặt thư mục cài cùng chỗ.
 - Produces: `Get-PreservedNames` (trả `[string[]]`), `Copy-ReleaseTree [string]$SourceDir [string]$TargetDir [string[]]$PreserveNames`, `Invoke-Bootstrap [string]$ZipUrl [string]$InstallDir`
 
 `bootstrap.ps1` là **updater**: giữ lại `.env`, `.docker-image-hash`, `result`, `logs` khi ghi đè.
@@ -2189,7 +2196,7 @@ $resultDir = Join-Path $root 'result'
 New-Item -ItemType Directory $resultDir -Force | Out-Null
 
 $dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu (Test-NvidiaGpu) -ContainerName $containerName -ResultDir $resultDir
-Write-Host "Chạy: docker $((Hide-Secrets -Args $dockerArgs) -join ' ')"
+Write-Host "Chạy: docker $((Hide-Secrets -Arguments $dockerArgs) -join ' ')"
 Start-Backend -DockerArgs $dockerArgs
 ```
 
@@ -2277,6 +2284,13 @@ Không có bước nào ở đây tự động hoá được. Dự án này đã
 Run: `powershell -NoProfile -ExecutionPolicy Bypass -File setup.ps1 -DryRun`
 Expected: in đủ 8 bước, không build, không tạo shortcut, không mở hộp thoại
 
+> **CHẶN TRƯỚC KHI CHẠY STEP 2:** `install.bat` và `bootstrap.ps1` đều trỏ URL vào nhánh
+> `main`, mà toàn bộ công việc này đang ở `feature/local-installer`. Chạy `install.bat` bây
+> giờ sẽ tải ZIP của `main` — trong đó KHÔNG có `setup.ps1` — và `bootstrap.ps1` sẽ ném lỗi.
+> Phải merge trước, HOẶC sửa tạm hai URL đó trỏ vào nhánh rồi mới chạy. Kèm theo: `INSTALL.md`
+> bảo người dùng tải `install.bat` "ở mục Releases", mà chưa có release nào được tạo — phải
+> tạo release, hoặc sửa lại câu đó.
+
 - [ ] **Step 2: Cài sạch từ đầu**
 
 Đổi tên `%LOCALAPPDATA%\MangaTranslator` thành `...-backup`, xoá image
@@ -2288,6 +2302,14 @@ Expected: đi hết 8 bước, self-test báo số vùng chữ, ba shortcut xu�
 - [ ] Nhập khoá API sai → hộp thoại báo "Khoá bị từ chối (401)" **trước** khi build
 - [ ] Tắt mạng rồi bấm "Kiểm tra khoá" → báo lỗi mạng, **không** báo khoá sai
 - [ ] Tắt Docker Desktop rồi bấm shortcut "Bật" → tự mở Docker và chờ
+- [ ] **Đóng cửa sổ launcher rồi chạy `docker ps`** → xác nhận container đã dừng.
+      `start.ps1` có `finally` gọi `Stop-Backend`, nhưng PowerShell KHÔNG trap được
+      nút X, nên đây là thứ duy nhất chứng minh được lời nhắc trên màn hình có đúng
+      hay không. Nếu container vẫn chạy, sửa lời nhắc chứ đừng hứa điều không làm được.
+- [ ] **Máy CHƯA cài Docker** (máy khác, hoặc gỡ Docker Desktop trước) → wizard đề nghị
+      `winget install`, cài xong nhận biết trạng thái cần khởi động lại, và chạy lại
+      `install.bat` sau reboot thì đi tiếp được. Đây là nhánh DUY NHẤT chưa có bất kỳ
+      lớp test nào phủ, mà lại là thứ đầu tiên người dùng mới gặp.
 
 - [ ] **Step 4: Chạy lại setup lần hai (kiểm chứng tính idempotent)**
 
@@ -2321,6 +2343,43 @@ entry `'VIN': 'VI'` với hạng tài khoản đang dùng hay không.
 Expected: shortcut biến mất, container và image bị xoá, thư mục còn lại kèm lời
 nhắc xoá tay
 
+- [ ] **Step 3b: Nhánh build hỏng.** Đổi tạm `Dockerfile` thành lệnh sai (vd `FROM khong-ton-tai`)
+      rồi chạy setup. Kỳ vọng: log build HIỆN RA trên màn hình trong lúc chạy, setup DỪNG với
+      thông báo lỗi, và `.docker-image-hash` KHÔNG được ghi. Đây là nhánh từng bị lỗi
+      im lặng (build hỏng bị coi là thành công), nên phải nhìn tận mắt một lần.
+
+- [ ] **Step 3c: Cài vào ổ khác và cập nhật.** `install.bat -InstallDir "D:\Manga Translator"`
+      (cố ý có DẤU CÁCH trong tên). Cài xong bấm "Cập nhật Manga Translator" trong Start Menu.
+      Kỳ vọng: cập nhật ghi đè ĐÚNG thư mục D: đó, KHÔNG đẻ ra bản thứ hai ở
+      `%LOCALAPPDATA%`, và `.env` còn nguyên khoá.
+
+- [ ] **Step 3d: Đổi cấu hình.** Start Menu → "Cài đặt Manga Translator" → đổi model từ
+      `gpt-4o` sang `gpt-4o-mini` → Lưu. Bật lại backend rồi chạy
+      `docker inspect manga_translator --format '{{range .Config.Env}}{{println .}}{{end}}' | findstr OPENAI_MODEL`.
+      Kỳ vọng: thấy model MỚI. Đây là thứ quy tắc "tạo lại container chứ không restart" sinh ra để bảo đảm.
+
+- [ ] **Step 3e: Mở launcher lần thứ hai** trong khi đã có một cửa sổ đang chạy. Ghi lại
+      chuyện gì xảy ra với cả hai. Giới hạn đã biết: mỗi lần chỉ một backend (cùng bind cổng 5003).
+
+- [ ] **Step 3f: Backend chạy nhưng không dịch được.** Trong lúc launcher đang chờ, chạy
+      `docker exec manga_translator pkill -f "manga_translator shared"` để giết executor mà giữ
+      container sống. Kỳ vọng: launcher báo lỗi kèm hướng dẫn xem log. GHI CHÚ ĐÃ BIẾT:
+      `start.ps1` chỉ in câu nhắc lệnh `docker logs`, KHÔNG tự in log như `setup.ps1` làm —
+      đây là chỗ đã park có chủ đích, xác nhận nó không phải ngõ cụt là đủ.
+
+- [ ] **Step 8b: Xác minh bản sửa 502 với VPN.** BẬT WARP (hoặc VPN đang dùng), đọc một
+      chương trên nguồn truyện, xem `docker logs manga_translator | findstr 502`. Kỳ vọng:
+      KHÔNG còn dòng 502 nào, hoặc ít hơn hẳn mức ~4% đã đo trước đây. Đây là bài nghiệm thu
+      DUY NHẤT cho thay đổi backend của nhánh này (Task 14).
+
+- [ ] **Step 9b: Nhật ký không lộ secret.** Sau một lượt cài thật, chạy
+      `findstr /i "sk- Bearer" logs\*.log`. Kỳ vọng: KHÔNG khớp dòng nào. Spec mục 8.3 hứa điều này.
+
+- [ ] **Step 9c: Cảnh báo SmartScreen.** Chỉ hiện với file THỰC SỰ tải từ Internet (có
+      Mark-of-the-Web); chạy `install.bat` có sẵn trên máy sẽ KHÔNG hiện. Muốn kiểm đúng thứ
+      người dùng gặp thì phải tải file qua trình duyệt rồi mới bấm đúp. Nếu bỏ qua bước này,
+      phải sửa ảnh minh hoạ trong `INSTALL.md` cho khớp thực tế.
+
 - [ ] **Step 10: Ghi kết quả**
 
 Cập nhật mục "Progress Log" ở cuối kế hoạch này với những gì hỏng và đã sửa gì.
@@ -2329,4 +2388,121 @@ Cập nhật mục "Progress Log" ở cuối kế hoạch này với những gì
 
 ## Progress Log
 
-(Điền trong lúc thực hiện.)
+Chép nguyên văn từ ledger thực thi. Mọi dòng `Ruling:` là một quyết định controller
+tự ra thay người dùng, kèm cái giá phải trả nếu quyết sai.
+
+- Task 1: complete (commits 004fd9f..0317bf4, review clean) — spec ✅, quality approved
+- Task 1: minor (deferred): thiếu newline cuối file ở lib/Ui.ps1 và tests/Ui.Tests.ps1
+- Task 1: minor (deferred): test Initialize-Ui đổi codepage console thật, không khôi phục (kế thừa từ chính brief)
+- Task 2: review 1 — spec ✅, quality approved, 1 Important (BOM) + 2 Minor
+- Task 2: Ruling: finding BOM là plan-mandated (code trong brief dùng Set-Content -Encoding UTF8, PS5.1 luôn ghi BOM) — QUYẾT ĐỊNH SỬA. Spec mục 6 yêu cầu giữ nguyên file người dùng; ghi thêm BOM đi ngược mục đích module. Tác động thực tế nhỏ (Get-Content -Encoding UTF8 tự bỏ BOM, dự án không dùng docker --env-file) nhưng bản sửa 1 dòng. Sai thì tốn: gần như không gì.
+- Task 2: minor (deferred): Read-EnvFile bỏ luôn khoá có giá trị rỗng khỏi hashtable -> caller không phân biệt được "có dòng nhưng rỗng" với "không có dòng"
+- Task 2: minor (deferred): Initialize-EnvFile không có test, Copy-Item không guard khi thiếu .env.example
+- Task 2: Ruling: hệ quả của bản sửa BOM — .env giờ được ghi BOM-less, mà `Get-Content` KHÔNG kèm `-Encoding UTF8` trên PS 5.1 dùng ANSI codepage, nên đọc lại chữ có dấu sẽ mojibake trên máy không bật tuỳ chọn "UTF-8 worldwide". Production AN TOÀN (Read-EnvFile luôn truyền -Encoding UTF8); chỉ TEST bị ảnh hưởng, và trên máy này pass vì codepage đang là 65001. QUYẾT ĐỊNH: không sửa test Task 2 (đang pass, đúng hành vi), nhưng khi dispatch Task 9 phải yêu cầu assertion đọc `.env` dùng `-Encoding UTF8` để test đúng thật chứ không đúng nhờ may. Sai thì tốn: một test đỏ trên máy khác, phát hiện ngay lần chạy đầu.
+- Task 2: fix round 1/5 (1 addressed [BOM], 1 open MỚI [StreamWriter không try/finally]; commits 45b4773..be2eec3)
+- Task 2: minor (deferred): Set-EnvValue truncate-rồi-ghi (StreamWriter append=false) nên lỗi giữa lúc ghi làm .env của người dùng mất nội dung — không phải hồi quy (Set-Content cũ cũng vậy), plan không yêu cầu ghi nguyên tử. Ruling: hoãn. Sai thì tốn: rủi ro mất khoá API trong cửa sổ vài chục ms, người dùng nhập lại qua "Cài đặt".
+- Ghi chú kiểm chứng (không phải finding): Save-ImageHashMarker của T4 cũng ghi BOM, NHƯNG Get-Content -Raw tự bỏ BOM khi decode nên so sánh hash vẫn đúng (đo thật: file có EF BB BF, đọc lại dài 6, -eq trả True). KHÔNG cần sửa T4. Đừng đi lại nhánh này.
+- Task 2: Ruling: implementer agent chết 2 lần liên tiếp vì API error, cả 2 lần đúng ở bước git commit. Code fix đã hoàn chỉnh trong working tree do agent viết. QUYẾT ĐỊNH: controller tự chạy test (7/7 pass) và tự commit, KHÔNG resume lần 3. Lý do: phần còn lại chỉ là bookkeeping, không phải viết code; cổng chất lượng thật là scoped re-review và nó vẫn chạy đầy đủ trên diff này. Sai thì tốn: một commit không do agent tạo, nội dung không đổi.
+- Task 2: fix round 2/5 (1 addressed [StreamWriter try/finally], 0 open; commits be2eec3..121facc)
+- Task 2: complete (commits 0317bf4..121facc, review clean sau 2 fix round)
+- Task 3: review 0 (tự phát hiện trước khi review): implementer phải lách `$Args` bị che bằng [CmdletBinding()]+[Parameter]. Nguyên nhân gốc là LỖI PLAN của tôi — tôi cảnh báo T11 đừng dùng $args rồi chính tôi đặt tên tham số $Args ở T3.
+- Task 3: Ruling: ĐỔI TÊN tham số `Hide-Secrets -Args` thành `-Arguments`, bỏ workaround CmdletBinding. Lý do: cách lách chạy được nhưng vỡ âm thầm nếu ai sau này đơn giản hoá signature; T11/T12/T15 (3 chỗ gọi) chưa triển khai nên đổi giờ gần như miễn phí. Đã sửa plan + commit. Sai thì tốn: một vòng fix ở T3, các task sau không ảnh hưởng.
+- Ghi chú phòng ngừa: đã quét TOÀN BỘ plan tìm tên tham số trùng biến tự động PowerShell (Args/Input/Error/Host/Home/Matches/This/Event/Sender/PSItem/Profile/PWD). Sau khi đổi $Args -> $Arguments thì KHÔNG còn chỗ nào. Lớp lỗi này đã đóng, không cần soi lại ở các task sau.
+- Task 3: review 1 — spec ✅, quality approved, 1 Important (test không phủ "biến có mặt nhưng rỗng") + 2 Minor
+- Task 3: Ruling: Important #1 là plan-mandated (test trong brief của tôi thiếu ca này) — QUYẾT ĐỊNH SỬA. Domain fact "truyền giá trị rỗng tệ hơn không truyền" chính là lý do module tồn tại; implementation đang đúng nhưng không có test nào chặn hồi quy. Gộp luôn Minor #2 (GEMINI_MODEL không xuất hiện trong test nào) vì cùng vùng sửa. Sai thì tốn: 2 test thừa.
+- Task 3: minor (không sửa): Hide-Secrets dùng foreach thay pipeline như brief — hành vi y hệt, chỉ là style.
+- Task 3: ⚠️ đã tự giải quyết: reviewer không xác minh được "Pester >=5 thắng ở CI". Không có CI trong dự án này; plan quy định lệnh chạy tường minh ở Global Constraints và Task 15 step 4 chạy full suite bằng đúng lệnh đó. Không phải gap.
+- Ghi chú kiểm chứng (không phải finding): endpoint `/translate/with-form/json/stream` mà SelfTest.ps1 (T5) và setup.ps1 (T11) dùng ĐÃ được xác nhận có thật trong fixtures/openapi.json. Chưa gọi thử với backend đang chạy (container không bật lúc kiểm) — việc đó thuộc Task 16 step 2.
+- Task 3: fix round 1/5 (2 addressed, 0 open; commits ea34e98..25c960d)
+- Task 3: complete (commits 121facc..25c960d, review clean; kèm 1 commit sửa plan c485226)
+- Task 4: review 1 — spec ✅, quality approved, 1 Important (log build lỗi bị rác NativeCommandError) + 1 Minor
+- Task 4: Ruling: Important là plan-mandated (brief của tôi dùng `2>&1 | Tee-Object`). ĐO THẬT: 1 dòng stderr -> 8 dòng log, 6 dòng là boilerplate PowerShell; thêm `| ForEach-Object { "$_" }` -> 2 dòng sạch đúng nguyên văn, $LASTEXITCODE vẫn đúng. QUYẾT ĐỊNH SỬA: `Get-Content -Tail 20` là thông tin duy nhất người dùng nhận được sau lượt build lỗi 30 phút. Sai thì tốn: gần như không gì, đã đo.
+- Task 4: minor (deferred): Push-Location $Root không guard Test-Path -> nếu $Root không tồn tại thì ném exception thay vì trả $false. Không sửa trong vòng này (minor không vào fix loop).
+- Ghi chú kiểm chứng QUAN TRỌNG cho T6 (đo thật): với native exe ghi stderr rồi thoát 0, `$LASTEXITCODE` VẪN ĐÚNG (0), nhưng `$?` là False. Các hàm dò (Test-DockerDaemonReady/Test-NvidiaGpu/Test-WingetAvailable/Test-DockerImageExists) dùng $LASTEXITCODE nên ĐÚNG như plan viết. TUYỆT ĐỐI không đổi sang `$?` — sẽ báo "không có Docker" trên máy có Docker. Phải nói rõ điều này khi dispatch T6.
+- Task 4: fix round 1/5 (1 addressed, 0 open; commits f7fb421..cc54b64)
+- Task 4: complete (commits 25c960d..cc54b64, review clean)
+- Task 5: complete (commits cc54b64..4e73e52, review clean) — spec ✅, approved, 0 fix round
+- Task 5: LỖI PLAN #4 (implementer tự sửa đúng): brief viết `return $frames`, nhưng PS thu mảng 0 phần tử về $null và 1 phần tử về scalar -> chính test của brief sẽ fail. Sửa bằng `return ,$frames`. Reviewer đã tái hiện độc lập.
+- Task 5: minor (deferred): curl -s + không kiểm exit code -> nếu probe hỏng vì lý do khác (sai ImagePath, thiếu curl, firewall) thì Wait-BackendReady quay vòng hết timeout mà không có tín hiệu chẩn đoán nào.
+- Task 5: minor (deferred): mô tả test viết tiếng Anh, không đồng nhất với EnvFile/DockerImage (tiếng Việt) — repo chưa có quy ước thống nhất.
+- Task 6: review 1 — spec ✅ nhưng quality NOT APPROVED: 1 Critical + 2 Important. Tất cả là LỖI PLAN #5 của tôi.
+- Task 6: Ruling: Critical THẬT và phải sửa. `2>$null` KHÔNG bắt được CommandNotFoundException (lỗi phân giải lệnh xảy ra TRƯỚC khi process chạy), nên Test-NvidiaGpu ném exception trên đúng cái máy nó sinh ra để phát hiện: máy không có GPU thì không có nvidia-smi.exe. ĐÃ KIỂM CHỨNG: nhánh installer cũ của chính dự án (.claude/worktrees/feature+setup-installer/lib/SetupHelpers.ps1) CÓ try/catch — plan của tôi làm hồi quy so với code đã đúng.
+- Task 6: Ruling: lỗi này LAN sang Task 4 đã complete — Test-DockerImageExists cũng thiếu try/catch. Sửa luôn trong cùng lượt dispatch này thay vì mở lại Task 4 riêng. Sai thì tốn: diff của T6 chạm vào file của T4, reviewer có thể nêu là ngoài phạm vi — đã nói trước với reviewer.
+- Task 6: Ruling: Get-VramMbFromSmiOutput lấy match ĐẦU TIÊN, mà nvidia-smi thật in "512MiB / 4096MiB" (đã dùng trước, tổng sau) -> báo sai VRAM. Sửa thành lấy MAX của mọi số MiB (total >= used nên max luôn là total, đúng cho cả đầu vào một số). Hàm này hiện CHƯA ai gọi; spec mục 5 yêu cầu bước 3 đọc VRAM và cảnh báo nếu <4GB -> phải nối dây trong T11.
+- Ruling (mang sang T12): quét toàn plan cho lớp lỗi "gọi native exe không guard". Chỗ còn phơi THẬT là uninstall.ps1: `Stop-Backend` (docker stop, ở file của T3) và `docker image rm` (file của T12) đều không guard, mà gỡ cài đặt CHÍNH LÀ luồng người dùng có thể đã xoá Docker Desktop trước -> script gỡ crash. QUYẾT ĐỊNH: gộp cả hai guard vào dispatch của T12 (T12 sẽ chạm file của T3, sẽ nói trước với reviewer). Các chỗ còn lại (docker build, Start-Backend, curl.exe) chỉ chạy SAU khi đã xác nhận Docker/curl sẵn sàng nên chấp nhận không guard.
+- Task 6: fix round 1/5 (4 addressed: Critical + 2 Important + cross-task Test-DockerImageExists; commits ea196df..88324d1). Re-review phát hiện 1 Minor MỚI -> hoá ra là vấn đề hệ thống, xem dưới.
+- Task 6: LỖI PLAN #6 (nặng nhất tới giờ): thiếu ràng buộc "mọi .ps1 phải UTF-8 CÓ BOM". PS 5.1 đọc source phi-ASCII không BOM bằng ANSI codepage -> mọi chuỗi tiếng Việt thành mojibake lúc chạy. Tôi đã đo encoding của CONSOLE (Initialize-Ui) nhưng chưa bao giờ đo encoding của SOURCE — hai tầng khác nhau, cần cả hai. ĐO THẬT trên bản copy: không BOM -> "KhÃ´ng xÃ¡c Ä‘á»‹nh...", có BOM -> "Không xác định được...".
+- Task 6: Ruling: ĐO trạng thái hiện tại của cả 12 file -> 4 file có nội dung phi-ASCII mà KHÔNG có BOM (BackendControl.ps1 10 ký tự, Preflight.ps1 15, SelfTest.ps1 38, Preflight.Tests.ps1 11); Ui.ps1 có 54 ký tự kể cả ✓ ⚠ nhưng may là có BOM. QUYẾT ĐỊNH: (a) thêm ràng buộc vào Global Constraints của plan (đã commit), (b) sửa BOM cho 4 file, (c) thêm tests/Encoding.Tests.ps1 canh ràng buộc cho MỌI file — vì còn 11 file nữa sắp viết, toàn chữ tiếng Việt hướng tới người dùng. Sai thì tốn: một test hạ tầng thừa; nếu KHÔNG làm thì lỗi này tái diễn 11 lần nữa và chỉ lộ ra khi người dùng chạy thật.
+- Task 6: fix round 2/5 (1 addressed [BOM 4 file] + thêm tests/Encoding.Tests.ps1 canh cho mọi file; commits 88324d1..b03df61; 47 test / 7 file đều pass)
+- Ghi chú phòng ngừa (đã tách 16 khối PowerShell của task 7-15 ra kiểm): 0/16 khối có lỗi cú pháp (PSParser::Tokenize). Quét tiếp các lớp lỗi đã từng vấp: không còn `$?`, không còn `2>&1` chưa chuyển chuỗi, không còn tên tham số trùng biến tự động.
+- Ghi chú: NGHI VẤN SAI đã loại bằng đo thật — tưởng `return $out` ở T7 (Get-BrowserListFromPaths) sẽ làm test `.Count | Should -Be 0` fail như T5. ĐO BẰNG PESTER THẬT: PASS, vì $null.Count trả 0 và Pester chấp nhận. KHÔNG sửa plan T7. (T5 cần `,$array` vì lý do khác: test ở đó index $f[0] trên mảng 1 phần tử, bị thu về scalar.)
+- Ghi chú kỹ thuật cho mọi test file: hàm định nghĩa ở top-level KHÔNG thấy được trong `It` của Pester 5 — phải đặt trong `BeforeAll`. Các file test trong plan đều đã đúng.
+- Task 6: fix round 2 re-review: cả A (BOM 4 file) và B (Encoding.Tests.ps1) đều ADDRESSED, 0 breakage mới
+- Task 6: complete (commits 4e73e52..b03df61, review clean sau 2 fix round; kèm commit sửa plan cfe200e)
+- Ruling: GỘP Task 7 + Task 8 vào một dispatch (BrowserDetect + Shortcut). Lý do: cả hai là module nhỏ độc lập, brief chứa code đầy đủ, chỉ là chép lại + chạy test; phiên đã chạm session limit một lần nên giảm số lượt dispatch. Review vẫn chạy đủ trên diff gộp. Sai thì tốn: một review surface to hơn, nếu rối thì tách lại.
+- Task 7: complete (commit 62f69e8, review clean) — spec ✅, approved. Minor (deferred): HKLM thắng HKCU khi dò App Paths, ngược quy ước Windows thông thường nhưng brief không quy định.
+- Task 8: complete (commit 3dd9ac1, review clean) — spec ✅, approved.
+- Task 8: LỖI PLAN #7 (implementer tự sửa đúng): test `($plan | Where-Object {...}).Count | Should -Be 1` trong brief của tôi sẽ FAIL NGAY CẢ VỚI implementation ĐÚNG, vì pipeline trả 1 phần tử thì thu về scalar và scalar không có .Count. Sửa bằng `@(...)`. Reviewer tái hiện độc lập.
+- Task 8: Ruling: Important (Remove-AppShortcuts hardcode 'Bật Manga Translator.lnk' thay vì lấy Name từ Get-ShortcutPlan -> đổi tên là uninstall bỏ sót shortcut Desktop) là plan-mandated. QUYẾT ĐỊNH SỬA, nhưng GỘP vào dispatch của Task 10 thay vì mở một lượt riêng — phiên đã chạm session limit, và review của T10 sẽ phủ luôn diff này (sẽ nói rõ với reviewer). Sai thì tốn: review surface của T10 to hơn một chút.
+- Task 8: minor (deferred): New-AppShortcut không có ngữ nghĩa "sửa chữa" — .lnk cũ trỏ sai Root sẽ không bao giờ được cập nhật, chỉ no-op.
+- Task 9: review 1 — spec ✅ nhưng quality NOT APPROVED: 1 Critical + 2 Minor. LỖI PLAN #8.
+- Task 9: Ruling: Critical THẬT. Invoke-WebRequest trên PS 5.1 NÉM exception với mọi mã non-2xx (không có -SkipHttpErrorCheck, đó là PS6+), nên 401 "khoá sai" rơi vào catch của Test-OpenAiKey và bị báo thành 'network' — đảo ngược đúng cái phân biệt mà task sinh ra để làm, và test không bắt được vì test chỉ chạy qua Invoker giả. ĐO THẬT: khoá sai -> WebException CÓ .Response, [int]$resp.StatusCode = 401; host không tồn tại -> WebException KHÔNG có .Response. Tiêu chí phân biệt sạch. QUYẾT ĐỊNH SỬA + tách hàm thuần Get-StatusCodeFromWebException để có test. Sai thì tốn: gần như không gì, đã đo cả hai nhánh.
+- Task 9: fix round 1/5 (1 addressed [401 vs network], 0 open; commits 23fd8d5..5984aab; 15 test ConfigDialog, 73 full suite)
+- Task 9: complete (commits 3dd9ac1..5984aab, review clean sau 1 fix round)
+- Task 9: minor (deferred): nút "Kiểm tra khoá" chặn UI tối đa 20s, không có phản hồi trung gian.
+- Task 9: minor (deferred): chưa có hàm thuần cho việc map exception -> status code trước khi sửa; nay đã có Get-StatusCodeFromWebException.
+- Ghi chú kiểm chứng: đối chiếu MỌI adapter ra thế giới thật (docker/Invoke-WebRequest/curl.exe/Start-Process/winget/ComObject) với checklist Task 16. Task 16 đã phủ đúng hai nhánh của bug Task 9 (Step 3). Lỗ hổng DUY NHẤT: nhánh winget cài Docker trên máy chưa có — đã bổ sung vào Task 16 và commit (71e90df).
+- Task 10: review — Task 10 spec ✅/approved (1 Important kế thừa từ brief: bước 1 nói "trang vừa mở" kể cả khi không dò được browser nào). Bản sửa Shortcut: ❌ NOT APPROVED, Critical.
+- Task 10: LỖI PLAN #9 và lần này là do CHÍNH TÔI viết code sửa trong chỉ thị mà không chạy thử: `Get-ShortcutPlan -Root ''` ném lỗi vì Join-Path không nhận -Path rỗng -> Remove-AppShortcuts crash MỌI lần gọi -> uninstall hỏng hoàn toàn, TỆ HƠN trước khi sửa. Test mới không bắt được vì nó gọi -Root 'C:\app' chứ không gọi đúng đường mà Remove-AppShortcuts đi.
+- Task 10: Ruling: sửa bằng HẰNG SỐ DÙNG CHUNG ($script:DesktopShortcutName) cho cả hai hàm, bỏ hẳn việc gọi Get-ShortcutPlan với Root giả. ĐÃ THỬ NGHIỆM TRƯỚC KHI GIAO: hai bên khớp, không ném. Sai thì tốn: gần như không gì.
+- Task 10: Ruling: KHÔNG viết test gọi thẳng Remove-AppShortcuts — nó xoá shortcut Desktop và thư mục Start Menu THẬT của máy đang chạy test. Hàm này chỉ kiểm được bằng tay, đã có ở Task 16 Step 9.
+- Task 10: fix round 1 re-review: ADDRESSED, DRY giữ được (tên ở đúng 1 chỗ), không test nào gọi Remove-AppShortcuts, không breakage mới
+- Task 10: complete (commits 71e90df..ffaf045, review clean sau 1 fix round) — gồm cả Task 10 và bản sửa Shortcut của Task 8
+- Task 11: review 1 — spec ✅, quality approved, 3 Minor (đều kế thừa từ brief): (a) -DryRun không chặn Start-DockerDesktop/Wait-DockerDaemon và Read-Host khi không có GPU; (b) Get-SourceHash không try/catch nên thiếu Dockerfile sẽ ném ra ngoài, bỏ qua Stop-SetupTranscript; (c) logs/ chưa có trong .gitignore.
+- Task 11: NGƯỜI DÙNG YÊU CẦU (2026-08-19): "Chạy thử ở ổ D hoặc E, không chạm vào ổ C". Điều tra ra LỖI THIẾT KẾ THẬT: phép kiểm dung lượng đo %LOCALAPPDATA% (C:) nhưng dữ liệu Docker của máy này nằm ở D:\Programs\docker\DockerDesktopWSL (xác nhận qua registry WSL BasePath VÀ CustomWslDistroDir trong settings-store.json; tìm thấy docker_data.vhdx 49.29GB trên D:). C: còn 13GB -> installer CHẶN OAN, trong khi ổ thật (D:) còn 114.7GB. Ảnh hưởng mọi người dùng đã dời dữ liệu Docker (rất phổ biến khi C: nhỏ).
+- Task 11: Ruling: thêm Get-DockerDataPath (registry WSL -> settings-store.json -> mặc định %LOCALAPPDATA%\Docker) và dùng nó cho phép kiểm dung lượng thay vì %LOCALAPPDATA%. ĐÃ THỬ NGHIỆM nguyên mẫu: trả D:\Programs\docker\DockerDesktopWSL\main, 114.7GB, qua ngưỡng. Thông báo lỗi cũng nêu rõ ổ nào. Sai thì tốn: một vòng fix.
+- Ruling (mang sang T13): bootstrap.ps1 nên nhận -InstallDir để người có C: chật cài sang ổ khác. Mặc định vẫn %LOCALAPPDATA%\MangaTranslator.
+- Task 11: fix round 1 — controller tự chạy `setup.ps1 -DryRun` trên máy thật: qua đủ 8 bước, exit 0, báo "Ổ chứa dữ liệu Docker còn trống 114.7 GB (D:\Programs\docker\DockerDesktopWSL\main)" và "GPU NVIDIA (4096 MiB VRAM)", tiếng Việt đủ dấu, không build/không tạo gì.
+- Ghi chú (không phải finding): bước 5 báo "SẼ build" dù image 16.4GB đã tồn tại, vì .docker-image-hash chưa có. Lượt build đó sẽ dùng lại layer cache (Dockerfile+patches không đổi) nên xong trong vài giây, không phải 30 phút. Không sửa.
+- Task 11: fix round 1/5 re-review: ADDRESSED, 0 breakage mới (Get-FreeSpaceGb đã có guard nên đường dẫn lạ fail-loud thay vì rơi nhầm ổ)
+- Task 11: complete (commits ffaf045..2271c5c, review clean sau 1 fix round; 83 test)
+- Task 12: review 1 — spec ✅, approved, 2 Important + 2 Minor. Cả 2 Important đều kế thừa từ brief của tôi.
+- Task 12: Ruling: SỬA cả hai Important vì cả hai đều là NÓI SAI SỰ THẬT với người dùng. (a) uninstall.ps1 hỏi xin phép xoá "toàn bộ thư mục cài" rồi không xoá — prompt phá huỷ mà mô tả sai việc mình làm là không chấp nhận được. (b) start.ps1 hứa "đóng cửa sổ là tắt backend" mà không có gì bảo đảm; setup.ps1 còn dựa vào giả định NGƯỢC LẠI. Sửa thành: try/finally gọi Stop-Backend (phủ Ctrl+C và thoát bình thường) + đổi lời hứa thành câu đúng, kèm lệnh dự phòng. KHÔNG hứa chặn được nút X vì PowerShell không trap được force-close. Sai thì tốn: một vòng fix.
+- Task 12: minor (deferred): configure.ps1 dot-source lib/Preflight.ps1 nhưng không gọi hàm nào (import chết, kế thừa từ brief).
+- Task 12: minor (deferred): 3 script mới thiếu newline cuối file, khác quy ước các file khác trong repo.
+- Task 12: fix round 1/5 (1 addressed [prompt uninstall], 1 NOT ADDRESSED [lời nhắc start.ps1 vẫn liệt kê "đóng cửa sổ" ngang hàng Ctrl+C]; commits 259c453..17b40a5)
+- Task 12: Ruling: reviewer đúng — chỉ Ctrl+C mới chạy được finally, nên câu "Nhấn Ctrl+C HOẶC đóng cửa sổ này để dừng backend" vẫn là lời hứa sai. Sửa thành chỉ Ctrl+C; dòng dự phòng `docker stop manga_translator` đã lo trường hợp đóng cửa sổ.
+- Task 12: Ruling: "breakage mới" (finally có thể dừng container mà cửa sổ này không khởi động) — KHÔNG chấp nhận là breakage mới. Hai container KHÔNG THỂ chạy cùng lúc (cả hai đều bind cổng 5003), nên start.ps1 buộc phải Stop-Backend TRƯỚC khi khởi động cái của nó — hành vi đó đã có sẵn từ brief, không phải do bản fix sinh ra. finally chỉ đối xứng với nó. Ghi nhận là giới hạn đã biết: mỗi lần một backend. Sai thì tốn: người dùng mở 2 launcher thì cái trước bị dừng — đã đúng như vậy từ trước.
+- Task 12: fix round 2/5 (1 addressed [lời nhắc chỉ còn Ctrl+C], 0 open; commits 17b40a5..3036b52)
+- Task 12: complete (commits 2271c5c..3036b52, review clean sau 2 fix round)
+- Task 13: review 1 — spec ✅, approved, 1 Important (rò thư mục temp ở 2 nhánh lỗi của Invoke-Bootstrap) + 4 Minor
+- Task 13: Ruling: SỬA Important (try/finally dọn temp). Kế thừa từ brief của tôi. Mỗi lần cài/cập nhật hỏng để lại một thư mục mot-<guid> trong TEMP vĩnh viễn.
+- Task 13: Ruling: SỬA luôn finding 5 (install.bat không truyền được -InstallDir) dù reviewer xếp là "note, not a defect". Lý do: người dùng vừa YÊU CẦU cài off C:, mà luồng "tải một file duy nhất" là luồng họ sẽ dùng — thêm tham số vào bootstrap.ps1 nhưng để install.bat không với tới được thì tính năng coi như không tồn tại với người dùng thật. ĐÃ THỬ NGHIỆM cách truyền `%*` qua .bat: chạy đúng cả khi có lẫn không có tham số. Sai thì tốn: một dòng trong .bat.
+- Task 13: minor (deferred): thông báo "Gói tải về không đúng cấu trúc mong đợi" không nói người dùng phải làm gì; $ZIP_ROOT_NAME hardcode (nhưng fail an toàn, có guard); nhánh fallback của -InstallDir không có test (nằm trong `if (-not $AsModule)` nên harness không vào được).
+- Task 13: fix round 1/5 (2 addressed [dọn temp bằng try/finally, install.bat truyền %*], 0 open; commits 043f4af..04b449a)
+- Task 13: complete (commits 3036b52..04b449a, review clean sau 1 fix round; 89 test)
+- Task 14: Ruling: KHÔNG chạy `docker build` trong task này. Container manga_translator ĐANG CHẠY (người dùng bật lại để đọc truyện), và rebuild sẽ thay image họ đang dùng. Người dùng chưa trả lời câu hỏi về thời điểm rebuild, và thông báo nền KHÔNG phải là sự đồng ý. Làm hết phần code + test (test chạy qua `docker cp` + `docker exec` vào container đang chạy, chỉ ghi vào /tmp, không phá gì), để lượt build thật cho người dùng / Task 16 step 2. Hệ quả đúng ý đồ: Dockerfile+patches đổi -> Get-SourceHash đổi -> installer sẽ tự rebuild ở lần chạy thật đầu tiên.
+- Task 14: review 1 — spec ✅, approved (bước rebuild bỏ qua ĐÚNG theo ruling của tôi). 2 điểm "Important nhưng không chặn" + 2 Minor.
+- Task 14: complete (commits 04b449a..95b1cf3, review clean, 0 fix round) — 89 test PowerShell + test Python pass trong container, main.py giữ BOM.
+- Task 14: Ruling: SỬA connect timeout 8s -> 12s. Lý do: đo thật cho thấy connect thành công (WARP bật) trải từ 2.5s tới 10s; timeout 8s sẽ HUỶ những kết nối lẽ ra thành công, biến chúng thành lỗi. Biến "chậm mà được" thành "hỏng" tệ hơn là chờ lâu trên nhánh vốn đã hỏng. Đánh đổi: worst case 3 lần thử tăng từ ~25.5s lên ~37.5s, chỉ xảy ra trên đường đã thất bại. GỘP vào dispatch Task 15 (khác file, không xung đột) thay vì mở vòng fix riêng — phiên đã chạm session limit 2 lần. Sai thì tốn: một ảnh hiếm hoi quay lâu hơn.
+- Task 14: minor (deferred): thông báo lỗi hardcode "sau 3 lan thu" trong khi attempts là default của hàm -> có thể lệch nếu đổi default; import `from http_retry import` khác quy ước package-style của các patch khác (chạy đúng, chỉ là khác kiểu).
+- Task 14: minor (deferred): worst case 25.5s (nay 37.5s) không bị client cắt — background.js gọi /fetch-image không đặt AbortSignal. Trần độ trễ, không phải lỗi chức năng.
+- Task 15: complete (commits 95b1cf3..cb9f1c1, review clean, 0 fix round, 0 finding) — kèm bản sửa CONNECT_TIMEOUT 8->12 của T14
+- Task 15: implementer tự bắt được 1 chỗ INSTALL.md nói sai so với code (yêu cầu "20 GB trên ổ C:" trong khi code dò đúng thư mục dữ liệu Docker) và sửa theo code. Reviewer xác nhận bản sửa đúng và không còn chỗ sai nào khác.
+- TẤT CẢ 15 task code HOÀN TẤT. Task 16 là checklist người thật, không thuộc phạm vi agent.
+
+## Review toàn nhánh (opus) — KHÔNG ĐẠT, 2 Critical + 6 Important
+- Critical #1 ĐÃ TỰ KIỂM CHỨNG trên backend đang chạy: `-F "config=$cfg"` bị PS 5.1 nuốt mất dấu nháy kép -> server trả "Internal Server Error" (21 byte, 0 frame) -> Wait-BackendReady quay hết 600s -> setup CHẾT ở bước 6, KHÔNG BAO GIỜ tạo shortcut, và start.ps1 hằng ngày cũng vậy. Bản sửa (ghi config ra file, `-F "config=<file"`) ĐÃ THỬ: 20917 byte, 14 frame, kết thúc status=0 có bản dịch thật.
+- Critical #2 ĐÃ TỰ KIỂM CHỨNG: Invoke-ImageBuild kết thúc pipeline bằng Tee-Object không ai tiêu thụ -> hàm trả Object[] gồm log + bool -> `-not $r` luôn False -> build HỎNG bị coi là THÀNH CÔNG, và toàn bộ log build 10-30 phút bị nuốt (người dùng nhìn cửa sổ đứng im).
+- Cả 15 lượt review từng-task đều bỏ sót cả hai, vì chúng chỉ lộ ra khi chạy thật đầu-cuối.
+- Reviewer BÁC BỎ 2 ruling của tôi và tôi đồng ý: (a) T5 "curl không kiểm exit code" tôi xếp minor — thực ra là thứ khuếch đại Critical #1 thành 10 phút treo im lặng; (b) T8 "shortcut không sửa chữa" tôi xếp minor — cộng với bug -InstallDir thì người cài off C: có shortcut trỏ mãi vào thư mục updater không còn quản.
+- Ledger line 63 của tôi SAI: "setup.ps1 thoát thì container dừng theo" — không đúng, giết client docker trên Windows không dừng container.
+- Fix wave sau review toàn nhánh: 8/8 fix xong, commit 310fa76, 90 test pass, setup.ps1 -DryRun vẫn qua đủ 8 bước exit 0.
+- Fix 1 ĐÃ KIỂM CHỨNG SỐNG sau khi sửa: "20917 bytes, 14 frames, result frame: OK" (trước khi sửa: 21 byte, 0 frame, NULL).
+- >>> NGƯỜI DÙNG YÊU CẦU TẠM DỪNG tại đây (2026-08-19).
+- CÒN LẠI KHI QUAY LẠI: (1) một lượt scoped re-review duy nhất trên diff cb9f1c1..310fa76 để đóng fix wave; (2) vá 8 lỗ hổng của checklist Task 16 mà reviewer nêu (chưa làm); (3) bàn giao Task 16 cho người thật; (4) finishing-a-development-branch. KHÔNG có task code nào còn dang dở.
+- Fix wave re-review: 7/8 ADDRESSED. Finding 3 PARTIALLY — start.ps1 chưa tự in `docker logs --tail 20` ở nhánh "container chạy nhưng không dịch được" (setup.ps1 thì có).
+- Ruling: PARK finding 3 phần còn lại. Quy trình cấm đợt fix thứ hai sau review toàn nhánh, và đây không phải ngõ cụt — start.ps1 vẫn in đúng lệnh `docker logs manga_translator` để người dùng tự chạy. Đã thêm Step 3f vào checklist Task 16 để người thật xác nhận nó không phải ngõ cụt. Sai thì tốn: người dùng phải tự gõ một lệnh đã được in sẵn.
+- Ruling: 2 Minor mới từ fix wave (New-AppShortcut giờ đọc .lnk cũ nên .lnk hỏng có thể ném COM; repair chỉ so Arguments chứ không so TargetPath) — KHÔNG sửa. Cái thứ nhất đã được try/catch top-level của setup.ps1 hứng thành thông báo tiếng Việt tử tế; cái thứ hai hẹp hơn trạng thái trước fix (vốn không sửa gì bao giờ). Sai thì tốn: gần như không gì.
+- Đã vá 8 lỗ hổng checklist Task 16 (commit 798238b), gồm cảnh báo CHẶN: install.bat/bootstrap.ps1 trỏ vào `main` nên Step 2 không chạy được trước khi merge, và INSTALL.md trỏ tới Releases chưa tồn tại.
+

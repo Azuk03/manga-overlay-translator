@@ -1,85 +1,26 @@
-# Doc bien tu .env va chay container manga-image-translator (backend).
-# Dung: .\run-backend.ps1
-# Ly do khong dung "docker run --env-file .env" truc tiep: cac bien rong (OPENAI_API_BASE, BACKEND_PORT)
-# se bi Docker set thanh chuoi rong trong container thay vi "khong set" -> co the ghi de default cua app.
-# Script nay chi truyen -e cho bien nao THAT SU co gia tri.
+﻿# run-backend.ps1
+# Lớp mỏng cho việc phát triển. Người dùng cuối dùng shortcut "Bật Manga
+# Translator" (start.ps1). Mọi logic docker nằm ở lib/BackendControl.ps1 để
+# không có hai bản trôi dạt khỏi nhau.
+$root = $PSScriptRoot
+foreach ($m in @('Ui', 'EnvFile', 'BackendControl', 'Preflight')) { . (Join-Path $root "lib/$m.ps1") }
+Initialize-Ui
 
-$envFile = Join-Path $PSScriptRoot ".env"
-if (-not (Test-Path $envFile)) {
-    Write-Error ".env khong ton tai. Copy tu .env.example va dien OPENAI_API_KEY truoc."
+$envPath = Join-Path $root '.env'
+if (-not (Test-Path $envPath)) {
+    Write-Err '.env không tồn tại. Copy từ .env.example và điền OPENAI_API_KEY trước.'
     exit 1
 }
-
-$vars = @{}
-Get-Content $envFile | ForEach-Object {
-    $line = $_.Trim()
-    if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
-        $idx = $line.IndexOf("=")
-        $key = $line.Substring(0, $idx).Trim()
-        $val = $line.Substring($idx + 1).Trim()
-        if ($val) { $vars[$key] = $val }
-    }
-}
-
-if (-not $vars.ContainsKey("OPENAI_API_KEY")) {
-    Write-Error "OPENAI_API_KEY dang trong trong .env. Dien key that vao truoc khi chay."
+$vars = Read-EnvFile -Path $envPath
+if (-not $vars.ContainsKey('OPENAI_API_KEY')) {
+    Write-Err 'OPENAI_API_KEY đang trống trong .env.'
     exit 1
 }
+$containerName = 'manga_translator'
+if ($vars.ContainsKey('CONTAINER_NAME')) { $containerName = $vars['CONTAINER_NAME'] }
+$resultDir = Join-Path $root 'result'
+New-Item -ItemType Directory $resultDir -Force | Out-Null
 
-$containerName = if ($vars.ContainsKey("CONTAINER_NAME")) { $vars["CONTAINER_NAME"] } else { "manga_translator" }
-
-$dockerArgs = @(
-    "run", "--rm",
-    "--name", $containerName,
-    "-p", "5003:5003",
-    "-p", "8000:8000",
-    "-p", "8001:8001",
-    "--ipc=host",
-    "--gpus", "all",
-    "--entrypoint", "python",
-    "-v", "$PSScriptRoot/result:/app/result",
-    # KHONG mount fonts/ -> mount thu muc rong se de len font co san trong image
-    # (vd Arial-Unicode-Regular.ttf can cho render VIN), gay loi "No such file or directory".
-    # San pham cuoi khong dung font backend (xem spec A.1) nen khong can mount o day.
-    "-e", "OPENAI_API_KEY=$($vars['OPENAI_API_KEY'])"
-)
-
-if ($vars.ContainsKey("OPENAI_MODEL")) {
-    $dockerArgs += "-e"; $dockerArgs += "OPENAI_MODEL=$($vars['OPENAI_MODEL'])"
-}
-if ($vars.ContainsKey("OPENAI_API_BASE")) {
-    $dockerArgs += "-e"; $dockerArgs += "OPENAI_API_BASE=$($vars['OPENAI_API_BASE'])"
-}
-if ($vars.ContainsKey("GEMINI_API_KEY")) {
-    $dockerArgs += "-e"; $dockerArgs += "GEMINI_API_KEY=$($vars['GEMINI_API_KEY'])"
-}
-if ($vars.ContainsKey("GEMINI_MODEL")) {
-    $dockerArgs += "-e"; $dockerArgs += "GEMINI_MODEL=$($vars['GEMINI_MODEL'])"
-}
-if ($vars.ContainsKey("DEEPL_AUTH_KEY")) {
-    $dockerArgs += "-e"; $dockerArgs += "DEEPL_AUTH_KEY=$($vars['DEEPL_AUTH_KEY'])"
-}
-
-$dockerArgs += @(
-    # Dung image da va bug to_json.py (xem Dockerfile + patches/to_json.py).
-    # Neu can rebuild: docker build -t manga-translator-patched:local .
-    "manga-translator-patched:local",
-    # KHONG dung --verbose: xac nhan trong source (manga_translator.py) moi
-    # anh debug (input.png, bboxes.png, mask_final.png, inpaint_input.png,
-    # final.png, thu muc ocrs/*.png) chi duoc ghi khi self.verbose=True (tu
-    # cung dung --verbose nay). Do that: 1 lan dich (25 vung sau khi GPT
-    # retry/split) ghi ra ~69MB PNG (bboxes.png/input.png/inpainted.png...
-    # moi file 9-12MB) vao result/ - thu muc nay mount tu Windows qua WSL2
-    # (Docker Desktop), noi tieng CHAM cho I/O nhieu file/file lon. Do
-    # thuc te: khoang trong "vo hinh" 11-48 giay giua log buoc cuoi
-    # ("Running rendering") va luc response THAT SU gui xong khop chinh
-    # xac voi gia thuyet nay. Log tien do (Loading models/Running text
-    # detection/.../GPT Prompt-Response) la logger.info() rieng, KHONG bi
-    # --verbose gate - van hien day du sau khi bo co nay, chi mat phan ghi
-    # anh debug (khong dung boi userscript, chi de debug backend luc dau).
-    "server/main.py", "--start-instance", "--host=0.0.0.0", "--port=5003",
-    "--use-gpu", "--models-ttl", "0", "--nonce", "None"
-)
-
-Write-Host "Chay: docker $($dockerArgs -replace $vars['OPENAI_API_KEY'], '***REDACTED***')"
-docker @dockerArgs
+$dockerArgs = Build-DockerRunArgs -EnvVars $vars -HasGpu (Test-NvidiaGpu) -ContainerName $containerName -ResultDir $resultDir
+Write-Host "Chạy: docker $((Hide-Secrets -Arguments $dockerArgs) -join ' ')"
+Start-Backend -DockerArgs $dockerArgs

@@ -14,6 +14,10 @@ COPY patches/gpt_config-vi.yaml /app/gpt_config-vi.yaml
 # muc 2/6) - route nay de backend tu tai anh ho kem Referer dung.
 COPY patches/main.py /app/server/main.py
 
+# Retry + ep IPv4 cho /fetch-image (xem patches/http_retry.py). Tach file rieng
+# de test duoc doc lap voi FastAPI app.
+COPY patches/http_retry.py /app/server/http_retry.py
+
 # Va bug: _LANGUAGE_CODE_MAP trong deepl.py chua co entry 'VIN' du DeepL API
 # that da ho tro tieng Viet tu 6/2025 (code backend chua cap nhat theo) - xem
 # docs/superpowers/specs/2026-07-23-translator-engine-picker-design.md muc 3.

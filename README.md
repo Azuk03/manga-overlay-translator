@@ -1,5 +1,10 @@
 # Manga Overlay Translator — Backend (Giai đoạn A + B)
 
+## Cài đặt cho người dùng cuối
+
+Tải `install.bat` ở mục Releases rồi bấm đúp. Xem [INSTALL.md](INSTALL.md).
+Phần còn lại của tài liệu này là ghi chép kỹ thuật cho người phát triển.
+
 Backend tự host `manga-image-translator`, đã dò schema thật + vá 1 bug, sẵn sàng cho Giai đoạn C (viết userscript).
 
 ## Cài đặt (khuyến nghị: Extension)
