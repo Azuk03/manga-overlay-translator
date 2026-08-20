@@ -33,13 +33,28 @@ function Invoke-TranslateProbe {
     if ($DetectOnly) { $translator = 'none' }
     $config = '{"translator":{"translator":"' + $translator + '","target_lang":"VIN"},"render":{"renderer":"none"}}'
     $tmp = Join-Path $env:TEMP ("mot-probe-" + [guid]::NewGuid().ToString() + ".bin")
+    $cfgFile = Join-Path $env:TEMP ("mot-cfg-" + [guid]::NewGuid().ToString() + ".json")
+    [System.IO.File]::WriteAllText($cfgFile, $config, (New-Object System.Text.UTF8Encoding($false)))
     # curl.exe có sẵn trong Windows 10+; Invoke-RestMethod -Form chỉ có từ PS 6.
     # Ghi ra file thay vì bắt stdout: PowerShell làm hỏng dữ liệu nhị phân qua pipe.
-    curl.exe -s -o $tmp -F "image=@$ImagePath" -F "config=$config" "$BaseUrl/translate/with-form/json/stream" | Out-Null
-    if (-not (Test-Path $tmp)) { return @() }
+    try {
+        # PS 5.1 nuot dau nhay kep khi dung dong lenh cho native exe, nen KHONG
+        # duoc truyen JSON truc tiep vao -F. Doc tu file la cach duy nhat dung
+        # bat ke quy tac trich dan cua PowerShell. Da do that: truyen truc tiep
+        # -> "Internal Server Error"; doc tu file -> 14 frame, co status 0.
+        curl.exe -s -o $tmp -F "image=@$ImagePath" -F "config=<$cfgFile" "$BaseUrl/translate/with-form/json/stream" | Out-Null
+        $curlExit = $LASTEXITCODE
+    } finally {
+        Remove-Item $cfgFile -ErrorAction SilentlyContinue
+    }
+    if ($curlExit -ne 0) {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+        return [byte[]]@()
+    }
+    if (-not (Test-Path $tmp)) { return [byte[]]@() }
     $bytes = [System.IO.File]::ReadAllBytes($tmp)
     Remove-Item $tmp -ErrorAction SilentlyContinue
-    return $bytes
+    return [byte[]]$bytes
 }
 
 function Wait-BackendReady {

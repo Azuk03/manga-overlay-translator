@@ -10,7 +10,8 @@ Write-Ok 'Đã lưu cấu hình.'
 
 # PHẢI tạo lại container, KHÔNG dùng docker restart: OPENAI_MODEL chỉ được nạp
 # lúc tạo container nên restart sẽ âm thầm giữ model cũ.
-Write-Warn 'Đang khởi động lại backend để áp dụng cấu hình mới...'
+Write-Warn 'Đang dừng backend để cấu hình mới có hiệu lực...'
 Stop-Backend -ContainerName 'manga_translator'
+Write-Warn 'Nếu đang mở cửa sổ "Bật Manga Translator", cửa sổ đó sẽ tự kết thúc.'
 Write-Ok 'Xong. Bấm shortcut "Bật Manga Translator" để chạy lại với cấu hình mới.'
 Read-Host 'Enter để đóng'

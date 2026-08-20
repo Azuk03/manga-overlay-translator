@@ -17,6 +17,11 @@ Describe 'Get-ShortcutPlan' {
     It 'trỏ tới đúng script dưới thư mục gốc' {
         ($plan | Where-Object { $_.Name -eq 'Bật Manga Translator' }).Script | Should -Be 'C:\app\start.ps1'
     }
+    It 'mục Cập nhật mang theo -InstallDir trỏ về đúng thư mục gốc' {
+        $u = $plan | Where-Object { $_.Name -eq 'Cập nhật Manga Translator' }
+        $u.Arguments | Should -Match '-InstallDir'
+        $u.Arguments | Should -Match ([regex]::Escape('C:\app'))
+    }
     It 'tên shortcut Desktop mà uninstall xoá phải khớp Get-ShortcutPlan' {
         $desktopItem = @(Get-ShortcutPlan -Root 'C:\app' | Where-Object { $_.OnDesktop })
         $desktopItem.Count | Should -Be 1

@@ -133,7 +133,18 @@ function Invoke-Setup {
         Write-Warn 'Đang chờ backend sẵn sàng và tải model lần đầu (có thể vài phút)...'
         $probeImg = Join-Path $Root 'fixtures/cjk_vertical_test.png'
         if (-not (Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath $probeImg -TimeoutSec 600)) {
-            Write-Err 'Backend không sẵn sàng sau 10 phút. Xem log: docker logs manga_translator'
+            Write-Err 'Backend không sẵn sàng sau 10 phút.'
+            if ($backendJob.State -ne 'Running') {
+                Write-Err 'Tiến trình docker đã thoát. Đầu ra cuối của nó:'
+                Receive-Job $backendJob 2>&1 | Select-Object -Last 20 | ForEach-Object { Write-Host "    $_" }
+            } else {
+                Write-Err 'Container vẫn chạy nhưng chưa dịch được. 20 dòng log cuối:'
+                try {
+                    docker logs --tail 20 manga_translator 2>&1 | ForEach-Object { Write-Host "    $_" }
+                } catch {
+                    Write-Err '  (không gọi được docker logs)'
+                }
+            }
             return 1
         }
         Write-Ok 'Backend sẵn sàng (detect + OCR + GPU chạy được).'
@@ -163,7 +174,14 @@ if (-not $AsModule) {
     # Dừng transcript ở ĐÂY chứ không trong Invoke-Setup: hàm đó có nhiều lối
     # ra bằng `return 1` / `return 2`, đặt trong thân hàm sẽ bỏ sót các nhánh
     # lỗi — đúng những lần ta cần nhật ký nhất.
-    $code = Invoke-Setup -Root $PSScriptRoot -DryRun ([bool]$DryRun)
+    try {
+        $code = Invoke-Setup -Root $PSScriptRoot -DryRun ([bool]$DryRun)
+    } catch {
+        Write-Err 'Cài đặt dừng lại vì một lỗi không lường trước.'
+        Write-Err ("Chi tiết: " + $_.Exception.Message)
+        Write-Err 'Hãy gửi file log trong thư mục logs\ để được hỗ trợ, rồi thử chạy lại.'
+        $code = 1
+    }
     Stop-SetupTranscript
     exit $code
 }

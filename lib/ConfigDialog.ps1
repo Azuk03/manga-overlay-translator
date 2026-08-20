@@ -93,15 +93,23 @@ function Show-ConfigDialog {
     $lblVerdict.Location = New-Object System.Drawing.Point(140, 75)
     $lblVerdict.AutoSize = $true
     $btnCheck.Add_Click({
-        $base = 'https://api.openai.com/v1'
-        $verdict = Test-OpenAiKey -Key $txtKey.Text -BaseUrl $base -Invoker ${function:Invoke-OpenAiModelsCall}
-        $msg = @{
-            'ok'      = 'Khoá dùng được.'
-            'invalid' = 'Khoá bị từ chối (401). Kiểm tra lại.'
-            'network' = 'Không nối được mạng — chưa kết luận được về khoá.'
-            'unknown' = 'Máy chủ trả mã lạ, chưa kết luận được.'
-        }[$verdict]
-        $lblVerdict.Text = $msg
+        $btnCheck.Enabled = $false
+        $lblVerdict.Text = 'Đang kiểm tra…'
+        $btnCheck.Refresh()
+        $lblVerdict.Refresh()
+        try {
+            $base = 'https://api.openai.com/v1'
+            $verdict = Test-OpenAiKey -Key $txtKey.Text -BaseUrl $base -Invoker ${function:Invoke-OpenAiModelsCall}
+            $msg = @{
+                'ok'      = 'Khoá dùng được.'
+                'invalid' = 'Khoá bị từ chối (401). Kiểm tra lại.'
+                'network' = 'Không nối được mạng — chưa kết luận được về khoá.'
+                'unknown' = 'Máy chủ trả mã lạ, chưa kết luận được.'
+            }[$verdict]
+            $lblVerdict.Text = $msg
+        } finally {
+            $btnCheck.Enabled = $true
+        }
     })
     $form.Controls.Add($btnCheck)
     $form.Controls.Add($lblVerdict)

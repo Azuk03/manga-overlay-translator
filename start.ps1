@@ -27,7 +27,12 @@ Write-Warn 'ĐANG KHỞI ĐỘNG… (lần đầu trong phiên có thể mất 1
 if (Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath (Join-Path $root 'fixtures/cjk_vertical_test.png') -TimeoutSec 600) {
     Write-Ok 'ĐÃ SẴN SÀNG — vào trang truyện và bấm Alt+D.'
 } else {
-    Write-Err 'Backend không sẵn sàng. Xem log: docker logs manga_translator'
+    if ($job.State -ne 'Running') {
+        Write-Err 'Tiến trình docker đã thoát:'
+        Receive-Job $job 2>&1 | Select-Object -Last 20 | ForEach-Object { Write-Host "    $_" }
+    } else {
+        Write-Err 'Backend không sẵn sàng. Xem log: docker logs manga_translator'
+    }
 }
 Write-Warn 'Nhấn Ctrl+C để dừng backend.'
 Write-Warn 'Nếu backend vẫn còn chạy sau đó, dừng bằng lệnh: docker stop manga_translator'
