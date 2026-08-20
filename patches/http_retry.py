@@ -15,7 +15,11 @@ import asyncio
 
 import httpx
 
-CONNECT_TIMEOUT = 8.0
+# 12s: do that ngay 2026-08-18, khi bat WARP thi cac ket noi THANH CONG toi
+# CDN anh mat tu 2.5s den 10s. Dat 8s se huy nhung ket noi dang tren da
+# thanh cong, bien "cham ma duoc" thanh "hong" - te hon la cho lau tren mot
+# ket noi von se hong. 12s nam tren dai do duoc.
+CONNECT_TIMEOUT = 12.0
 READ_TIMEOUT = 30.0
 
 
