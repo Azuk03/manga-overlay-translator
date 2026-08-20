@@ -12,6 +12,8 @@ import httpx
 import openai
 from pydantic import BaseModel
 
+from http_retry import fetch_with_retry
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
@@ -404,11 +406,10 @@ class FetchImageRequest(BaseModel):
 @app.post("/fetch-image", tags=["internal-api"])
 async def fetch_image(data: FetchImageRequest) -> Response:
     headers = {"Referer": data.referer} if data.referer else {}
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        try:
-            resp = await client.get(data.url, headers=headers)
-        except httpx.HTTPError as e:
-            raise HTTPException(502, detail=f"Khong tai duoc anh: {e}")
+    try:
+        resp = await fetch_with_retry(data.url, headers)
+    except httpx.HTTPError as e:
+        raise HTTPException(502, detail=f"Khong tai duoc anh sau 3 lan thu: {e}")
     if resp.status_code >= 400:
         raise HTTPException(resp.status_code, detail=f"CDN tra ve loi HTTP {resp.status_code}")
     content_type = resp.headers.get("content-type", "application/octet-stream")
