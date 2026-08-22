@@ -15,21 +15,52 @@ function Get-ShortcutPlan {
     return $result
 }
 
+# WScript.Shell KHONG doc duoc shortcut co ten Unicode (tra ve object rong).
+# Shell.Application thi doc duoc - da kiem chung.
+function Get-ShortcutArguments {
+    param([string]$ShortcutPath)
+    try {
+        $dir = Split-Path $ShortcutPath -Parent
+        $leaf = Split-Path $ShortcutPath -Leaf
+        $item = (New-Object -ComObject Shell.Application).Namespace($dir).ParseName($leaf)
+        if ($null -eq $item) { return '' }
+        return $item.GetLink.Arguments
+    } catch {
+        return ''
+    }
+}
+
 function New-AppShortcut {
     param([string]$ShortcutPath, [string]$ScriptPath, [string]$WorkingDirectory, [string]$Arguments = '')
-    $argsStr = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
-    if ($Arguments) { $argsStr += " $Arguments" }
-    $shell = New-Object -ComObject WScript.Shell
+    $wantedArgs = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
+    if ($Arguments) { $wantedArgs = $wantedArgs + ' ' + $Arguments }
+
     # Sua hong: truoc day ham nay tra ve som neu .lnk da ton tai, nen shortcut
     # cu (vd tro sai -InstallDir tu ban cai truoc) khong bao gio duoc sua lai.
     # Gio doc Arguments hien co va chi ghi lai neu no khac voi gia tri dung.
-    $sc = $shell.CreateShortcut($ShortcutPath)
-    $isNew = -not (Test-Path $ShortcutPath)
-    if (-not $isNew -and $sc.Arguments -eq $argsStr) { return $false }
-    $sc.TargetPath = 'powershell.exe'
-    $sc.Arguments = $argsStr
-    $sc.WorkingDirectory = $WorkingDirectory
-    $sc.Save()
+    if (Test-Path -LiteralPath $ShortcutPath) {
+        $current = Get-ShortcutArguments -ShortcutPath $ShortcutPath
+        if ($current -eq $wantedArgs) { return $false }
+    }
+
+    # WScript.Shell chuyen duong dan sang codepage ANSI cua he thong, nen ten
+    # co dau tieng Viet bi bien thanh '?' va luu that bai. Cach vong: tao o
+    # duong dan ASCII tam roi doi ten bang .NET (xu ly Unicode dung). Da do:
+    # file tao ra giong het tung byte voi file tao truc tiep.
+    $tempPath = Join-Path (Split-Path $ShortcutPath -Parent) ('mot-tmp-' + [guid]::NewGuid().ToString() + '.lnk')
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $sc = $shell.CreateShortcut($tempPath)
+        $sc.TargetPath = 'powershell.exe'
+        $sc.Arguments = $wantedArgs
+        $sc.WorkingDirectory = $WorkingDirectory
+        $sc.Save()
+
+        if (Test-Path -LiteralPath $ShortcutPath) { [System.IO.File]::Delete($ShortcutPath) }
+        [System.IO.File]::Move($tempPath, $ShortcutPath)
+    } finally {
+        if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue }
+    }
     return $true
 }
 

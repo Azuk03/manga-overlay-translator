@@ -39,7 +39,11 @@ function Invoke-ImageBuild {
     $log = Join-Path $Root 'logs/docker-build.log'
     New-Item -ItemType Directory (Split-Path $log) -Force | Out-Null
     Push-Location $Root
-    docker build -t $ImageName . 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $log | Out-Host
+    docker build -t $ImageName . 2>&1 |
+        ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" } } |
+        Where-Object { $_ -ne '' } |
+        Tee-Object -FilePath $log |
+        Out-Host
     $code = $LASTEXITCODE
     Pop-Location
     if ($code -ne 0) {
