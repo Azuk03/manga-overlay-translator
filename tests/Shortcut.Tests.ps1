@@ -45,3 +45,26 @@ Describe 'New-AppShortcut' {
         New-AppShortcut -ShortcutPath $lnk -ScriptPath 'C:\app\start.ps1' -WorkingDirectory 'C:\app' | Should -BeFalse
     }
 }
+
+Describe 'New-AppShortcut với tên Unicode' {
+    It 'tạo được shortcut có dấu tiếng Việt trong tên' {
+        $p = Join-Path $TestDrive 'Bật Manga Translator.lnk'
+        New-AppShortcut -ShortcutPath $p -ScriptPath 'X:\app\start.ps1' -WorkingDirectory 'X:\app' | Should -BeTrue
+        Test-Path -LiteralPath $p | Should -BeTrue
+    }
+    It 'đọc lại được Arguments từ shortcut tên Unicode' {
+        $p = Join-Path $TestDrive 'Cập nhật Manga Translator.lnk'
+        New-AppShortcut -ShortcutPath $p -ScriptPath 'X:\app\bootstrap.ps1' -WorkingDirectory 'X:\app' -Arguments '-InstallDir "D:\Manga Translator"' | Out-Null
+        Get-ShortcutArguments -ShortcutPath $p | Should -BeLike '*-InstallDir "D:\Manga Translator"*'
+    }
+    It 'gọi lần hai với cùng tham số thì không ghi lại' {
+        $p = Join-Path $TestDrive 'Gỡ cài đặt Manga Translator.lnk'
+        New-AppShortcut -ShortcutPath $p -ScriptPath 'X:\app\uninstall.ps1' -WorkingDirectory 'X:\app' | Out-Null
+        New-AppShortcut -ShortcutPath $p -ScriptPath 'X:\app\uninstall.ps1' -WorkingDirectory 'X:\app' | Should -BeFalse
+    }
+    It 'không để sót file tạm .lnk nào' {
+        $p = Join-Path $TestDrive 'Cài đặt Manga Translator.lnk'
+        New-AppShortcut -ShortcutPath $p -ScriptPath 'X:\app\configure.ps1' -WorkingDirectory 'X:\app' | Out-Null
+        @(Get-ChildItem $TestDrive -Filter 'mot-tmp-*.lnk').Count | Should -Be 0
+    }
+}
