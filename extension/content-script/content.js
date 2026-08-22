@@ -40,18 +40,6 @@
     // dung tu xoa Storage tay). Da gap loi thuc te: doi config nhung quen xoa
     // cache -> test nham phai ket qua cu, tuong nhu code khong hoat dong.
     CACHE_VERSION: 24, // GO edge-gate (phu thuoc main-detect nondeterministic -> miss bong bong vat-bien): crop-bien chay LUON moi seam lien mach (nhu lan test tot). Giu hop nhat (bo toggle)
-    // Option C: so trang gom chu goc truoc khi dung ho so nhan vat, va do dai
-    // text toi thieu de dung (tranh dung tu trang gan trong). Xem spec
-    // 2026-08-09-per-series-character-context-design.md.
-    CTX_MIN_PAGES: 3,
-    CTX_MIN_CHARS: 200,
-    // Cua so hoi thoai GAN NHAT (mo rong Option C): khong doi CTX_MIN_PAGES/
-    // CTX_MIN_CHARS (van danh cho ho so nhan vat tinh) - day la lop RIENG,
-    // bat dau tich luy tu ANH DAU TIEN, khong can dat nguong. Gioi han so
-    // dong/ky tu de chi phi token them moi luot dich o muc nho. Xem spec
-    // 2026-08-12-vietnamese-translation-pronoun-consistency-design.md.
-    RECENT_DIALOGUE_MAX_LINES: 20,
-    RECENT_DIALOGUE_MAX_CHARS: 600,
     // Da xac nhan thuc nghiem o Giai doan B: backend xu ly TUAN TU (khong
     // song song), tang CONCURRENCY khong co loi ich - xem README.md.
     CONCURRENCY: 1,
@@ -358,18 +346,6 @@
     return result.mot_translator_engine || DEFAULT_TRANSLATOR_ENGINE;
   }
 
-  // Option C: doc toggle "ngu canh nhan vat" (mac dinh BAT). Live-read moi lan
-  // nhu cac setting khac. Tat => hanh vi y het truoc Option C.
-  async function getCharacterContext() {
-    try {
-      const { mot_character_context } = await chrome.storage.local.get('mot_character_context');
-      return mot_character_context !== false; // default ON
-    } catch {
-      return true;
-    }
-  }
-
-
   const DEFAULT_EAGER_TRANSLATE = false;
 
   // Doc setting "dich truoc toan bo" tu chrome.storage.local - chi doc 1
@@ -411,14 +387,11 @@
       });
     },
 
-    // gptConfigPath (tuy chon, Option C): duong dan gpt_config rieng cua truyen
-    // (base template + ho so nhan vat). Khong truyen => dung CFG.GPT_CONFIG_PATH
-    // mac dinh (hanh vi cu).
     // detectOnly: chi chay detect + OCR (translator 'none' - KHONG goi GPT,
     // KHONG inpaint) de lay TOA DO + text goc cac vung. Rat re (chi model
     // local). Dung cho gate detect-first cua ghep-bien: biet truoc co vung
     // vat-bien khong ma khong ton 1 luot GPT (xem detectBoundaryRegions()).
-    async translateImage(blob, gptConfigPath, detectOnly = false) {
+    async translateImage(blob, detectOnly = false) {
       const dataUrl = await this.blobToDataURL(blob);
       const targetLang = await getTargetLang();
       const engine = detectOnly ? 'none' : await getTranslatorEngine();
@@ -432,7 +405,7 @@
       // tac dung voi deepl (kien truc khac han, khong doc gpt_config - xem
       // spec 2026-07-23-translator-engine-picker-design.md muc 3/6).
       if (!detectOnly && targetLang === 'VIN' && engine !== 'deepl') {
-        translatorConfig.gpt_config = gptConfigPath || CFG.GPT_CONFIG_PATH;
+        translatorConfig.gpt_config = CFG.GPT_CONFIG_PATH;
       }
       const config = {
         detector: { detection_size: CFG.DETECTION_SIZE },
@@ -452,7 +425,7 @@
       return { regions: res.regions };
     },
 
-    async translateImageTiled(blob, naturalW, naturalH, img, gptConfigPath) {
+    async translateImageTiled(blob, naturalW, naturalH, img) {
       const tiles = await sliceImageIntoTiles(blob, naturalW, naturalH);
       log(
         'Webtoon dai (' + naturalH + 'px > TILE_MAX_H ' + CFG.TILE_MAX_H + 'px) - cat thanh',
@@ -465,7 +438,7 @@
       let boundaryRegions = [];
       for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
-        const result = await this.translateImage(tile.blob, gptConfigPath);
+        const result = await this.translateImage(tile.blob);
         for (const r of result.regions) {
           allRegions.push({ ...r, y: r.y + tile.yOffset });
         }
@@ -481,7 +454,7 @@
         // detect o ty le KHAC (crop rieng) can mergeBoundaryRegions
         // (containment) tach rieng sau khi dedupeRegions da chay xong.
         if (i === tiles.length - 1) {
-          boundaryRegions = await detectBoundaryRegions(img, tile.blob, gptConfigPath);
+          boundaryRegions = await detectBoundaryRegions(img, tile.blob);
         }
       }
       return { regions: mergeBoundaryRegions(dedupeRegions(allRegions), boundaryRegions) };
@@ -1094,7 +1067,7 @@
   // spec 2026-07-23-cross-image-boundary-stitching-design.md muc render
   // khong clamp 100%). Khong bat/khong co anh ke/loi bat ky buoc nao ->
   // tra ve [] êm xuoi, khong chan render anh chinh.
-  async function detectBoundaryRegions(img, blob, gptConfigPath) {
+  async function detectBoundaryRegions(img, blob) {
     const nextImg = findNextSiblingImage(img);
     if (!nextImg) {
       log('Ghep-bien: khong co anh ke tiep, bo qua.');
@@ -1154,7 +1127,7 @@
     // dung CUNG detector always-run van dung de tim vat-bien -> khong the thua.
     let probeRegions;
     try {
-      probeRegions = (await ApiAdapter.translateImage(cropBlob, gptConfigPath, true)).regions || [];
+      probeRegions = (await ApiAdapter.translateImage(cropBlob, true)).regions || [];
     } catch (err) {
       log('Ghep-bien: loi detect-only crop bien, bo qua.', err);
       return [];
@@ -1166,7 +1139,7 @@
 
     let cropResult;
     try {
-      cropResult = await ApiAdapter.translateImage(cropBlob, gptConfigPath);
+      cropResult = await ApiAdapter.translateImage(cropBlob);
     } catch (err) {
       log('Ghep-bien: loi dich anh crop bien, bo qua.', err);
       return [];
@@ -1280,134 +1253,6 @@
   // - spec goc nghi cho 1 anh, o day gop thanh danh sach vi co nhieu anh).
   const errorLog = [];
 
-  // ===== Option C: ngu canh nhan vat per-truyen =====
-  // Dung ho so nhan vat 1 lan (sau vai trang) roi tiem gpt_config rieng cua
-  // truyen vao cac call dich sau => dai tu nhat quan. Xem spec
-  // 2026-08-09-per-series-character-context-design.md.
-  const SeriesCtx = {
-    _mem: null,
-    _ensuredThisSession: false,
-    _building: false,
-    _storeKey(seriesId) {
-      return `mot_series_ctx_v${CFG.CACHE_VERSION}_${seriesId}`;
-    },
-    async load(seriesId) {
-      if (this._mem && this._mem.seriesId === seriesId) return this._mem;
-      const key = this._storeKey(seriesId);
-      const got = (await chrome.storage.local.get(key))[key];
-      this._mem = got || { seriesId, sheet: '', path: null, srcAccum: [], pages: 0, built: false };
-      this._mem.seriesId = seriesId;
-      return this._mem;
-    },
-    async save() {
-      if (!this._mem) return;
-      await chrome.storage.local.set({ [this._storeKey(this._mem.seriesId)]: this._mem });
-    },
-    // Tra ve gpt_config path cua truyen neu da dung ho so (va dam bao file ton
-    // tai tren backend 1 lan/phien); null neu chua dung.
-    async resolvePath(st) {
-      if (!st.built || !st.sheet) return null;
-      if (!this._ensuredThisSession) {
-        this._ensuredThisSession = true;
-        const res = await sendMessageAsync({
-          type: 'SET_SERIES_CONTEXT',
-          payload: { series_id: st.seriesId, sheet: st.sheet },
-        }).catch(() => null);
-        if (res && res.ok && res.data && res.data.gpt_config_path) {
-          st.path = res.data.gpt_config_path;
-          await this.save();
-        }
-      }
-      return st.path;
-    },
-    // Gom src cua trang vua dich; khi du CTX_MIN_PAGES trang + CTX_MIN_CHARS ky
-    // tu thi goi backend dung ho so 1 lan (khoa _building chong goi trung).
-    async accumulateAndMaybeBuild(st, result, targetLang) {
-      const srcs = (result.regions || []).map((r) => r.src).filter(Boolean);
-      if (srcs.length) {
-        st.srcAccum.push(...srcs);
-        st.pages += 1;
-        await this.save();
-      }
-      const joined = st.srcAccum.join('\n');
-      if (this._building || st.pages < CFG.CTX_MIN_PAGES || joined.length < CFG.CTX_MIN_CHARS) return;
-      this._building = true;
-      try {
-        const res = await sendMessageAsync({
-          type: 'BUILD_SERIES_CONTEXT',
-          payload: { series_id: st.seriesId, text: joined, target_lang: targetLang },
-        }).catch(() => null);
-        if (res && res.ok && res.data && res.data.sheet) {
-          st.sheet = res.data.sheet;
-          st.path = res.data.gpt_config_path;
-          st.built = true;
-          await this.save();
-          log('Da dung ho so nhan vat cho truyen', st.seriesId, '-', st.sheet.length, 'ky tu');
-        }
-      } finally {
-        this._building = false;
-      }
-    },
-  };
-
-  // ===== Option C mo rong: cua so hoi thoai GAN NHAT =====
-  // Bo sung ho so nhan vat TINH (SeriesCtx o tren) bang 1 lop NGAN HAN: danh
-  // sach cac dong da dich GAN DAY nhat theo dung thu tu doc, giup cac luot
-  // dich chi co 1-2 dong ngan (khong du de tu suy ra ai-noi-voi-ai) van co
-  // mach truyen de bam vao. KHONG doi CTX_MIN_PAGES/CTX_MIN_CHARS (van danh
-  // rieng cho ho so nhan vat) - lop nay bat dau tich luy tu ANH DAU TIEN,
-  // khong can dat nguong. KHONG ton them luot goi GPT nao - chi dump text
-  // da dich (src->dst), khong tom tat bang AI. Xem spec
-  // 2026-08-12-vietnamese-translation-pronoun-consistency-design.md.
-  const RecentDialogue = {
-    _buf: [], // {src, dst} theo dung thu tu doc, toi da RECENT_DIALOGUE_MAX_LINES
-    _seriesId: null,
-    // gpt_config_path backend tra ve tu /set-recent-dialogue - dung lam FALLBACK
-    // cho gptConfigPath TRUOC khi ho so nhan vat kip xay xong (luc do
-    // SeriesCtx.resolvePath con tra null, backend se dung file base khong co khoi
-    // hoi thoai) -> cua so hoi thoai co hieu luc ngay tu ~anh thu 2 thay vi phai
-    // doi ho so nhan vat xay xong (~trang 4). Reset khi doi truyen.
-    path: null,
-    append(seriesId, regions) {
-      if (this._seriesId !== seriesId) {
-        this._seriesId = seriesId;
-        this._buf = [];
-        this.path = null;
-      }
-      // Loc: bo dong rong VA dong dst==src (SFX/giu-nguyen) - luong prefetch
-      // truyen regions CHUA loc (khac luong xem da loc san), gom filter vao day
-      // de ca 2 luong nhat quan, khong nhet rac (vd "ドドド -> ドドド") vao cua so.
-      const lines = (regions || [])
-        .map((r) => ({ src: (r.src || '').trim(), dst: (r.dst || '').trim() }))
-        .filter((l) => l.src && l.dst && l.dst.toLowerCase() !== l.src.toLowerCase());
-      if (!lines.length) return;
-      this._buf.push(...lines);
-      if (this._buf.length > CFG.RECENT_DIALOGUE_MAX_LINES) {
-        this._buf = this._buf.slice(-CFG.RECENT_DIALOGUE_MAX_LINES);
-      }
-      let text = this._buf.map((l) => `${l.src} -> ${l.dst}`).join('\n');
-      if (text.length > CFG.RECENT_DIALOGUE_MAX_CHARS) {
-        // Cat phan cu, roi bo not dong DAU bi cat do dang (tranh manh vun).
-        text = text.slice(-CFG.RECENT_DIALOGUE_MAX_CHARS).replace(/^[^\n]*\n/, '');
-      }
-      // Fire-and-forget: KHONG await - render KHONG duoc cho round-trip nay
-      // (content-script -> service worker IPC -> fetch backend). Ket qua chi
-      // can cho cac luot dich SAU (bat path tra ve). .catch de khong nem loi.
-      sendMessageAsync({
-        type: 'SET_RECENT_DIALOGUE',
-        payload: { series_id: seriesId, recent: text },
-      })
-        .then((res) => {
-          // Chi bat path neu VAN con dung truyen do (append cu cua truyen truoc
-          // co the ve tre sau khi da doi truyen -> khong ghi de path nham).
-          if (this._seriesId === seriesId && res && res.ok && res.data && res.data.gpt_config_path) {
-            this.path = res.data.gpt_config_path;
-          }
-        })
-        .catch(() => null);
-    },
-  };
-
   async function translateAndRenderImage(img) {
     if (imgLayers.has(img)) return;
     const tStart = performance.now();
@@ -1417,13 +1262,6 @@
       const url = img.currentSrc || img.src;
       const urlCacheable = !!url && !url.startsWith('blob:') && !url.startsWith('data:');
       let result = null;
-
-      // Option C: tinh seriesId 1 LAN cho ca ham (Cache MISS dung de xay
-      // gpt_config path, VA cuoi ham dung de cap nhat RecentDialogue bat ke
-      // Cache HIT hay MISS - noi dung nguoi doc vua "luot qua" van la mach
-      // truyen dang dien ra, du la dich lai hay lay tu cache).
-      const ctxOn = await getCharacterContext();
-      const seriesId = ctxOn && targetLang === 'VIN' && engine !== 'deepl' ? getSeriesId() : null;
 
       // FAST PATH: tra cache theo URL -> hash -> ket qua, KHONG tai anh (bo qua
       // ~3.4s tai + hash). Chi trung khi da tung dich URL nay o dung lang/engine.
@@ -1445,27 +1283,14 @@
           log('Cache HIT (hash):', hash, targetLang, engine, url);
         } else {
           log('Cache MISS, goi backend:', hash, targetLang, engine, url);
-          // Option C: neu bat ngu canh + dinh danh duoc truyen + engine ho GPT,
-          // dung gpt_config rieng cua truyen (neu da dung ho so). Tat/khong dinh
-          // danh duoc => gptConfigPath null => luong cu.
-          let gptConfigPath = null;
-          let st = null;
-          if (seriesId) {
-            st = await SeriesCtx.load(seriesId);
-            gptConfigPath = (await SeriesCtx.resolvePath(st)) || RecentDialogue.path;
-          }
           if (img.naturalHeight > CFG.TILE_MAX_H) {
-            result = await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img, gptConfigPath);
+            result = await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img);
           } else {
-            result = await ApiAdapter.translateImage(blob, gptConfigPath);
-            const boundaryRegions = await detectBoundaryRegions(img, blob, gptConfigPath);
+            result = await ApiAdapter.translateImage(blob);
+            const boundaryRegions = await detectBoundaryRegions(img, blob);
             result.regions = mergeBoundaryRegions(result.regions, boundaryRegions);
           }
           await Cache.set(hash, targetLang, engine, result);
-          // Chua dung ho so => gom chu goc, du thi dung 1 lan cho truyen.
-          if (seriesId && st && !st.built) {
-            await SeriesCtx.accumulateAndMaybeBuild(st, result, targetLang);
-          }
         }
         if (urlCacheable) await Cache.setUrlHash(url, hash);
       }
@@ -1500,9 +1325,6 @@
         }
         return true;
       });
-      if (seriesId) {
-        RecentDialogue.append(seriesId, result.regions);
-      }
       const busyFlags = await computeRegionComplexity(result.regions);
       result.regions.forEach((r, i) => {
         r.busy = busyFlags[i];
@@ -1718,24 +1540,6 @@
     );
   }
 
-  // Option C: dinh danh "truyen" de khoa ho so nhan vat + file gpt_config
-  // per-truyen. hitomi => gallery id (reader/<id>.html); site khac => host +
-  // 2 doan path dau. Tra null neu khong dinh danh duoc => luong cu (khong ngu canh).
-  function getSeriesId() {
-    try {
-      const h = location.hostname.replace(/^www\./, '');
-      if (/(^|\.)hitomi\.la$/.test(h)) {
-        const m = location.pathname.match(/\/reader\/(\d+)\.html/) || location.pathname.match(/-(\d+)\.html/);
-        if (m) return 'hitomi-' + m[1];
-      }
-      const seg = location.pathname.split('/').filter(Boolean).slice(0, 2).join('-');
-      const id = (h + (seg ? '-' + seg : '')).slice(0, 120);
-      return id || null;
-    } catch {
-      return null;
-    }
-  }
-
   // Nho background chay ham MAIN-world doc galleryinfo + build URL. Tra ve
   // mang URL, hoac null neu khong phai gallery hitomi / hitomi doi cau truc.
   async function getHitomiGalleryUrls() {
@@ -1786,13 +1590,6 @@
   async function prefetchHitomiGallery(urls) {
     const targetLang = await getTargetLang();
     const engine = await getTranslatorEngine();
-    // Option C: prefetch cung phai dung/tiem ho so nhan vat, neu khong cac trang
-    // prefetch bi cache KHONG ngu canh -> khi xem la cache-hit, feature bi bo qua
-    // hoan toan voi truyen prefetch (dung la case hitomi chinh). Chia se SeriesCtx
-    // voi luong xem (translateAndRenderImage) qua singleton nen phoi hop nhat quan.
-    const ctxOn = await getCharacterContext();
-    const seriesId = ctxOn && targetLang === 'VIN' && engine !== 'deepl' ? getSeriesId() : null;
-    const st = seriesId ? await SeriesCtx.load(seriesId) : null;
     let done = 0;
 
     // Bo qua han viec tai neu URL da co san ban dich. Truoc day vong lap nay
@@ -1858,11 +1655,8 @@
             cached = await Cache.get(hash, targetLang, engine);
           }
           if (!cached) {
-            const gptConfigPath = (st ? await SeriesCtx.resolvePath(st) : null) || RecentDialogue.path;
-            const result = await ApiAdapter.translateImage(blob, gptConfigPath);
+            const result = await ApiAdapter.translateImage(blob);
             await Cache.set(hash, targetLang, engine, result);
-            if (seriesId) RecentDialogue.append(seriesId, result.regions);
-            if (st && !st.built) await SeriesCtx.accumulateAndMaybeBuild(st, result, targetLang);
           }
           await Cache.setUrlHash(url, hash);
         }

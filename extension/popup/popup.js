@@ -113,24 +113,14 @@ eagerCheckbox.addEventListener('change', () => {
   chrome.storage.local.set({ mot_eager_translate: eagerCheckbox.checked });
 });
 
-// ===== Khoi 8: Ngu canh nhan vat per-truyen (Option C, mac dinh BAT) =====
-const ccCheckbox = document.getElementById('character-context');
-
-chrome.storage.local.get('mot_character_context', (result) => {
-  ccCheckbox.checked = result.mot_character_context !== false; // default ON
-});
-
-ccCheckbox.addEventListener('change', () => {
-  chrome.storage.local.set({ mot_character_context: ccCheckbox.checked });
-});
-
 // ===== Khoi 9: Xoa cache dich (ep dich lai) =====
 // Ghep-bien webtoon gio HOP NHAT (luon bat, auto-gate theo findNextSiblingImage
 // + edge-gate) nen KHONG con toggle - bo checkbox boundary-stitch.
-// Xoa moi entry dich (mot_cache_*), chi muc URL->hash (mot_urlhash_*) va ho so
-// nhan vat (mot_series_ctx_*). GIU LAI cac setting (backend_url, target_lang,
-// engine, eager, character_context). Dung khi doi prompt/model
-// backend hoac muon giai phong dung luong.
+// Xoa moi entry dich (mot_cache_*), chi muc URL->hash (mot_urlhash_*) va (neu
+// con sot lai tu ban truoc) ho so nhan vat cu (mot_series_ctx_*) - tinh nang
+// da bi go bo nen khong con ghi moi, nhung don luon entry cu neu co. GIU LAI
+// cac setting (backend_url, target_lang, engine, eager). Dung khi doi
+// prompt/model backend hoac muon giai phong dung luong.
 document.getElementById('btn-clear-cache').addEventListener('click', () => {
   const statusEl = document.getElementById('clear-cache-status');
   statusEl.textContent = 'Đang xóa...';

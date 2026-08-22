@@ -171,36 +171,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Option C: dung/tao lai ho so nhan vat per-truyen, hoac cap nhat cua so
-  // hoi thoai gan nhat (xem RecentDialogue trong content.js). Goi mang phai
-  // chay o service worker (host_permissions) - content-script khong tu
-  // fetch backend.
-  if (
-    message.type === 'BUILD_SERIES_CONTEXT' ||
-    message.type === 'SET_SERIES_CONTEXT' ||
-    message.type === 'SET_RECENT_DIALOGUE'
-  ) {
-    (async () => {
-      try {
-        const route =
-          message.type === 'BUILD_SERIES_CONTEXT'
-            ? '/build-series-context'
-            : message.type === 'SET_SERIES_CONTEXT'
-            ? '/set-series-context'
-            : '/set-recent-dialogue';
-        const r = await fetch(`${await getBackendUrl()}${route}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(message.payload),
-        });
-        sendResponse({ ok: r.ok, data: r.ok ? await r.json() : null });
-      } catch (err) {
-        sendResponse({ ok: false, error: String(err) });
-      }
-    })();
-    return true; // giu channel mo cho sendResponse bat dong bo
-  }
-
   if (message.type === 'HITOMI_GALLERY_URLS') {
     if (!sender.tab || sender.tab.id == null) {
       sendResponse({ ok: false, error: 'no tab' });
