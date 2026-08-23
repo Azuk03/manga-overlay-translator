@@ -74,7 +74,7 @@ async function downloadImage(url, refererUrl) {
   return responseToPayload(relayRes);
 }
 
-const TRANSLATE_TIMEOUT_MS = 90000; // khop CFG.TIMEOUT_MS ben content-script
+const TRANSLATE_TIMEOUT_MS = 180000; // PHAI khop CFG.TIMEOUT_MS ben content-script
 
 // Port nguyen van tu ApiAdapter.normalizeResponse() cua userscript cu
 // (manga-overlay-translator.user.js dong 641-690) - giao thuc frame nhi
