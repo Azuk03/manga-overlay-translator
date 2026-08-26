@@ -318,6 +318,14 @@ Ngữ cảnh giữ ở **client, theo từng tab** — không phải backend. Th
 
 Chỉ tiếng Anh, vì tiếng Anh chỉ có một chữ "you" nên model buộc phải đoán; Nhật/Hàn mã hoá sẵn mức lịch sự trong câu gốc nên số đo trên không suy ra được — và suy diễn kiểu đó chính là thứ đã làm hỏng bản trước. Cổng chặn dùng lại `_srcNonLatin` sẵn có. Xem spec `2026-08-26-english-pronoun-context-window-design.md`.
 
+**Chuẩn hoá chữ HOA/thường theo chữ gốc (2026-08-26).** `extension/content-script/text-case.js`: nguồn OCR gần như luôn ALL-CAPS (chữ truyện tranh), nên nếu chữ gốc là ALL-CAPS thì bản dịch cũng đưa lên HOA lúc hiển thị. Đo được vấn đề: 85% ALL-CAPS lẫn 15% viết thường **trong cùng một chương** — chính sự lẫn lộn mới chói mắt, không phải việc viết hoa. Cửa sổ ngữ cảnh còn khuếch đại nó (66% → 84% ngay sau khi bật).
+
+Không nhờ LLM: `gpt_config-vi.yaml` đã có quy tắc chuẩn hoá viết hoa từ lâu mà model vẫn không tuân thủ ổn định — prompt là xu hướng, không phải bảo đảm.
+
+Viết HOA là chiều an toàn **duy nhất**: cả nguồn lẫn đích đều ALL-CAPS nên máy không thể phân biệt tên riêng, sentence-case sẽ biến `ERKIN` giữa câu thành `erkin`. Đưa lên HOA thì không bao giờ làm hỏng tên riêng.
+
+Chỉ đổi chuỗi **hiển thị** — `r.dst` và cache giữ nguyên văn model trả về, nên đổi ý sau này không phải bump `CACHE_VERSION`. Kèm theo: `_fitTextboxFont()` giờ đọc chữ thẳng từ DOM thay vì nhận qua tham số, vì chữ HOA **rộng hơn** — đo bằng chuỗi cũ sẽ ra cỡ chữ quá lớn và tràn khung.
+
 ### 5.5.1 Webtoon dài — cắt lát (content.js:477, `translateImageTiled`)
 
 Ảnh cao hơn `TILE_MAX_H` (4000px, chừa biên an toàn dưới giới hạn canvas ~16384px + giới hạn *tổng diện tích* riêng của trình duyệt):
