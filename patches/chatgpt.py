@@ -668,11 +668,23 @@ class OpenAITranslator(ConfigGPT, CommonTranslator):
             messages.append({'role': 'system', 'content': self.prev_context})            
         elif REQUEST_CONTEXT:
             # Cua so thoai client gui kem (chi nguon tieng Anh). Cau chu nay da
-            # duoc do thuc nghiem 2026-08-26 - doi chu se lam so do do duoc
-            # khong con ap dung, xem spec truoc khi sua.
+            # duoc do thuc nghiem - doi chu se lam so do do duoc khong con ap
+            # dung, xem spec truoc khi sua.
+            #
+            # Ban dau chi ghi "keep the SAME address pair for the same
+            # characters". Do tren truyen that: cua so day thoai voi mot khach
+            # hang lon tuoi (xung 'ong') lam RO sang cap ban be ngang hang, ho
+            # cung bi goi 'ong' - 0/2 lan dung. Cua so la danh sach PHANG, model
+            # khong biet dong nao thuoc cap nao nen no chi bat chuoc giong nao
+            # ap dao. Noi thang rang cap KHAC thuong phai dung dai tu KHAC:
+            # 2/2 lan dung cho ca hai phia (cap moi ra 'cau', cap cu giu 'ong').
             messages.append({'role': 'system', 'content':
-                "Previously translated lines from this same series, in reading order. "
-                "Keep the SAME Vietnamese address pair and register for the same characters:\n"
+                "Previously translated lines from this same series, in reading order, "
+                "for CONSISTENCY REFERENCE ONLY.\n"
+                "Reuse an address pair ONLY when the SAME two characters are speaking. "
+                "A different pair of characters usually needs a DIFFERENT pair - judge each "
+                "line from its own speaker and listener. Never copy a formal or elderly "
+                "register onto characters who are peers.\n"
                 + "\n".join(REQUEST_CONTEXT)})
             self.logger.info(f"Dialogue context: {len(REQUEST_CONTEXT)} lines from client.")
         
