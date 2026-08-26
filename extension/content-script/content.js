@@ -1389,6 +1389,56 @@
   // - spec goc nghi cho 1 anh, o day gop thanh danh sach vi co nhieu anh).
   const errorLog = [];
 
+  // ===== Tai truoc anh ke tiep (pipeline cua hang doi) =====
+  // WeakMap: khong bao gio duyet, va khong duoc phep giu song mot <img> da roi
+  // khoi DOM (dung loai ro ri vua sua o releaseImg).
+  const _prefetchedBlobs = new WeakMap(); // img -> { src, promise }
+
+  function startPrefetchBlob(img) {
+    if (!img) return;
+    const src = img.currentSrc || img.src || '';
+    // blob:/data: doc thang pixel tu <img> dang hien thi, khong tai qua mang -
+    // khong co gi de lam truoc.
+    if (!src || src.startsWith('blob:') || src.startsWith('data:')) return;
+    const existing = _prefetchedBlobs.get(img);
+    if (existing && existing.src === src) return; // dang tai roi
+
+    const promise = (async () => {
+      // Neu anh nay da co san ban dich thi duong dich se di fast path va khong
+      // dung toi byte nao - tai ve la phi bang thong. Dung dung phep kiem tra
+      // ma fast path dung.
+      const targetLang = await getTargetLang();
+      const engine = await getTranslatorEngine();
+      const fully = await motIsUrlFullyCached(
+        chrome.storage.local,
+        src,
+        (u) => Cache._urlKey(u),
+        (h) => Cache._key(h, targetLang, engine)
+      );
+      if (fully) return null;
+      return await downloadBlobFromUrl(src);
+    })().catch((err) => {
+      // Tai truoc that bai thi im lang: duong dich chinh se tu tai lai va bao
+      // loi dung cach neu that su hong. Nuot o day de khong sinh unhandled
+      // rejection cho mot viec chi mang tinh toi uu.
+      log('Tai truoc anh ke tiep that bai, se tai lai luc dich:', err && err.message);
+      return null;
+    });
+
+    _prefetchedBlobs.set(img, { src, promise });
+  }
+
+  // Lay blob da tai truoc, CHI khi no dung la cua src hien tai cua anh: reader
+  // ao hoa co the da doi src cua chinh <img> nay trong luc cho, dung nham blob
+  // cu la ve ban dich cua trang khac len trang nay.
+  async function takePrefetchedBlob(img, src) {
+    const entry = _prefetchedBlobs.get(img);
+    if (!entry) return null;
+    _prefetchedBlobs.delete(img);
+    if (entry.src !== src) return null;
+    return await entry.promise;
+  }
+
   async function translateAndRenderImage(img) {
     if (imgLayers.has(img)) return;
     const tStart = performance.now();
@@ -1412,7 +1462,10 @@
       // SLOW PATH: tai anh + hash + tra hash-cache + (dich backend). Luu chi muc
       // URL->hash de lan sau vao fast-path.
       if (!result) {
-        const blob = await ApiAdapter.downloadImageBlob(img);
+        // Anh nay co the da duoc tai san trong luc backend dich anh truoc do
+        // (xem startPrefetchBlob trong Queue._drain) - luc do buoc tai ~3s o
+        // day bien mat hoan toan.
+        const blob = (await takePrefetchedBlob(img, url)) || (await ApiAdapter.downloadImageBlob(img));
         const hash = await Cache.hashBlob(blob);
         result = await Cache.get(hash, targetLang, engine);
         if (result) {
@@ -1527,14 +1580,36 @@
       // pha vo gia dinh cua dedup chong ve trung giua anh lien ke (xem
       // renderedPageBBoxes/isDuplicateOfRendered - dua vao gia dinh anh
       // truoc luon dang ky TRUOC anh sau xu ly) va dich khong theo thu tu doc.
-      this._pending.sort((a, b) => {
-        const topA = a.getBoundingClientRect().top + window.scrollY;
-        const topB = b.getBoundingClientRect().top + window.scrollY;
-        return topA - topB;
-      });
+      //
+      // THU TU NAY LA DIEU KIEN DUNG DAN, KHONG PHAI SO THICH - dung doi sang
+      // "uu tien anh gan khung nhin nhat" du nghe hop ly hon: dedup xuyen-anh
+      // dua vao viec anh TRUOC luon dang ky vung da ve TRUOC anh sau (xem
+      // registerRenderedRegion + ghi chu 2026-08-03 o translateAndRenderImage).
+      // Xu ly khong theo thu tu trang lam vo dung gia dinh do va bong bong vat
+      // bien bi ve hai lan - dung bug da mat hai vong go roi truc tiep tren
+      // trinh duyet moi tim ra.
+      //
+      // Do san khoa sap xep MOT LAN moi anh thay vi doc trong ham so sanh:
+      // sort() goi ham so sanh O(n log n) lan, moi lan 2 getBoundingClientRect,
+      // tuc ~2100 lan cuong buc layout cho mot chuong 146 anh - trong khi chi
+      // can dung 146. Thu tu ket qua khong doi mot ly nao.
+      const keyed = this._pending.map((el) => ({
+        el,
+        top: el.getBoundingClientRect().top + window.scrollY,
+      }));
+      keyed.sort((a, b) => a.top - b.top);
+      this._pending = keyed.map((k) => k.el);
+
       const img = this._pending.shift();
       if (!img) return;
       this._active++;
+      // Bat dau TAI anh ke tiep ngay bay gio, de no chay song song voi luot
+      // dich cua anh hien tai. Tai anh la I/O thuan, khong tranh chap GPU voi
+      // backend, nen gan nhu giau duoc hoan toan trong thoi gian dich. Thu
+      // thuat nay von da co trong prefetchHitomiGallery (co ghi kem so do:
+      // ~10s/trang xuong ~7s/trang) nhung chua bao gio duoc ap vao chinh hang
+      // doi nay - tuc moi site khong phai hitomi deu dang chay tuan tu cung.
+      startPrefetchBlob(this._pending[0]);
       // v0.39: log THOI GIAN CHO trong hang doi (khac thoi gian XU LY that
       // trong translateAndRenderImage) + so anh KHAC con dang cho phia sau -
       // giup phan biet "cham vi phai xep hang sau anh khac" (co the cai
@@ -1593,6 +1668,7 @@
     const pendingIdx = Queue._pending.indexOf(img);
     if (pendingIdx !== -1) Queue._pending.splice(pendingIdx, 1);
     Queue._queued.delete(img);
+    _prefetchedBlobs.delete(img); // bo blob da tai truoc cho anh khong con dung toi
     delete img.__motRenderedSrc;
   }
 
