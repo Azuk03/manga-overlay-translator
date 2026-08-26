@@ -422,6 +422,13 @@
     return blob;
   }
 
+  // Cua so thoai gan nhat cua RIENG tab nay. Giu o client (khong phai backend)
+  // vi do that cho thay tron ngu canh giua cac truyen la tai hoa AM THAM: diem
+  // nhat quan van dep nhung toan bo register bi sai (mot canh tiem thuoc hien
+  // dai bi dich bang giong cung dinh ta-nguoi). Nguoi dung chay toi 10 tab dong
+  // thoi nen state dung chung o backend la dung kich ban do.
+  const dialogueWindow = [];
+
   // ===== ApiAdapter — NOI DUY NHAT BIET SCHEMA BACKEND =====
   const ApiAdapter = {
     async downloadImageBlob(img) {
@@ -483,8 +490,13 @@
         ? { inpainter: 'none' }
         : { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE };
       const send = async (b) => {
-        const body = JSON.stringify({ image: await this.blobToDataURL(b), config });
-        return await sendMessageAsync({ type: 'TRANSLATE', body });
+        const payload = { image: await this.blobToDataURL(b), config };
+        // detectOnly chay translator 'none' (khong goi GPT) nen ngu canh vo nghia.
+        if (!detectOnly) {
+          const ctx = motContextPayload(dialogueWindow);
+          if (ctx.length) payload.context = ctx;
+        }
+        return await sendMessageAsync({ type: 'TRANSLATE', body: JSON.stringify(payload) });
       };
 
       let res = await send(blob);
@@ -1527,6 +1539,12 @@
         }
         return true;
       });
+      // Nap thoai cua trang nay vao cua so cho trang sau. Dat SAU bo loc de
+      // khong nap nham vung da bi loai, va chay ca khi trung cache - nho vay
+      // trang da cache khong lam thung cua so.
+      for (const r of result.regions) {
+        motPushContext(dialogueWindow, r.src, r.dst);
+      }
       const busyFlags = await computeRegionComplexity(result.regions);
       result.regions.forEach((r, i) => {
         r.busy = busyFlags[i];

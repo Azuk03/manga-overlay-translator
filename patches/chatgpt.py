@@ -12,6 +12,13 @@ from .common import CommonTranslator, MissingAPIKeyException, VALID_LANGUAGES
 from .gpt_response_parse import find_marker_indices  # va 2026-08-26, xem file do
 from .keys import OPENAI_API_KEY, OPENAI_HTTP_PROXY, OPENAI_API_BASE, OPENAI_MODEL, OPENAI_GLOSSARY_PATH
 
+# Ngu canh thoai cua RIENG luot dich dang chay. share.py dat truoc khi goi va
+# xoa sau khi xong, LUON nam trong khoa doc quyen cua executor (check_lock() tra
+# HTTP 429 neu dang ban), nen khong the co hai luot ghi de nhau.
+# Bien MODULE chu khong phai thuoc tinh instance: translator duoc dung lai giua
+# cac luot, de sot lai ngu canh trang truoc thi luot sau se lay nham.
+REQUEST_CONTEXT = []
+
 try:
     import openai
 except ImportError:
@@ -659,6 +666,15 @@ class OpenAITranslator(ConfigGPT, CommonTranslator):
         # 如果有上文，添加到系统消息中 / If there is a previous context, add it to the system message        
         if self.prev_context:
             messages.append({'role': 'system', 'content': self.prev_context})            
+        elif REQUEST_CONTEXT:
+            # Cua so thoai client gui kem (chi nguon tieng Anh). Cau chu nay da
+            # duoc do thuc nghiem 2026-08-26 - doi chu se lam so do do duoc
+            # khong con ap dung, xem spec truoc khi sua.
+            messages.append({'role': 'system', 'content':
+                "Previously translated lines from this same series, in reading order. "
+                "Keep the SAME Vietnamese address pair and register for the same characters:\n"
+                + "\n".join(REQUEST_CONTEXT)})
+            self.logger.info(f"Dialogue context: {len(REQUEST_CONTEXT)} lines from client.")
         
         # 如果需要先给出示例对话
         # Add chat samples if available

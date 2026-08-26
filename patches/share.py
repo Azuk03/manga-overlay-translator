@@ -81,6 +81,13 @@ class MangaShare:
 
     async def run_method(self, method, **attributes):
         try:
+            # Ngu canh thoai client gui kem, chi song trong dung luot nay.
+            # An toan vi check_lock() da gianh khoa doc quyen truoc khi toi day
+            # (luot thu hai bi tra HTTP 429), nen khong the co hai luot chen nhau.
+            from manga_translator.translators import chatgpt as _mot_chatgpt
+            _mot_chatgpt.REQUEST_CONTEXT = list(
+                getattr(attributes.get("config", None), "_mot_context", None) or [])
+
             if asyncio.iscoroutinefunction(method):
                 result = await method(**attributes)
             else:
@@ -111,6 +118,13 @@ class MangaShare:
             encoded_result = b'\x02' + len(err_bytes).to_bytes(4, 'big') + err_bytes
             await self.progress_queue.put(encoded_result)
         finally:
+            # Xoa NGAY: de sot lai thi luot sau (co the la truyen khac, tab khac)
+            # se lay nham ngu canh - dung tai hoa AM THAM ma spec canh bao.
+            try:
+                from manga_translator.translators import chatgpt as _mot_chatgpt
+                _mot_chatgpt.REQUEST_CONTEXT = []
+            except Exception:
+                pass
             self.lock.release()
 
 
