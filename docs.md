@@ -318,14 +318,6 @@ Ngữ cảnh giữ ở **client, theo từng tab** — không phải backend. Th
 
 Chỉ tiếng Anh, vì tiếng Anh chỉ có một chữ "you" nên model buộc phải đoán; Nhật/Hàn mã hoá sẵn mức lịch sự trong câu gốc nên số đo trên không suy ra được — và suy diễn kiểu đó chính là thứ đã làm hỏng bản trước. Cổng chặn dùng lại `_srcNonLatin` sẵn có. Xem spec `2026-08-26-english-pronoun-context-window-design.md`.
 
-**Chuẩn hoá chữ HOA/thường theo chữ gốc (2026-08-26).** `extension/content-script/text-case.js`: nguồn OCR gần như luôn ALL-CAPS (chữ truyện tranh), nên nếu chữ gốc là ALL-CAPS thì bản dịch cũng đưa lên HOA lúc hiển thị. Đo được vấn đề: 85% ALL-CAPS lẫn 15% viết thường **trong cùng một chương** — chính sự lẫn lộn mới chói mắt, không phải việc viết hoa. Cửa sổ ngữ cảnh còn khuếch đại nó (66% → 84% ngay sau khi bật).
-
-Không nhờ LLM: `gpt_config-vi.yaml` đã có quy tắc chuẩn hoá viết hoa từ lâu mà model vẫn không tuân thủ ổn định — prompt là xu hướng, không phải bảo đảm.
-
-Viết HOA là chiều an toàn **duy nhất**: cả nguồn lẫn đích đều ALL-CAPS nên máy không thể phân biệt tên riêng, sentence-case sẽ biến `ERKIN` giữa câu thành `erkin`. Đưa lên HOA thì không bao giờ làm hỏng tên riêng.
-
-Chỉ đổi chuỗi **hiển thị** — `r.dst` và cache giữ nguyên văn model trả về, nên đổi ý sau này không phải bump `CACHE_VERSION`. Kèm theo: `_fitTextboxFont()` giờ đọc chữ thẳng từ DOM thay vì nhận qua tham số, vì chữ HOA **rộng hơn** — đo bằng chuỗi cũ sẽ ra cỡ chữ quá lớn và tràn khung.
-
 ### 5.5.1 Webtoon dài — cắt lát (content.js:477, `translateImageTiled`)
 
 Ảnh cao hơn `TILE_MAX_H` (4000px, chừa biên an toàn dưới giới hạn canvas ~16384px + giới hạn *tổng diện tích* riêng của trình duyệt):
@@ -615,6 +607,8 @@ Khác luồng 7.1 ở đúng 2 điểm: (1) `forceLoadLazyImages()` chạy trư�
 - **Không hoạt động trên site vẽ trang bằng `<canvas>` tainted** (vd shonenjumpplus.com) — `ImageFinder` chỉ quét `<img>`; canvas tainted chặn MỌI JS đọc pixel, kể cả extension có `host_permissions` toàn quyền. Giới hạn bảo mật tầng trình duyệt, không vượt qua được.
 - **Ghép biên webtoon vẫn còn 1 lượt detect-only mỗi trang + rất hiếm khi 1 bong bóng bị GPT dịch 2 lần** (mục 5.7) — đã tối ưu tối đa mà không hy sinh chất lượng (đánh đổi đã cân nhắc kỹ, người dùng chọn giữ nguyên sau khi xem log thật).
 - **Eager mode không giới hạn phạm vi prefetch** — dồn cả chương vào 1 hàng đợi tuần tự, tail có thể chờ rất lâu trên chương dài (mục 5.10/8).
+- **Chữ HOA/thường của bản dịch để NGUYÊN như model trả về — đã thử chuẩn hoá và CỐ Ý quay lại (2026-08-26).** Đo được: chữ gốc 96% ALL-CAPS (chữ truyện tranh qua OCR) còn model trả về 78% ALL-CAPS, tức 22% lẫn lộn. Đã làm bản bám-theo-chữ-gốc, nhưng vì gốc gần như luôn ALL-CAPS nên kết quả thực tế là **hoa toàn bộ** — và bị gỡ bỏ vì **chữ hoa RỘNG HƠN**: nó chỉ hợp webtoon khung rộng, còn bong bóng manga nhiều khi rất bé, ép hoa làm cỡ chữ tụt xuống hoặc tràn khung. Đừng làm lại theo hướng ép hoa.
+  Hướng còn để ngỏ nếu muốn thử tiếp: hạ về chữ thường rồi viết hoa lại **tên riêng**, nhận diện bằng token xuất hiện NGUYÊN VĂN ở cả câu gốc lẫn bản dịch (tên riêng không được dịch: `JENKINS`, `ERKIN`, `ANNETTA` có ở cả hai bên, còn `ÔNG`/`THẢO DƯỢC` thì không).
 - **Ngôi xưng/đại từ tiếng Việt chưa hoàn hảo** — chỉ còn tầng prompt dùng chung (few-shot + `temperature: 0.15`); 2 lớp ngữ cảnh động đã gỡ vì đo thấy hại nhiều hơn lợi (mục 5.9).
 
 ---

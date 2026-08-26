@@ -817,17 +817,12 @@
       return best;
     },
 
-    // Doc chu THAT dang hien trong DOM, khong nhan qua tham so: tu khi ban dich
-    // duoc dua len HOA theo chu goc (xem text-case.js), chuoi HIEN THI khac
-    // chuoi trong r.dst. Do bang chuoi cu se ra co chu qua lon vi chu HOA RONG
-    // HON - chu se tran khung. Doc thang tu DOM thi hai ben khong the lech nhau.
-    _fitTextboxFont(textbox) {
+    _fitTextboxFont(textbox, text) {
       const boxW = textbox.clientWidth * CFG.FIT_SAFETY;
       const boxH = textbox.clientHeight * CFG.FIT_SAFETY;
       if (boxW <= 0 || boxH <= 0) return;
-      const textEl = textbox.querySelector('.mot-text');
-      const text = textEl.textContent || '';
       const size = this._fitFontSize(text, boxW, boxH);
+      const textEl = textbox.querySelector('.mot-text');
       textEl.style.fontSize = size + 'px';
       if (size <= CFG.FONT_MIN) {
         const h = this._measureWrappedHeight(this._measureCanvas.getContext('2d'), text, size, boxW);
@@ -1039,10 +1034,7 @@
 
         const text = document.createElement('span');
         text.className = 'mot-text';
-        // Bam theo chu goc: goc ALL-CAPS (OCR truyen tranh) thi ban dich cung
-        // ALL-CAPS. Chi doi luc HIEN THI - r.dst va cache giu nguyen van model
-        // tra ve. Xem text-case.js.
-        text.textContent = motMatchSourceCase(r.src, r.dst);
+        text.textContent = r.dst;
         textbox.appendChild(text);
 
         // C4: bam vao 1 khung chu de xem chu goc (vd doi chieu ban dich) -
@@ -1052,9 +1044,9 @@
           let showingSrc = false;
           textbox.addEventListener('click', () => {
             showingSrc = !showingSrc;
-            text.textContent = showingSrc ? r.src : motMatchSourceCase(r.src, r.dst);
+            text.textContent = showingSrc ? r.src : r.dst;
             textbox.title = showingSrc ? 'Bấm để xem bản dịch' : 'Bấm để xem chữ gốc';
-            this._fitTextboxFont(textbox);
+            this._fitTextboxFont(textbox, text.textContent);
           });
         }
 
@@ -1064,7 +1056,7 @@
 
       // Fit font sau khi da noi vao DOM (can kich thuoc px thuc te).
       requestAnimationFrame(() => {
-        textboxes.forEach((box) => this._fitTextboxFont(box));
+        textboxes.forEach((box, i) => this._fitTextboxFont(box, regions[i].dst));
       });
 
       // Anh doi kich thuoc hien thi (zoom/resize/site tu doi layout) - vua
@@ -1073,7 +1065,7 @@
       // fit lai FONT (do dai dong chu thay doi theo kich thuoc px moi).
       const ro = new ResizeObserver(() => {
         positionLayer(img, layer);
-        textboxes.forEach((box) => this._fitTextboxFont(box));
+        textboxes.forEach((box, i) => this._fitTextboxFont(box, regions[i].dst));
       });
       ro.observe(img);
       // Giu tham chieu de con NGAT duoc. Truoc day `ro` chi la bien cuc bo cua

@@ -137,7 +137,7 @@ Kế hoạch triển khai phải có một bài test đồng thời nhiều tab 
 
 ### 4.4 Ngoài phạm vi
 
-**Viết hoa.** *(ĐÃ LÀM 2026-08-26, xem `extension/content-script/text-case.js` — bám theo chữ gốc thay vì ép cứng.)* Vấn đề độc lập, và thí nghiệm cho thấy cửa sổ còn *khuếch đại* nó
+**Viết hoa.** Vấn đề độc lập, và thí nghiệm cho thấy cửa sổ còn *khuếch đại* nó
 (22/24 dòng ALL-CAPS so với 15/24 khi không có cửa sổ). Đây là việc chuẩn hoá xác
 định được, phải làm ở client lúc render, không nhờ LLM. Tách thành thiết kế
 riêng — kèm cảnh báo: `.capitalize()` ngây thơ sẽ biến `ERKIN` giữa câu thành
