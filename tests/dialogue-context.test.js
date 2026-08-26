@@ -90,3 +90,35 @@ test('payload cua cua so rong la mang rong', () => {
   assert.deepEqual(motContextPayload([]), []);
   assert.deepEqual(motContextPayload(null), []);
 });
+
+// ===== Khong cho dai tu "bang phang" tu nhan ban qua cua so =====
+// Do duoc tren truyen that: cua so KHONG lam ban dich dung, no lam ban dich
+// NHAT QUAN voi lua chon dau tien. Trang dau chuong chua co cua so nen model
+// dung mac dinh cua no la "ban" - chinh dang ma gpt_config cam ("never a flat
+// toi/ban") - roi "ban" vao cua so va moi trang sau chep theo. Do 3 lan: cua so
+// chua 'ban' -> 3/3 lan ra 'ban'; cua so chua 'ong' -> 3/3 ra 'ong'; khong cua
+// so -> 'cau'. Chan tu goc: dong dung "ban" khong duoc lam mau tham chieu.
+
+test('KHONG nap dong dung dai tu bang phang "ban" vao cua so', () => {
+  assert.equal(motShouldKeepForContext(
+    'AND HOW DO I KNOW YOU DIDNT GIVE ME A BAD BATCH',
+    'VÀ LÀM SAO TÔI BIẾT BẠN KHÔNG ĐƯA TÔI LÔ HÀNG KÉM'), false);
+  assert.equal(motShouldKeepForContext(
+    'HOW DARE YOU SPEAK TO ERKIN THAT WAY',
+    'CÁI GÌ?! BẠN DÁM NÓI VỚI ERKIN NHƯ THẾ?!'), false);
+});
+
+test('van nap dong dung dai tu dung', () => {
+  assert.equal(motShouldKeepForContext(
+    'I TOLD YOU THE HERBS COME FROM THE NORTH',
+    'TÔI ĐÃ NÓI VỚI CẬU RỒI, THẢO DƯỢC ĐẾN TỪ PHƯƠNG BẮC'), true);
+  assert.equal(motShouldKeepForContext(
+    'YOU DID NOT STORE THE HERBS PROPERLY',
+    'ÔNG ĐÃ KHÔNG BẢO QUẢN THẢO DƯỢC ĐÚNG CÁCH'), true);
+});
+
+test('"ban be" la danh tu, khong phai dai tu - van duoc nap', () => {
+  assert.equal(motShouldKeepForContext(
+    'WE HAVE BEEN FRIENDS FOR YEARS',
+    'CHÚNG TA ĐÃ LÀ BẠN BÈ NHIỀU NĂM RỒI'), true);
+});

@@ -31,6 +31,20 @@ const MOT_CTX_SFX = /^(huff|haa|hmph|stink|ding|argh+|badum|grumble|yell|pull|sq
 // Credits/ten studio o dau va cuoi chuong - chinh la thu da dau doc ban truoc.
 const MOT_CTX_CREDIT = /tappytoon|studio|art\s*&\s*story|webtoon|naver|kakao|©|colorist|letterer/i;
 
+// Dai tu "bang phang" ma chinh gpt_config-vi.yaml cam ("never a flat toi/ban",
+// "never the stiff toi/ban for friends").
+//
+// VI SAO PHAI CHAN TU CUA SO: do tren truyen that cho thay cua so KHONG lam ban
+// dich dung, no lam ban dich NHAT QUAN VOI LUA CHON DAU TIEN. Trang dau chuong
+// chua co cua so nen model dung mac dinh cua no la "ban", roi "ban" vao cua so
+// va moi trang sau chep theo - ca chuong khoa cung vao dung cai dang bi cam.
+// Do 3 lan tren cung mot cau: cua so chua 'ban' -> 3/3 ra 'ban'; cua so chua
+// 'ong' -> 3/3 ra 'ong'; khong cua so -> 'cau'. Loc bo thi 2/4 -> 0/4.
+// Khong nap dong nhu vay lam mau tham chieu: model se tu suy lai thay vi chep.
+//
+// "ban be" (danh tu, nghia la friends) KHONG phai dai tu - phai cho qua.
+const MOT_CTX_FLAT_PRONOUN = /(?<![\p{L}])bạn(?!\s*bè)(?![\p{L}])/iu;
+
 function motIsLatinText(s) {
   if (typeof s !== 'string') return false;
   if (!s.trim()) return false;
@@ -48,6 +62,7 @@ function motShouldKeepForContext(src, dst) {
   if (MOT_CTX_CREDIT.test(s)) return false;
   if (s.split(/\s+/).length < 3) return false;
   if (d.toLowerCase() === s.toLowerCase()) return false;
+  if (MOT_CTX_FLAT_PRONOUN.test(d)) return false;
   return true;
 }
 
