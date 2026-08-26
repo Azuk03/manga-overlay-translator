@@ -622,8 +622,16 @@
 
   // Tinh lai vi tri toan bo layer, gom bang requestAnimationFrame (moi frame
   // chi 1 lan) de khong giat khi scroll/resize lien tuc.
+  // Trang thai "dung yen" cua vong lap rAF ben duoi. Khai bao O DAY (truoc moi
+  // ham cham vao no) chu khong phai canh repositionLoop: scheduleReposition()
+  // duoc dang ky lam listener ngay ben duoi, doc mot bien `let` khai bao sau no
+  // la mot loi TDZ cho san neu sau nay co ai goi ham nay som hon.
+  let _idleFrames = 0;
+  let _frameTick = 0;
+
   let _reposScheduled = false;
   function scheduleReposition() {
+    _idleFrames = 0; // co cuon/resize that -> trang dang dong, chay du toc do
     if (_reposScheduled) return;
     _reposScheduled = true;
     requestAnimationFrame(() => {
@@ -666,9 +674,34 @@
   // (c) tu DUNG khi khong con overlay; (d) tam dung khi tab an (document.hidden).
   let _rafId = null;
   const _lastRect = new WeakMap();
+
+  // (e) HA TAN SO KHI NGUOI DUNG DUNG YEN. Doc getBoundingClientRect() cua moi
+  // layer o MOI frame la mot phep do lien tuc khong bao gio nghi: no bat CPU
+  // lam viec ca khi trang dung im. Tren chinh may nay (laptop RTX 3050 Ti 4GB)
+  // dieu do khong vo hai - CPU nong lam GPU bi throttle, tuc backend dich CHAM DI.
+  //
+  // Nhung KHONG duoc ha tan so mot cach mu quang: vong lap nay sinh ra chinh vi
+  // reader kieu MangaPlaza di chuyen trang bang CSS transform, thu KHONG phat
+  // su kien scroll - ha xuong 10 lan/giay se lam overlay tre thay ro dung luc
+  // lat trang. Nen dieu kien la: chi ha khi da mot luc KHONG co gi nhuc nhich,
+  // VA bat ky dau hieu nao cho thay nguoi dung vua tuong tac deu keo tan so len
+  // lai ngay lap tuc (xem wakeReposition). Trang dung yen thi khong co gi de
+  // tre; trang dang chuyen dong thi luon chay du toc do.
+  const IDLE_AFTER_FRAMES = 60; // ~1s khong doi gi
+  const IDLE_CHECK_EVERY = 6; // sau do chi do lai moi 6 frame
+  // (_idleFrames/_frameTick khai bao o tren, canh scheduleReposition)
+
   function repositionLoop() {
     _rafId = null;
-    if (imgLayers.size === 0) return; // khong con overlay -> dung han
+    if (imgLayers.size === 0) {
+      _idleFrames = 0;
+      return; // khong con overlay -> dung han
+    }
+    _frameTick++;
+    if (_idleFrames >= IDLE_AFTER_FRAMES && _frameTick % IDLE_CHECK_EVERY !== 0) {
+      if (!document.hidden) _rafId = requestAnimationFrame(repositionLoop);
+      return;
+    }
     const updates = [];
     imgLayers.forEach((layer, img) => {
       const r = img.getBoundingClientRect();
@@ -689,12 +722,27 @@
         layer.style.height = r.height + 'px';
       }
     }
+    if (updates.length > 0) _idleFrames = 0;
+    else _idleFrames++;
     if (!document.hidden) _rafId = requestAnimationFrame(repositionLoop);
   }
   function startRepositionLoop() {
     if (_rafId == null && !document.hidden && imgLayers.size > 0) {
       _rafId = requestAnimationFrame(repositionLoop);
     }
+  }
+
+  // Bat ky dau hieu nao cho thay nguoi dung vua tuong tac -> keo tan so do vi
+  // tri len lai ngay. Day la thu giu cho viec ha tan so o tren luon an toan:
+  // chuyen dong bang CSS transform (thu khong phat 'scroll') gan nhu luon di
+  // sau mot thao tac cua nguoi dung - bat cac su kien do la bat duoc thoi diem
+  // BAT DAU chuyen dong, khong phai doi den luc do lai moi phat hien.
+  function wakeReposition() {
+    _idleFrames = 0;
+    startRepositionLoop();
+  }
+  for (const evt of ['wheel', 'keydown', 'pointerdown', 'touchstart']) {
+    window.addEventListener(evt, wakeReposition, { passive: true, capture: true });
   }
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) startRepositionLoop();
@@ -995,6 +1043,11 @@
         textboxes.forEach((box, i) => this._fitTextboxFont(box, regions[i].dst));
       });
       ro.observe(img);
+      // Giu tham chieu de con NGAT duoc. Truoc day `ro` chi la bien cuc bo cua
+      // render(), khong ai giu -> khong the disconnect() -> moi anh da dich de
+      // lai vinh vien mot ResizeObserver dang quan sat mot <img> co the da roi
+      // khoi DOM (do that: 263 .mot-layer con song cho 13 <img>). Xem releaseImg().
+      layer.__motRo = ro;
 
       log('Da ve overlay:', regions.length, 'vung chu (inpaint that)');
     },
@@ -1315,8 +1368,19 @@
     return renderedPageBBoxes.some((r) => overlapRatio(r, candidate) > 0.5);
   }
 
+  // Chi giu mot cua so gan day. Registry nay chi phuc vu MOT viec: chan anh KE
+  // TIEP ve lai noi dung ma anh LIEN TRUOC no da ve ho qua dai bien muon - tuc
+  // no chi bao gio khop voi vai anh gan nhat. De no lon vo han tren chuong dai
+  // vua ton bo nho vua lam isDuplicateOfRendered() (quet ca mang cho TUNG vung
+  // cua TUNG anh) cham dan theo binh phuong do dai phien doc.
+  // 200 la rat rong: moi anh chi gop vai vung dai-bien, tuc phu hon 50 anh gan nhat.
+  const MAX_RENDERED_BBOXES = 200;
+
   function registerRenderedRegion(img, region) {
     renderedPageBBoxes.push(toPageBBox(img, region));
+    if (renderedPageBBoxes.length > MAX_RENDERED_BBOXES) {
+      renderedPageBBoxes.splice(0, renderedPageBBoxes.length - MAX_RENDERED_BBOXES);
+    }
   }
 
   // ===== Job — tai + dich + ve overlay cho 1 anh (dung chung cho Queue) =====
@@ -1411,6 +1475,10 @@
       console.error('[MOT] Loi dich anh:', img.currentSrc || img.src, err);
       state.errors++;
       errorLog.push({ src: img.currentSrc || img.src, message: err.message });
+      // showErrorSummary() do het vao mot alert() - de danh sach lon vo han thi
+      // vua ton bo nho, vua dung mot hop thoai khong the doc noi. state.errors
+      // van dem du tong so that.
+      if (errorLog.length > 50) errorLog.splice(0, errorLog.length - 50);
     }
   }
 
@@ -1501,19 +1569,56 @@
   const registeredImages = new Set();
   let intersectionObserver = null;
 
-  // Reader AO HOA (virtual list, vd MangaPlaza) TAI DUNG cung <img> cho trang
-  // khac (doi blob src). Khi src doi tren 1 anh DA render, layer cu la cua noi
-  // dung CU -> vo hieu (xoa layer + bo danh dau) roi dich lai noi dung moi.
-  function invalidateImg(img) {
+  // Tra lai MOI thu gan voi 1 anh: layer, ResizeObserver rieng cua no, cho
+  // trong imgLayers/_lastRect va cho trong hang doi. Tach rieng khoi
+  // invalidateImg() vi co HAI ly do rat khac nhau can don:
+  //  - anh doi src (invalidateImg): don xong roi DICH LAI noi dung moi;
+  //  - anh bi xoa khoi DOM (releaseImg): don xong la het, khong dich lai gi.
+  function releaseImg(img) {
     const layer = imgLayers.get(img);
     if (layer) {
+      // disconnect() bat buoc: ResizeObserver dang quan sat <img> se giu song
+      // ca <img> lan closure cua no (trong do co ca mang `regions` kem anh nen
+      // base64) chung nao chua ngat.
+      if (layer.__motRo) {
+        layer.__motRo.disconnect();
+        layer.__motRo = null;
+      }
       _lastRect.delete(layer);
       layer.remove();
       imgLayers.delete(img);
     }
+    // Go khoi hang doi truc tiep thay vi goi Queue.cancel(): cancel() ghi log
+    // "cuon qua xa, chua kip dich" - dung nguyen nhan khac han, doc log se lac huong.
+    const pendingIdx = Queue._pending.indexOf(img);
+    if (pendingIdx !== -1) Queue._pending.splice(pendingIdx, 1);
     Queue._queued.delete(img);
     delete img.__motRenderedSrc;
+  }
+
+  // Reader AO HOA (virtual list, vd MangaPlaza) TAI DUNG cung <img> cho trang
+  // khac (doi blob src). Khi src doi tren 1 anh DA render, layer cu la cua noi
+  // dung CU -> vo hieu (xoa layer + bo danh dau) roi dich lai noi dung moi.
+  function invalidateImg(img) {
+    releaseImg(img);
     if (autoStarted) Queue.enqueue(img);
+  }
+
+  // Anh da bi XOA HAN khoi DOM (reader chuyen trang kieu xoa <img> cu di).
+  // Truoc day khong ai xu ly truong hop nay: imgLayers la Map MANH nen <img>
+  // da roi DOM, layer cua no va ResizeObserver cua no song vinh vien - do that
+  // tren may nguoi dung la 263 .mot-layer / 2422 phan tu cho ve ven 13 <img>.
+  //
+  // Doi mot vong su kien roi moi kiem tra isConnected: nhieu reader DI CHUYEN
+  // node bang cach xoa rồi chen lai ngay trong cung mot tac vu, neu don ngay
+  // luc thay removedNodes thi se pha nham overlay cua mot anh van dang hien.
+  function releaseIfDetached(img) {
+    setTimeout(() => {
+      if (!img.isConnected) {
+        releaseImg(img);
+        registeredImages.delete(img);
+      }
+    }, 0);
   }
 
   function registerImage(img) {
@@ -1567,6 +1672,14 @@
           if (node.nodeType !== 1) continue; // chi quan tam Element node
           if (node.tagName === 'IMG') registerImage(node);
           node.querySelectorAll?.('img').forEach(registerImage);
+        }
+        // Anh roi khoi DOM -> tra lai layer + ResizeObserver cua no. Truoc day
+        // chi theo doi addedNodes, nen reader nao XOA <img> (thay vi tai dung
+        // no cho trang khac) deu lam ro ri vinh vien (xem releaseIfDetached).
+        for (const node of m.removedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (node.tagName === 'IMG') releaseIfDetached(node);
+          node.querySelectorAll?.('img').forEach(releaseIfDetached);
         }
       }
     });
@@ -1811,8 +1924,12 @@
   // day la userscript don gian, khong co UI panel rieng.
   function showErrorSummary() {
     const lines = errorLog.map((e) => `- ${e.src}\n  ${e.message}`);
+    // state.errors la tong SO THAT; errorLog chi giu 50 loi gan nhat (xem cho
+    // push). Dung state.errors de con so bao ra khong bi cat cut theo.
+    const omitted = state.errors - errorLog.length;
+    const note = omitted > 0 ? `\n\n(chỉ hiện ${errorLog.length} lỗi gần nhất, ${omitted} lỗi cũ hơn đã lược)` : '';
     alert(
-      `Dịch xong nhưng có ${errorLog.length} ảnh lỗi:\n\n${lines.join('\n')}`
+      `Dịch xong nhưng có ${state.errors} ảnh lỗi:\n\n${lines.join('\n')}${note}`
     );
   }
 

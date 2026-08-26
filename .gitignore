@@ -12,3 +12,6 @@ test-image.b64
 # Python build artifacts
 __pycache__/
 *.pyc
+
+# Log cua setup.ps1/start.ps1 - sinh ra luc chay, khong phai ma nguon.
+logs/
