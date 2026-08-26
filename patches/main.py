@@ -120,6 +120,9 @@ async def stream_json(req: Request, data: TranslateRequest) -> StreamingResponse
     # do ve, thay vi pickle ca Context ~108MB. Executor doc co nay qua getattr
     # (giong cach _web_frontend_optimized dang chay toi executor).
     data.config._response_format = "json"
+    # Cung mau underscore-attr: server gan, executor doc bang getattr. Config di
+    # qua ranh gioi tien trinh bang pickle nen thuoc tinh nay theo sang executor.
+    data.config._mot_context = list(data.context or [])
     return await while_streaming(req, transform_to_json, data.config, data.image)
 
 @app.post("/translate/bytes/stream", response_class=StreamingResponse, tags=["api", "json"],response_description="A stream over elements with strucure(1byte status, 4 byte size, n byte data) status code are 0,1,2,3,4 0 is result data, 1 is progress report, 2 is error, 3 is waiting queue position, 4 is waiting for translator instance")

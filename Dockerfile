@@ -31,6 +31,10 @@ COPY patches/http_retry.py /app/server/http_retry.py
 # docs/superpowers/specs/2026-07-23-translator-engine-picker-design.md muc 3.
 COPY patches/deepl.py /app/manga_translator/translators/deepl.py
 
+# Them field `context` vao TranslateRequest. Pydantic v2 mac dinh extra='ignore'
+# nen field khong khai bao se bi bo AM THAM - client gui len cung vo ich.
+COPY patches/request_extraction.py /app/server/request_extraction.py
+
 # Va bug: buoc KIEM TRA response cua chatgpt.py bat buoc marker <|n|> phai nam dau
 # dong (re.match voi ^), trong khi buoc TRICH ngay tren no lai tim marker o bat ky
 # dau (re.split). Response ma buoc trich xu ly duoc van bi bac bo -> thu lai 3 lan,
