@@ -74,7 +74,15 @@ async function downloadImage(url, refererUrl) {
   return responseToPayload(relayRes);
 }
 
-const TRANSLATE_TIMEOUT_MS = 180000; // PHAI khop CFG.TIMEOUT_MS ben content-script
+// Timeout THAT SU cua mot luot dich - day la noi duy nhat co hieu luc, vi day
+// cung la noi duy nhat goi fetch (content-script khong tu goi mang duoc).
+//
+// 180s (do that 2026-08-23): 10 tab dich nen dong thoi -> request cham nhat mat
+// 67s tren trang nhieu chu, do tre tang ~6.5s moi tab them vao. Voi 90s thi tu
+// ~13 tab tro len bat dau co trang bi HUY IM LANG (mat trang, khong bao loi).
+// Noi len 180s day tran len ~27 tab. Cai gia: backend treo that thi tab do ket
+// 3 phut thay vi 1.5 phut - chap nhan duoc voi dich nen.
+const TRANSLATE_TIMEOUT_MS = 180000;
 
 // Port nguyen van tu ApiAdapter.normalizeResponse() cua userscript cu
 // (manga-overlay-translator.user.js dong 641-690) - giao thuc frame nhi

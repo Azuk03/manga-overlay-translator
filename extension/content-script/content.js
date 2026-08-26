@@ -22,12 +22,11 @@
     MIN_NW: 400,
     MIN_NH: 400,
     MIN_DISPLAY_RATIO: 0.3,
-    // 180s (do that 2026-08-23): 10 tab dich nen dong thoi -> request cham nhat
-    // mat 67s tren trang nhieu chu, do tre tang ~6.5s moi tab them vao. Voi 90s
-    // thi tu ~13 tab tro len bat dau co trang bi HUY IM LANG (mat trang, khong
-    // bao loi). Noi len 180s day tran len ~27 tab. Cai gia: backend treo that
-    // thi tab do ket 3 phut thay vi 1.5 phut - chap nhan duoc voi dich nen.
-    TIMEOUT_MS: 180000,
+    // (Da bo TIMEOUT_MS khoi day: no la CODE CHET - khai bao nhung khong dong
+    // nao doc. Timeout that su nam o background.js, noi duy nhat goi fetch. Giu
+    // lai mot ban sao vo tac dung kem ghi chu "phai khop" la cai bay: nguoi sua
+    // sau rat de chinh dung cai khong co hieu luc roi tuong da doi timeout.
+    // Toan bo so lieu do duoc da chuyen sang canh hang so that.)
     FONT: '"Be Vietnam Pro", "Nunito", sans-serif',
     // (Da bo BG_PAD - tung noi rong khung nen 8% + keo gian anh inpaint
     // cho vua, nhung tren nen mau/gradient viec keo gian tao ra "mieng va"
@@ -275,7 +274,7 @@
   // canvas (giong het imageElementToBlob() da dung on dinh o C2 cho
   // nhanh blob:/data: URL) thay vi createImageBitmap() - dang tin cay hon
   // qua nhieu trinh duyet/dinh dang, khong chi rieng vu AVIF nay.
-  function reencodeToPng(blob) {
+  function decodeBlobToCanvas(blob) {
     return new Promise((resolve, reject) => {
       const objUrl = URL.createObjectURL(blob);
       const img = new Image();
@@ -286,10 +285,7 @@
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
         URL.revokeObjectURL(objUrl);
-        canvas.toBlob((out) => {
-          if (out) resolve(out);
-          else reject(new Error('Khong re-encode duoc anh sang PNG'));
-        }, 'image/png');
+        resolve(canvas);
       };
       img.onerror = () => {
         URL.revokeObjectURL(objUrl);
@@ -297,6 +293,36 @@
       };
       img.src = objUrl;
     });
+  }
+
+  function reencodeToPng(blob) {
+    return decodeBlobToCanvas(blob).then(
+      (canvas) =>
+        new Promise((resolve, reject) => {
+          canvas.toBlob((out) => {
+            if (out) resolve(out);
+            else reject(new Error('Khong re-encode duoc anh sang PNG'));
+          }, 'image/png');
+        })
+    );
+  }
+
+  // Giai ma blob thanh ImageBitmap de cat/ghep bang canvas.
+  //
+  // PHAI di qua ham nay, KHONG goi thang createImageBitmap(blob): tu khi anh
+  // duoc gui THANG byte goc (xem image-format.js) thi blob toi day co the la
+  // AVIF, ma theo ghi chu v0.33 - loi that da gap tren Coc Coc - mot so ban
+  // Chromium co codec AVIF cho <img> nhung KHONG co cho createImageBitmap()
+  // ("InvalidStateError: The source image could not be decoded"). Truoc day moi
+  // blob deu da la PNG nen khong the gap; gio thi co the. Duong lui dung lai
+  // dung <img> + canvas - cach von da chay on dinh cho ca AVIF.
+  async function decodeBlobToBitmap(blob) {
+    try {
+      return await createImageBitmap(blob);
+    } catch (err) {
+      log('createImageBitmap that bai, giai ma lai bang <img>+canvas:', err && err.message);
+      return await createImageBitmap(await decodeBlobToCanvas(blob));
+    }
   }
 
   console.log('[MOT] CFG/ImageFinder/Cache/helpers da nap xong (Task 6).');
@@ -307,13 +333,17 @@
   // trong Manifest V3 - da xac nhan bang test that (res.arrayBuffer den noi
   // nay chi con la {} rong, Blob ket qua chi co 15 byte cua chuoi
   // "[object Object]" bi stringify nham thay vi du lieu nhi phan that).
-  function base64ToBlob(base64, contentType) {
+  function base64ToBytes(base64) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
     }
-    return new Blob([bytes], { type: contentType });
+    return bytes;
+  }
+
+  function base64ToBlob(base64, contentType) {
+    return new Blob([base64ToBytes(base64)], { type: contentType });
   }
 
   // Boc chrome.runtime.sendMessage (callback-style) thanh Promise, kiem tra
@@ -364,6 +394,34 @@
       : result.mot_eager_translate;
   }
 
+  // Blob nao la BYTE GOC gui thang (khong qua nen lai PNG). Dung WeakSet chu
+  // khong doi chu ky ham tra ve, de moi noi goi downloadImageBlob() giu nguyen.
+  // translateImage() tra cuu o day de biet co duoc phep thu lai bang duong nen
+  // PNG khi backend tu choi (vd nguoi dung cap nhat extension nhung chua build
+  // lai image nen chua co pillow-avif-plugin).
+  const passthroughBlobs = new WeakSet();
+
+  // NOI DUY NHAT tai anh tu URL. Truoc day logic nay bi CHEP LAM DOI (mot ban
+  // trong ApiAdapter.downloadImageBlob, mot ban trong downloadBlobFromUrl cho
+  // prefetch) kem mot comment dan "phai mirror dung nhanh non-blob de hash
+  // KHOP" - dung loai rui ro ma viec gop lai nay xoa han: hai ban lech nhau la
+  // hash lech nhau, tuc prefetch ghi vao mot khoa ma luc doc khong bao gio trung.
+  async function downloadBlobFromUrl(url) {
+    const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url });
+    if (!res || !res.ok) {
+      throw new Error((res && res.error) || 'Khong tai duoc anh: ' + url);
+    }
+    const bytes = base64ToBytes(res.base64);
+    if (motShouldReencodeForBackend(res.contentType, bytes)) {
+      // Duong cu: backend khong doc duoc dinh dang nay, hoac anh co EXIF (huong
+      // xoay co the lech giua trinh duyet va Pillow) - xem image-format.js.
+      return await reencodeToPng(new Blob([bytes], { type: res.contentType }));
+    }
+    const blob = new Blob([bytes], { type: res.contentType });
+    passthroughBlobs.add(blob);
+    return blob;
+  }
+
   // ===== ApiAdapter — NOI DUY NHAT BIET SCHEMA BACKEND =====
   const ApiAdapter = {
     async downloadImageBlob(img) {
@@ -374,13 +432,7 @@
         // trinh duyet (xem spec muc 5a diem 1).
         return await imageElementToBlob(img);
       }
-
-      const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url: src });
-      if (!res || !res.ok) {
-        throw new Error((res && res.error) || 'Khong tai duoc anh goc: ' + src);
-      }
-      const rawBlob = base64ToBlob(res.base64, res.contentType);
-      return await reencodeToPng(rawBlob);
+      return await downloadBlobFromUrl(src);
     },
 
     blobToDataURL(blob) {
@@ -397,7 +449,6 @@
     // local). Dung cho gate detect-first cua ghep-bien: biet truoc co vung
     // vat-bien khong ma khong ton 1 luot GPT (xem detectBoundaryRegions()).
     async translateImage(blob, detectOnly = false) {
-      const dataUrl = await this.blobToDataURL(blob);
       const targetLang = await getTargetLang();
       const engine = detectOnly ? 'none' : await getTranslatorEngine();
       const translatorConfig = {
@@ -421,9 +472,24 @@
       if (!detectOnly) {
         config.inpainter = { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE };
       }
-      const body = JSON.stringify({ image: dataUrl, config });
+      const send = async (b) => {
+        const body = JSON.stringify({ image: await this.blobToDataURL(b), config });
+        return await sendMessageAsync({ type: 'TRANSLATE', body });
+      };
 
-      const res = await sendMessageAsync({ type: 'TRANSLATE', body });
+      let res = await send(blob);
+      if ((!res || !res.ok) && passthroughBlobs.has(blob)) {
+        // Blob nay la byte goc gui thang. Backend tu choi co the vi no CHUA co
+        // pillow-avif-plugin (nguoi dung cap nhat extension nhung chua build lai
+        // image). Nen lai thanh PNG va thu dung MOT lan - duong nen PNG la thu
+        // von da chay on dinh tu truoc, nen buoc lui nay luon an toan.
+        log('Backend tu choi byte goc, thu lai bang duong nen PNG:', (res && res.error) || '');
+        try {
+          res = await send(await reencodeToPng(blob));
+        } catch (err) {
+          throw new Error('Backend tu choi ca byte goc lan ban nen PNG: ' + err.message);
+        }
+      }
       if (!res || !res.ok) {
         throw new Error((res && res.error) || 'Loi khong xac dinh khi goi backend');
       }
@@ -468,7 +534,7 @@
 
   // Copy tu manga-overlay-translator.user.js dong 726-772
   async function sliceImageIntoTiles(blob, naturalW, naturalH) {
-    const bitmap = await createImageBitmap(blob);
+    const bitmap = await decodeBlobToBitmap(blob);
     const tiles = [];
     const step = CFG.TILE_MAX_H - CFG.TILE_OVERLAP;
     for (let y = 0; y < naturalH; y += step) {
@@ -555,8 +621,16 @@
 
   // Tinh lai vi tri toan bo layer, gom bang requestAnimationFrame (moi frame
   // chi 1 lan) de khong giat khi scroll/resize lien tuc.
+  // Trang thai "dung yen" cua vong lap rAF ben duoi. Khai bao O DAY (truoc moi
+  // ham cham vao no) chu khong phai canh repositionLoop: scheduleReposition()
+  // duoc dang ky lam listener ngay ben duoi, doc mot bien `let` khai bao sau no
+  // la mot loi TDZ cho san neu sau nay co ai goi ham nay som hon.
+  let _idleFrames = 0;
+  let _frameTick = 0;
+
   let _reposScheduled = false;
   function scheduleReposition() {
+    _idleFrames = 0; // co cuon/resize that -> trang dang dong, chay du toc do
     if (_reposScheduled) return;
     _reposScheduled = true;
     requestAnimationFrame(() => {
@@ -599,9 +673,34 @@
   // (c) tu DUNG khi khong con overlay; (d) tam dung khi tab an (document.hidden).
   let _rafId = null;
   const _lastRect = new WeakMap();
+
+  // (e) HA TAN SO KHI NGUOI DUNG DUNG YEN. Doc getBoundingClientRect() cua moi
+  // layer o MOI frame la mot phep do lien tuc khong bao gio nghi: no bat CPU
+  // lam viec ca khi trang dung im. Tren chinh may nay (laptop RTX 3050 Ti 4GB)
+  // dieu do khong vo hai - CPU nong lam GPU bi throttle, tuc backend dich CHAM DI.
+  //
+  // Nhung KHONG duoc ha tan so mot cach mu quang: vong lap nay sinh ra chinh vi
+  // reader kieu MangaPlaza di chuyen trang bang CSS transform, thu KHONG phat
+  // su kien scroll - ha xuong 10 lan/giay se lam overlay tre thay ro dung luc
+  // lat trang. Nen dieu kien la: chi ha khi da mot luc KHONG co gi nhuc nhich,
+  // VA bat ky dau hieu nao cho thay nguoi dung vua tuong tac deu keo tan so len
+  // lai ngay lap tuc (xem wakeReposition). Trang dung yen thi khong co gi de
+  // tre; trang dang chuyen dong thi luon chay du toc do.
+  const IDLE_AFTER_FRAMES = 60; // ~1s khong doi gi
+  const IDLE_CHECK_EVERY = 6; // sau do chi do lai moi 6 frame
+  // (_idleFrames/_frameTick khai bao o tren, canh scheduleReposition)
+
   function repositionLoop() {
     _rafId = null;
-    if (imgLayers.size === 0) return; // khong con overlay -> dung han
+    if (imgLayers.size === 0) {
+      _idleFrames = 0;
+      return; // khong con overlay -> dung han
+    }
+    _frameTick++;
+    if (_idleFrames >= IDLE_AFTER_FRAMES && _frameTick % IDLE_CHECK_EVERY !== 0) {
+      if (!document.hidden) _rafId = requestAnimationFrame(repositionLoop);
+      return;
+    }
     const updates = [];
     imgLayers.forEach((layer, img) => {
       const r = img.getBoundingClientRect();
@@ -622,12 +721,31 @@
         layer.style.height = r.height + 'px';
       }
     }
+    if (updates.length > 0) _idleFrames = 0;
+    else _idleFrames++;
     if (!document.hidden) _rafId = requestAnimationFrame(repositionLoop);
   }
   function startRepositionLoop() {
     if (_rafId == null && !document.hidden && imgLayers.size > 0) {
       _rafId = requestAnimationFrame(repositionLoop);
     }
+  }
+
+  // Bat ky dau hieu nao cho thay nguoi dung vua tuong tac -> keo tan so do vi
+  // tri len lai ngay. Day la thu giu cho viec ha tan so o tren luon an toan:
+  // chuyen dong bang CSS transform (thu khong phat 'scroll') gan nhu luon di
+  // sau mot thao tac cua nguoi dung - bat cac su kien do la bat duoc thoi diem
+  // BAT DAU chuyen dong, khong phai doi den luc do lai moi phat hien.
+  function wakeReposition() {
+    // Content script chay tren MOI trang, ke ca trang chua bao gio bam dich -
+    // thoat ngay khi khong co overlay nao de 4 listener duoi day thuc su khong
+    // ton gi tren nhung trang do.
+    if (imgLayers.size === 0) return;
+    _idleFrames = 0;
+    startRepositionLoop();
+  }
+  for (const evt of ['wheel', 'keydown', 'pointerdown', 'touchstart']) {
+    window.addEventListener(evt, wakeReposition, { passive: true, capture: true });
   }
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) startRepositionLoop();
@@ -928,6 +1046,11 @@
         textboxes.forEach((box, i) => this._fitTextboxFont(box, regions[i].dst));
       });
       ro.observe(img);
+      // Giu tham chieu de con NGAT duoc. Truoc day `ro` chi la bien cuc bo cua
+      // render(), khong ai giu -> khong the disconnect() -> moi anh da dich de
+      // lai vinh vien mot ResizeObserver dang quan sat mot <img> co the da roi
+      // khoi DOM (do that: 263 .mot-layer con song cho 13 <img>). Xem releaseImg().
+      layer.__motRo = ro;
 
       log('Da ve overlay:', regions.length, 'vung chu (inpaint that)');
     },
@@ -1052,7 +1175,7 @@
   // Blob thuan (khong con la <img> song), cat bang canvas moi an toan.
   async function getStripFromNextImage(nextImg, stripHeightPx) {
     const fullBlob = await ApiAdapter.downloadImageBlob(nextImg);
-    const bitmap = await createImageBitmap(fullBlob);
+    const bitmap = await decodeBlobToBitmap(fullBlob);
     const h = Math.min(stripHeightPx, bitmap.height);
     const canvas = document.createElement('canvas');
     canvas.width = bitmap.width;
@@ -1095,8 +1218,8 @@
     let ownStripH;
     try {
       const [currentBitmap, stripBitmap] = await Promise.all([
-        createImageBitmap(blob),
-        createImageBitmap(stripBlob),
+        decodeBlobToBitmap(blob),
+        decodeBlobToBitmap(stripBlob),
       ]);
       ownStripH = Math.min(CFG.BOUNDARY_BORROW_HEIGHT, currentBitmap.height);
       const canvas = document.createElement('canvas');
@@ -1248,8 +1371,19 @@
     return renderedPageBBoxes.some((r) => overlapRatio(r, candidate) > 0.5);
   }
 
+  // Chi giu mot cua so gan day. Registry nay chi phuc vu MOT viec: chan anh KE
+  // TIEP ve lai noi dung ma anh LIEN TRUOC no da ve ho qua dai bien muon - tuc
+  // no chi bao gio khop voi vai anh gan nhat. De no lon vo han tren chuong dai
+  // vua ton bo nho vua lam isDuplicateOfRendered() (quet ca mang cho TUNG vung
+  // cua TUNG anh) cham dan theo binh phuong do dai phien doc.
+  // 200 la rat rong: moi anh chi gop vai vung dai-bien, tuc phu hon 50 anh gan nhat.
+  const MAX_RENDERED_BBOXES = 200;
+
   function registerRenderedRegion(img, region) {
     renderedPageBBoxes.push(toPageBBox(img, region));
+    if (renderedPageBBoxes.length > MAX_RENDERED_BBOXES) {
+      renderedPageBBoxes.splice(0, renderedPageBBoxes.length - MAX_RENDERED_BBOXES);
+    }
   }
 
   // ===== Job — tai + dich + ve overlay cho 1 anh (dung chung cho Queue) =====
@@ -1257,6 +1391,56 @@
   // Luu loi chi tiet de nguoi dung bam nut xem lai (C4: "Loi - click xem"
   // - spec goc nghi cho 1 anh, o day gop thanh danh sach vi co nhieu anh).
   const errorLog = [];
+
+  // ===== Tai truoc anh ke tiep (pipeline cua hang doi) =====
+  // WeakMap: khong bao gio duyet, va khong duoc phep giu song mot <img> da roi
+  // khoi DOM (dung loai ro ri vua sua o releaseImg).
+  const _prefetchedBlobs = new WeakMap(); // img -> { src, promise }
+
+  function startPrefetchBlob(img) {
+    if (!img) return;
+    const src = img.currentSrc || img.src || '';
+    // blob:/data: doc thang pixel tu <img> dang hien thi, khong tai qua mang -
+    // khong co gi de lam truoc.
+    if (!src || src.startsWith('blob:') || src.startsWith('data:')) return;
+    const existing = _prefetchedBlobs.get(img);
+    if (existing && existing.src === src) return; // dang tai roi
+
+    const promise = (async () => {
+      // Neu anh nay da co san ban dich thi duong dich se di fast path va khong
+      // dung toi byte nao - tai ve la phi bang thong. Dung dung phep kiem tra
+      // ma fast path dung.
+      const targetLang = await getTargetLang();
+      const engine = await getTranslatorEngine();
+      const fully = await motIsUrlFullyCached(
+        chrome.storage.local,
+        src,
+        (u) => Cache._urlKey(u),
+        (h) => Cache._key(h, targetLang, engine)
+      );
+      if (fully) return null;
+      return await downloadBlobFromUrl(src);
+    })().catch((err) => {
+      // Tai truoc that bai thi im lang: duong dich chinh se tu tai lai va bao
+      // loi dung cach neu that su hong. Nuot o day de khong sinh unhandled
+      // rejection cho mot viec chi mang tinh toi uu.
+      log('Tai truoc anh ke tiep that bai, se tai lai luc dich:', err && err.message);
+      return null;
+    });
+
+    _prefetchedBlobs.set(img, { src, promise });
+  }
+
+  // Lay blob da tai truoc, CHI khi no dung la cua src hien tai cua anh: reader
+  // ao hoa co the da doi src cua chinh <img> nay trong luc cho, dung nham blob
+  // cu la ve ban dich cua trang khac len trang nay.
+  async function takePrefetchedBlob(img, src) {
+    const entry = _prefetchedBlobs.get(img);
+    if (!entry) return null;
+    _prefetchedBlobs.delete(img);
+    if (entry.src !== src) return null;
+    return await entry.promise;
+  }
 
   async function translateAndRenderImage(img) {
     if (imgLayers.has(img)) return;
@@ -1281,7 +1465,10 @@
       // SLOW PATH: tai anh + hash + tra hash-cache + (dich backend). Luu chi muc
       // URL->hash de lan sau vao fast-path.
       if (!result) {
-        const blob = await ApiAdapter.downloadImageBlob(img);
+        // Anh nay co the da duoc tai san trong luc backend dich anh truoc do
+        // (xem startPrefetchBlob trong Queue._drain) - luc do buoc tai ~3s o
+        // day bien mat hoan toan.
+        const blob = (await takePrefetchedBlob(img, url)) || (await ApiAdapter.downloadImageBlob(img));
         const hash = await Cache.hashBlob(blob);
         result = await Cache.get(hash, targetLang, engine);
         if (result) {
@@ -1344,6 +1531,10 @@
       console.error('[MOT] Loi dich anh:', img.currentSrc || img.src, err);
       state.errors++;
       errorLog.push({ src: img.currentSrc || img.src, message: err.message });
+      // showErrorSummary() do het vao mot alert() - de danh sach lon vo han thi
+      // vua ton bo nho, vua dung mot hop thoai khong the doc noi. state.errors
+      // van dem du tong so that.
+      if (errorLog.length > 50) errorLog.splice(0, errorLog.length - 50);
     }
   }
 
@@ -1392,14 +1583,36 @@
       // pha vo gia dinh cua dedup chong ve trung giua anh lien ke (xem
       // renderedPageBBoxes/isDuplicateOfRendered - dua vao gia dinh anh
       // truoc luon dang ky TRUOC anh sau xu ly) va dich khong theo thu tu doc.
-      this._pending.sort((a, b) => {
-        const topA = a.getBoundingClientRect().top + window.scrollY;
-        const topB = b.getBoundingClientRect().top + window.scrollY;
-        return topA - topB;
-      });
+      //
+      // THU TU NAY LA DIEU KIEN DUNG DAN, KHONG PHAI SO THICH - dung doi sang
+      // "uu tien anh gan khung nhin nhat" du nghe hop ly hon: dedup xuyen-anh
+      // dua vao viec anh TRUOC luon dang ky vung da ve TRUOC anh sau (xem
+      // registerRenderedRegion + ghi chu 2026-08-03 o translateAndRenderImage).
+      // Xu ly khong theo thu tu trang lam vo dung gia dinh do va bong bong vat
+      // bien bi ve hai lan - dung bug da mat hai vong go roi truc tiep tren
+      // trinh duyet moi tim ra.
+      //
+      // Do san khoa sap xep MOT LAN moi anh thay vi doc trong ham so sanh:
+      // sort() goi ham so sanh O(n log n) lan, moi lan 2 getBoundingClientRect,
+      // tuc ~2100 lan cuong buc layout cho mot chuong 146 anh - trong khi chi
+      // can dung 146. Thu tu ket qua khong doi mot ly nao.
+      const keyed = this._pending.map((el) => ({
+        el,
+        top: el.getBoundingClientRect().top + window.scrollY,
+      }));
+      keyed.sort((a, b) => a.top - b.top);
+      this._pending = keyed.map((k) => k.el);
+
       const img = this._pending.shift();
       if (!img) return;
       this._active++;
+      // Bat dau TAI anh ke tiep ngay bay gio, de no chay song song voi luot
+      // dich cua anh hien tai. Tai anh la I/O thuan, khong tranh chap GPU voi
+      // backend, nen gan nhu giau duoc hoan toan trong thoi gian dich. Thu
+      // thuat nay von da co trong prefetchHitomiGallery (co ghi kem so do:
+      // ~10s/trang xuong ~7s/trang) nhung chua bao gio duoc ap vao chinh hang
+      // doi nay - tuc moi site khong phai hitomi deu dang chay tuan tu cung.
+      startPrefetchBlob(this._pending[0]);
       // v0.39: log THOI GIAN CHO trong hang doi (khac thoi gian XU LY that
       // trong translateAndRenderImage) + so anh KHAC con dang cho phia sau -
       // giup phan biet "cham vi phai xep hang sau anh khac" (co the cai
@@ -1434,19 +1647,57 @@
   const registeredImages = new Set();
   let intersectionObserver = null;
 
-  // Reader AO HOA (virtual list, vd MangaPlaza) TAI DUNG cung <img> cho trang
-  // khac (doi blob src). Khi src doi tren 1 anh DA render, layer cu la cua noi
-  // dung CU -> vo hieu (xoa layer + bo danh dau) roi dich lai noi dung moi.
-  function invalidateImg(img) {
+  // Tra lai MOI thu gan voi 1 anh: layer, ResizeObserver rieng cua no, cho
+  // trong imgLayers/_lastRect va cho trong hang doi. Tach rieng khoi
+  // invalidateImg() vi co HAI ly do rat khac nhau can don:
+  //  - anh doi src (invalidateImg): don xong roi DICH LAI noi dung moi;
+  //  - anh bi xoa khoi DOM (releaseImg): don xong la het, khong dich lai gi.
+  function releaseImg(img) {
     const layer = imgLayers.get(img);
     if (layer) {
+      // disconnect() bat buoc: ResizeObserver dang quan sat <img> se giu song
+      // ca <img> lan closure cua no (trong do co ca mang `regions` kem anh nen
+      // base64) chung nao chua ngat.
+      if (layer.__motRo) {
+        layer.__motRo.disconnect();
+        layer.__motRo = null;
+      }
       _lastRect.delete(layer);
       layer.remove();
       imgLayers.delete(img);
     }
+    // Go khoi hang doi truc tiep thay vi goi Queue.cancel(): cancel() ghi log
+    // "cuon qua xa, chua kip dich" - dung nguyen nhan khac han, doc log se lac huong.
+    const pendingIdx = Queue._pending.indexOf(img);
+    if (pendingIdx !== -1) Queue._pending.splice(pendingIdx, 1);
     Queue._queued.delete(img);
+    _prefetchedBlobs.delete(img); // bo blob da tai truoc cho anh khong con dung toi
     delete img.__motRenderedSrc;
+  }
+
+  // Reader AO HOA (virtual list, vd MangaPlaza) TAI DUNG cung <img> cho trang
+  // khac (doi blob src). Khi src doi tren 1 anh DA render, layer cu la cua noi
+  // dung CU -> vo hieu (xoa layer + bo danh dau) roi dich lai noi dung moi.
+  function invalidateImg(img) {
+    releaseImg(img);
     if (autoStarted) Queue.enqueue(img);
+  }
+
+  // Anh da bi XOA HAN khoi DOM (reader chuyen trang kieu xoa <img> cu di).
+  // Truoc day khong ai xu ly truong hop nay: imgLayers la Map MANH nen <img>
+  // da roi DOM, layer cua no va ResizeObserver cua no song vinh vien - do that
+  // tren may nguoi dung la 263 .mot-layer / 2422 phan tu cho ve ven 13 <img>.
+  //
+  // Doi mot vong su kien roi moi kiem tra isConnected: nhieu reader DI CHUYEN
+  // node bang cach xoa rồi chen lai ngay trong cung mot tac vu, neu don ngay
+  // luc thay removedNodes thi se pha nham overlay cua mot anh van dang hien.
+  function releaseIfDetached(img) {
+    setTimeout(() => {
+      if (!img.isConnected) {
+        releaseImg(img);
+        registeredImages.delete(img);
+      }
+    }, 0);
   }
 
   function registerImage(img) {
@@ -1500,6 +1751,14 @@
           if (node.nodeType !== 1) continue; // chi quan tam Element node
           if (node.tagName === 'IMG') registerImage(node);
           node.querySelectorAll?.('img').forEach(registerImage);
+        }
+        // Anh roi khoi DOM -> tra lai layer + ResizeObserver cua no. Truoc day
+        // chi theo doi addedNodes, nen reader nao XOA <img> (thay vi tai dung
+        // no cho trang khac) deu lam ro ri vinh vien (xem releaseIfDetached).
+        for (const node of m.removedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (node.tagName === 'IMG') releaseIfDetached(node);
+          node.querySelectorAll?.('img').forEach(releaseIfDetached);
         }
       }
     });
@@ -1556,17 +1815,9 @@
     }
   }
 
-  // Tai blob tu URL truc tiep (khong qua <img>). Mirror DUNG nhanh non-blob
-  // cua ApiAdapter.downloadImageBlob de hash KHOP hash luc dieu huong (cache
-  // HIT khi nguoi dung lat toi trang).
-  async function downloadBlobFromUrl(url) {
-    const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url });
-    if (!res || !res.ok) {
-      throw new Error((res && res.error) || 'Khong tai duoc anh: ' + url);
-    }
-    const rawBlob = base64ToBlob(res.base64, res.contentType);
-    return await reencodeToPng(rawBlob);
-  }
+  // (downloadBlobFromUrl da chuyen len canh ApiAdapter - prefetch va duong dich
+  // thuong gio dung CHUNG mot ham, khong con hai ban chep tay phai giu cho khop
+  // hash nhau.)
 
   // Toast tien trinh prefetch: 1 element cap nhat textContent, tai dung style
   // .mot-toast. Khi done == total -> doi text "xong" roi tu an sau 3s.
@@ -1752,8 +2003,12 @@
   // day la userscript don gian, khong co UI panel rieng.
   function showErrorSummary() {
     const lines = errorLog.map((e) => `- ${e.src}\n  ${e.message}`);
+    // state.errors la tong SO THAT; errorLog chi giu 50 loi gan nhat (xem cho
+    // push). Dung state.errors de con so bao ra khong bi cat cut theo.
+    const omitted = state.errors - errorLog.length;
+    const note = omitted > 0 ? `\n\n(chỉ hiện ${errorLog.length} lỗi gần nhất, ${omitted} lỗi cũ hơn đã lược)` : '';
     alert(
-      `Dịch xong nhưng có ${errorLog.length} ảnh lỗi:\n\n${lines.join('\n')}`
+      `Dịch xong nhưng có ${state.errors} ảnh lỗi:\n\n${lines.join('\n')}${note}`
     );
   }
 

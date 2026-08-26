@@ -3,8 +3,17 @@
 function Build-DockerRunArgs {
     param([hashtable]$EnvVars, [bool]$HasGpu, [string]$ContainerName, [string]$ResultDir)
 
+    # -p 127.0.0.1:5003:5003 (KHONG phai '5003:5003'): dang khong co dia chi
+    # publish ra MOI interface cua may, tuc ca LAN goi duoc backend. Backend nay
+    # khong co xac thuc va co /fetch-image nhan URL bat ky - dung nghia mot SSRF
+    # proxy - nen chi duoc nghe tren localhost. --host=0.0.0.0 BEN TRONG container
+    # thi phai giu: docker-proxy chuyen tiep vao eth0 cua container, nghe 127.0.0.1
+    # trong do se khong nhan duoc goi nao.
+    # 8000/8001 da bo: README muc "Port thuc te" da xac nhan thuc nghiem khong co
+    # gi nghe o 2 cong do trong cau hinh nay (chung chi thuoc Web Mode/API Mode
+    # chay tach rieng cua upstream).
     $a = @('run', '--rm', '--name', $ContainerName,
-           '-p', '5003:5003', '-p', '8000:8000', '-p', '8001:8001', '--ipc=host')
+           '-p', '127.0.0.1:5003:5003', '--ipc=host')
     if ($HasGpu) { $a += @('--gpus', 'all') }
     # KHÔNG mount fonts/ - mount thư mục rỗng sẽ đè lên font có sẵn trong image.
     $a += @('--entrypoint', 'python', '-v', "$($ResultDir):/app/result")
