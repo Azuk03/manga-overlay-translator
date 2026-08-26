@@ -21,6 +21,7 @@
       "js": [
         "content-script/url-cache-key.js",
         "content-script/image-format.js",
+        "content-script/dialogue-context.js",
         "content-script/content.js"
       ],
       "run_at": "document_idle"
