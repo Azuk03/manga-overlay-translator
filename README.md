@@ -39,7 +39,7 @@ File `manga-overlay-translator.user.js` vẫn khả dụng để tham khảo, nh
 README gốc của `manga-image-translator` mâu thuẫn giữa 5003/8000/8001. Đã xác nhận thực nghiệm:
 
 - **REST API + Web UI: port `5003`** (chạy `server/main.py --start-instance --port=5003`)
-- Port 8000/8001: không mở gì trong cấu hình này (README chỉ áp dụng nếu chạy Web Mode/API Mode tách riêng)
+- Port 8000/8001: không mở gì trong cấu hình này (README chỉ áp dụng nếu chạy Web Mode/API Mode tách riêng) — **từ 2026-08-26 không publish nữa**
 - Port 5004: worker nội bộ (`shared` mode), giao tiếp qua `--nonce`, không cần expose
 
 ## Bug đã tìm ra + vá
@@ -155,19 +155,40 @@ Vùng chữ chồng lên chi tiết tranh vẽ (bài toán mơ hồ ngay từ đ
 
 ## Endpoint mở rộng riêng của bản patch (không có ở backend gốc)
 
-Tất cả 4 endpoint dưới đây nằm trong `patches/main.py` (full-override `server/main.py`, không phải patch từng dòng).
+Nằm trong `patches/main.py` (full-override `server/main.py`, không phải patch từng dòng).
 
 ### `POST /fetch-image` — relay tải ảnh kèm `Referer` đúng
 
 Extension MV3 (`background.js`) **không tự đặt được header `Referer`** khi `fetch()` (khác `GM_xmlhttpRequest` cũ của userscript, vốn có đặc quyền đặt header này). Một số CDN ảnh chặn hotlink khi thiếu `Referer` hợp lệ. `background.js` fetch thẳng trước; nếu HTTP lỗi hoặc Content-Type không phải ảnh, relay request này sang backend kèm `{url, referer}` — backend dùng client HTTP Python thật (không giới hạn header) tải kèm `Referer` đúng rồi trả lại bytes ảnh.
 
-### `POST /build-series-context` — dựng hồ sơ nhân vật 1 lần/truyện
+*(Trước đây còn `/build-series-context`, `/set-series-context` và `/set-recent-dialogue` phục vụ tính năng ngữ cảnh nhân vật. **Đã gỡ bỏ 2026-08-22** cùng với tính năng đó — hồ sơ nhân vật bị dựng từ trang bìa/credits nên sinh cặp xưng-hô sai, còn cửa sổ hội thoại thì đầy banner/SFX, trong khi vẫn làm phồng system prompt 27–32% mỗi lượt dịch. Xem `docs.md` mục 5.9.)*
 
-Body: `{series_id, text, target_lang}` (`text` = text gốc OCR gom từ vài trang đầu). Gọi GPT 1 lần để tự sinh 1 đoạn hồ sơ ngắn (tên, giới tính, tuổi/vai vế, quan hệ, đại từ tiếng Việt tương ứng), ghi thành 1 file `gpt_config` riêng cho `series_id` (dựa trên `gpt_config-vi.yaml` gốc + thêm khối "CHARACTER CONTEXT"), trả về `{sheet, gpt_config_path}`. Dùng cho tính năng ngữ cảnh dịch xuyên-trang (`docs.md` mục 5.9).
+## Hai thay đổi về an toàn (2026-08-26)
 
-### `POST /set-series-context` / `POST /set-recent-dialogue` — cập nhật độc lập 2 khối của file riêng đó
+**Cổng 5003 chỉ còn nghe trên localhost.** `lib/BackendControl.ps1` từng chạy `-p 5003:5003`, tức publish ra **mọi interface** của máy — cả LAN gọi được. Backend này không có xác thực và `POST /fetch-image` nhận URL bất kỳ rồi trả về nội dung, tức đúng nghĩa một SSRF proxy. Nay là `-p 127.0.0.1:5003:5003`. Lưu ý `--host=0.0.0.0` **bên trong** container thì phải giữ: docker-proxy chuyển tiếp vào eth0 của container, nghe `127.0.0.1` trong đó sẽ không nhận được gói nào. Cũng bỏ luôn publish 8000/8001 — đã xác nhận thực nghiệm không có gì nghe ở đó (xem mục "Port thực tế").
 
-`_write_series_gpt_config(series_id, sheet=None, recent=None)` giữ **2 khối độc lập, cập nhật riêng biệt** trong cùng 1 file `gpt_config` per-truyện: khối "CHARACTER CONTEXT" (hồ sơ nhân vật tĩnh, cập nhật qua `/set-series-context`, thường chỉ 1 lần) và khối "RECENT DIALOGUE" (cửa sổ hội thoại gần nhất, cập nhật qua `/set-recent-dialogue` sau MỖI trang). Gọi 1 trong 2 endpoint chỉ ghi đè đúng khối tương ứng, khối còn lại giữ nguyên (đọc lại từ file cũ trước khi ghi). Cả 2 đều trả `{gpt_config_path}`. Nội dung tiêm vào cả 2 khối đều đi qua `_esc_braces()` (xem Bug #5 ở trên) trước khi ghi.
+**CORS thu hẹp về `chrome-extension://`.** Bản gốc để `allow_origins=["*"]`, nghĩa là **bất kỳ trang web nào** người dùng ghé thăm cũng gọi được backend bằng JS của nó — việc bind về localhost không chặn được, vì trình duyệt vẫn tới được localhost. Nay dùng `allow_origin_regex=r"^chrome-extension://[a-p]+$"`. Đã kiểm chứng trong chính image: origin extension nhận được header `Access-Control-Allow-Origin`, `https://evil.example.com` thì không. Extension không bị ảnh hưởng vì mọi fetch thật đều nằm trong service worker/trang popup, vốn có `host_permissions` nên không bị CORS chặn; `/docs` mở bằng trình duyệt vẫn chạy (same-origin).
+
+*Còn sót lại (đã biết, chưa chặn):* CORS chỉ ngăn trang web **đọc** phản hồi, không ngăn nó **gửi** request. Một trang độc hại vẫn có thể kích hoạt `/fetch-image` mà không thấy kết quả (blind SSRF). Chặn hẳn cần kiểm tra `Origin` phía server.
+
+## Định dạng ảnh Pillow đọc được (đo 2026-08-26)
+
+Đo trực tiếp trong image `manga-translator-patched:local`:
+
+```
+Pillow 10.2.0
+  jpeg: True   png: True   webp: True   avif: False
+```
+
+Nghĩa là extension **không cần** giải mã rồi nén lại PNG cho hầu hết ảnh — việc nó vẫn làm cho tới 2026-08-26, tốn phình 7,4× kích thước và một lượt nén PNG ảnh 6 megapixel mỗi trang. Riêng AVIF (định dạng hitomi trả về) thì Pillow 10.2.0 thật sự không đọc được, nên `Dockerfile` cài thêm:
+
+```dockerfile
+RUN pip install --no-cache-dir pillow-avif-plugin==1.6.0
+```
+
+và `patches/main.py` `import pillow_avif` (đăng ký plugin là toàn cục theo tiến trình, và `Image.open()` được gọi trong tiến trình server tại `server/request_extraction.py::to_pil_image`, nên import ở `main.py` là đủ). Đã kiểm chứng: cài sạch không kéo theo phụ thuộc nào khác, Pillow vẫn 10.2.0, và `to_pil_image()` decode được data URL AVIF thật.
+
+**Lưu ý khi đổi phía client:** trình duyệt áp dụng EXIF orientation khi vẽ `<img>`, Pillow thì không — nên ảnh có `Orientation != 1` phải được nén lại qua canvas, nếu không toạ độ vùng chữ sẽ lệch. Xem `extension/content-script/image-format.js` và `docs.md` mục 5.5.
 
 ## Concurrency
 
@@ -194,7 +215,8 @@ Body: `{series_id, text, target_lang}` (`text` = text gốc OCR gom từ vài tr
 | `.env` / `.env.example` | Config bí mật (API key, model, port) |
 | `Dockerfile` + `patches/to_json.py` | Image đã vá bug #2 ở trên (+ `.copy()` mẩu nền cho fast-path json) |
 | `patches/gpt_config-vi.yaml` | Prompt dịch tùy chỉnh (La-tinh hóa tên riêng + ngữ cảnh ngôi xưng) — xem mục `gpt_config` |
-| `patches/main.py` | Full-override `server/main.py`: `/fetch-image`, `/build-series-context`, `/set-series-context`, `/set-recent-dialogue` — xem mục "Endpoint mở rộng riêng của bản patch" |
+| `patches/main.py` | Full-override `server/main.py`: `/fetch-image`, CORS thu hẹp, đăng ký codec AVIF — xem mục "Endpoint mở rộng riêng của bản patch" |
+| `patches/http_retry.py` | Tải ảnh CDN có retry + ép IPv4 (lỗi ~4% khi bật Cloudflare WARP) |
 | `patches/share.py` + `patches/sent_data_internal.py` | Tối ưu relay 108.5MB → 108KB + buffer O(n) — xem mục "Tối ưu relay giữa 2 tiến trình" |
 | `patches/deepl.py` | Engine DeepL + `VIN` (⚠️ chưa test thật với API key thật — xem `docs.md` mục 8) |
 | `run-backend.ps1` | Script chạy container, đọc `.env` |

@@ -22,12 +22,11 @@
     MIN_NW: 400,
     MIN_NH: 400,
     MIN_DISPLAY_RATIO: 0.3,
-    // 180s (do that 2026-08-23): 10 tab dich nen dong thoi -> request cham nhat
-    // mat 67s tren trang nhieu chu, do tre tang ~6.5s moi tab them vao. Voi 90s
-    // thi tu ~13 tab tro len bat dau co trang bi HUY IM LANG (mat trang, khong
-    // bao loi). Noi len 180s day tran len ~27 tab. Cai gia: backend treo that
-    // thi tab do ket 3 phut thay vi 1.5 phut - chap nhan duoc voi dich nen.
-    TIMEOUT_MS: 180000,
+    // (Da bo TIMEOUT_MS khoi day: no la CODE CHET - khai bao nhung khong dong
+    // nao doc. Timeout that su nam o background.js, noi duy nhat goi fetch. Giu
+    // lai mot ban sao vo tac dung kem ghi chu "phai khop" la cai bay: nguoi sua
+    // sau rat de chinh dung cai khong co hieu luc roi tuong da doi timeout.
+    // Toan bo so lieu do duoc da chuyen sang canh hang so that.)
     FONT: '"Be Vietnam Pro", "Nunito", sans-serif',
     // (Da bo BG_PAD - tung noi rong khung nen 8% + keo gian anh inpaint
     // cho vua, nhung tren nen mau/gradient viec keo gian tao ra "mieng va"
