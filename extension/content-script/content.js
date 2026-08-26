@@ -737,6 +737,10 @@
   // sau mot thao tac cua nguoi dung - bat cac su kien do la bat duoc thoi diem
   // BAT DAU chuyen dong, khong phai doi den luc do lai moi phat hien.
   function wakeReposition() {
+    // Content script chay tren MOI trang, ke ca trang chua bao gio bam dich -
+    // thoat ngay khi khong co overlay nao de 4 listener duoi day thuc su khong
+    // ton gi tren nhung trang do.
+    if (imgLayers.size === 0) return;
     _idleFrames = 0;
     startRepositionLoop();
   }
