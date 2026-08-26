@@ -56,13 +56,13 @@ chat_system_template: >
   OUTPUT:
   <|1|>Mình không thể tin nổi chuyện này đang xảy ra.
 
-  Hostile/rough:
+  Angry/confrontational (anger shows in TONE, the address pair does NOT drop):
   INPUT:
   <|1|>Get out of my way!
   <|2|>Make me.
   OUTPUT:
-  <|1|>Tránh đường cho tao!
-  <|2|>Thử xem mày làm được không.
+  <|1|>Tránh ra cho tôi đi!
+  <|2|>Thử xem anh làm được gì tôi.
 
   Authority/archaic (nobility, deity, powerful antagonist):
   INPUT:
@@ -108,7 +108,10 @@ chat_system_template: >
        - Senior -> junior (age or rank): anh/chị-em, or by name. Junior ->
          senior: em-anh/chị; cháu-chú/bác/cô/dì/ông/bà.
        - Family: con-bố/mẹ; cháu-ông/bà; siblings em <-> anh/chị by age.
-       - Rough / hostile / insulting: tao-mày.
+       - Angry / hostile / insulting: do NOT switch to tao-mày. Keep the pair
+         the relationship already established (tôi-anh/chị, tôi-ông/bà, tớ-cậu)
+         and carry the anger in word choice and tone instead. tao-mày is out of
+         scope for this project - never produce it.
        - Authority, arrogance, nobility, deity, villain-of-power: ta-ngươi.
        - Historical / wuxia / court: ta-ngươi, huynh/đệ/tỷ/muội, tại hạ, tiền
          bối/hậu bối, bệ hạ-thần, sư phụ/đồ đệ, chủ nhân/nô tài, as fitting.
@@ -123,10 +126,11 @@ chat_system_template: >
        ALWAYS wrong. A line with no clear listener, or a reflective/observing
        tone, is monologue: use mình/tôi. Default any first-person line to
        "mình" unless it is clearly speech directed at someone present.
-    4. Match the emotional register: a tớ/cậu friend who turns furious or hostile
-       switches to mày/tao or ta-ngươi; strangers who become lovers switch to
+    4. Match the emotional register: strangers who become lovers switch to
        anh/em; a revealed noble is addressed reverently. Such shifts are CORRECT,
        not inconsistency - let the address track the CURRENT relationship/tone.
+       ANGER IS THE EXCEPTION: a furious character keeps the pair already in use
+       and shows the anger through tone, never by dropping to tao-mày.
     5. CONSISTENCY: within one stable relationship state, reuse the same pair
        every time; never randomly alternate tớ<->tôi or cậu<->bạn for the same
        relationship. Change only when the story/tone genuinely changes it (rule 4).
@@ -163,11 +167,14 @@ chat_system_template: >
 # TANG DO ON DINH ngoi xung/dang ky xuyen suot CAC LUOT GOI KHAC NHAU: da do
 # thuc te qua log GPT that (xem spec 2026-08-12-vietnamese-translation-
 # pronoun-consistency-design.md) - CUNG 1 cau nguon, gui 2 lan RIENG BIET
-# (khac anh/khac trang), ra 2 ngoi HOAN TOAN khac nhau (vd "ta/nguoi" roi
-# "tao/may" cho cung 1 cau) - vi nhiet do MAC DINH 0.5 (config_gpt.py) chua
-# tung duoc ta ep xuong, nen GPT ngau nhien hoa moi lan du cung input+prompt.
+# (khac anh/khac trang), ra 2 ngoi HOAN TOAN khac nhau cho cung 1 cau - vi
+# nhiet do MAC DINH 0.5 (config_gpt.py) chua tung duoc ta ep xuong, nen GPT
+# ngau nhien hoa moi lan du cung input+prompt.
 # 0.15 (khong phai 0 tuyet doi) de van giu chut tu nhien trong cach dien dat,
-# nhung giam manh hien tuong "tung xuc xac" ngoi xung. Key nay duoc
-# _write_series_gpt_config() (xem patches/main.py) tu dong sao chep nguyen
-# ven vao MOI file gpt_config theo-truyen, khong can sua gi them.
+# nhung giam manh hien tuong "tung xuc xac" ngoi xung.
+#
+# (Ghi chu cu o day noi key nay duoc _write_series_gpt_config() sao chep vao
+# tung file gpt_config theo-truyen. Ham do da bi XOA ngay 2026-08-22 cung voi
+# tinh nang ngu canh nhan vat - gio chi con DUY NHAT file nay, dung chung cho
+# moi truyen, nap qua CFG.GPT_CONFIG_PATH.)
 temperature: 0.15
