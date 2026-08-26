@@ -182,6 +182,16 @@ Extension MV3 (`background.js`) **không tự đặt được header `Referer`**
 
 *(Trước đây còn `/build-series-context`, `/set-series-context` và `/set-recent-dialogue` phục vụ tính năng ngữ cảnh nhân vật. **Đã gỡ bỏ 2026-08-22** cùng với tính năng đó — hồ sơ nhân vật bị dựng từ trang bìa/credits nên sinh cặp xưng-hô sai, còn cửa sổ hội thoại thì đầy banner/SFX, trong khi vẫn làm phồng system prompt 27–32% mỗi lượt dịch. Xem `docs.md` mục 5.9.)*
 
+### Trường `context` trong body của `/translate/json/stream`
+
+Client gửi kèm tối đa 8 câu đã dịch gần nhất, dạng `["src -> dst", ...]`, theo thứ tự đọc. Backend **không lưu lại gì** — giá trị chỉ sống trong đúng lượt dịch đó.
+
+Đường đi: `TranslateRequest.context` (`patches/request_extraction.py`) → `config._mot_context` (`patches/main.py`, cùng mẫu underscore-attr với `_response_format`) → `chatgpt.REQUEST_CONTEXT` (`patches/share.py`, đặt trong khoá độc quyền rồi xoá ở `finally`) → system message thứ hai (`patches/chatgpt.py`).
+
+Phải khai báo `context` ở `TranslateRequest`: pydantic v2 mặc định `extra='ignore'`, field không khai báo sẽ bị bỏ **âm thầm** chứ không báo lỗi.
+
+An toàn khi nhiều tab: `MangaShare.check_lock()` giành khoá không-chặn và trả HTTP 429 nếu đang bận, nên hai lượt dịch không thể chồng nhau — đó là điều kiện khiến biến module dùng được.
+
 ## Hai thay đổi về an toàn (2026-08-26)
 
 **Cổng 5003 chỉ còn nghe trên localhost.** `lib/BackendControl.ps1` từng chạy `-p 5003:5003`, tức publish ra **mọi interface** của máy — cả LAN gọi được. Backend này không có xác thực và `POST /fetch-image` nhận URL bất kỳ rồi trả về nội dung, tức đúng nghĩa một SSRF proxy. Nay là `-p 127.0.0.1:5003:5003`. Lưu ý `--host=0.0.0.0` **bên trong** container thì phải giữ: docker-proxy chuyển tiếp vào eth0 của container, nghe `127.0.0.1` trong đó sẽ không nhận được gói nào. Cũng bỏ luôn publish 8000/8001 — đã xác nhận thực nghiệm không có gì nghe ở đó (xem mục "Port thực tế").

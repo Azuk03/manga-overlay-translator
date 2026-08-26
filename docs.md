@@ -308,6 +308,16 @@ Khác hẳn userscript cũ (nơi `ApiAdapter` tự `GM_xmlhttpRequest`), `ApiAda
 2. **Backend cũ.** Người dùng có thể cập nhật extension mà chưa build lại image. `translateImage()` thử lại đúng một lần qua đường nén PNG khi backend từ chối blob gửi-thẳng.
 3. **`createImageBitmap` không có codec AVIF** trên một số bản Chromium dù `<img>` thì có (đúng bug Cốc Cốc v0.33). Từ nay blob tới các chỗ cắt/ghép có thể là AVIF, nên mọi lần giải mã đi qua `decodeBlobToBitmap()` — có đường lùi `<img>`+canvas.
 
+**Cửa sổ ngữ cảnh thoại — chỉ nguồn tiếng Anh (2026-08-26).** Mỗi lượt dịch mang theo tối đa 8 câu đã dịch gần nhất của chính tab đó (`extension/content-script/dialogue-context.js`), gửi trong khoá `context` của body request. Lý do: quy tắc "giữ nguyên cặp xưng hô" trong `gpt_config-vi.yaml` là **bất khả thi** khi mỗi trang là một lời gọi API không có trí nhớ — model không thể biết trang trước đã dùng cặp nào. Đây là lỗi cấu trúc, không phải lỗi diễn đạt prompt.
+
+Đo được (3 lần chạy mỗi điều kiện, trên chuỗi trang thật có đủ bìa/credits/SFX): không ngữ cảnh → 5.3 lần đổi đại từ mỗi lượt đọc; cửa sổ **không lọc** → 2.0 lần nhưng chốt vào đại từ khác nhau giữa các lần chạy; cửa sổ **có lọc** → 1.0 lần và ra y hệt cả 3 lần. Chi phí +12% token prompt (so với 27–32% của bản đã gỡ). Thích ứng vẫn giữ: sang cảnh bạn bè ngang hàng nó vẫn đổi sang `cậu`.
+
+Kiểm chứng đầu-cuối qua HTTP thật, cùng một ảnh chỉ khác trường `context`: có ngữ cảnh → "**Ông** không bảo quản thảo dược đúng cách"; không ngữ cảnh → "**BẠN** KHÔNG BẢO QUẢN...".
+
+Ngữ cảnh giữ ở **client, theo từng tab** — không phải backend. Thí nghiệm tiêm ngữ cảnh từ truyện khác cho thấy đó là tai hoạ **âm thầm**: mọi thước đo nhất quán vẫn đẹp trong khi cả cảnh bị dịch sai register (tiệm thuốc hiện đại thành giọng cung đình `ta-ngươi`). Người dùng chạy tới 10 tab đồng thời nên state dùng chung ở backend là đúng kịch bản đó.
+
+Chỉ tiếng Anh, vì tiếng Anh chỉ có một chữ "you" nên model buộc phải đoán; Nhật/Hàn mã hoá sẵn mức lịch sự trong câu gốc nên số đo trên không suy ra được — và suy diễn kiểu đó chính là thứ đã làm hỏng bản trước. Cổng chặn dùng lại `_srcNonLatin` sẵn có. Xem spec `2026-08-26-english-pronoun-context-window-design.md`.
+
 ### 5.5.1 Webtoon dài — cắt lát (content.js:477, `translateImageTiled`)
 
 Ảnh cao hơn `TILE_MAX_H` (4000px, chừa biên an toàn dưới giới hạn canvas ~16384px + giới hạn *tổng diện tích* riêng của trình duyệt):
@@ -569,6 +579,7 @@ Khác luồng 7.1 ở đúng 2 điểm: (1) `forceLoadLazyImages()` chạy trư�
 | Chuẩn hoá khoá URL→hash (hitomi xoay timestamp) | 2026-08-20 | ✅ 21 test `node --test` |
 | Retry + ép IPv4 cho `/fetch-image` (lỗi ~4% do WARP) | 2026-08-20 | ✅ Đo counterfactual bật/tắt WARP trong container |
 | Gỡ ngữ cảnh nhân vật + hội thoại gần nhất | 2026-08-22 | ✅ Đo trên dùng thật — xem mục 5.9 |
+| Cửa sổ ngữ cảnh thoại (chỉ tiếng Anh) | 2026-08-26 | ✅ Đo 3 lần/điều kiện trên chuỗi thật + đối chứng qua HTTP thật |
 | **Đợt tối ưu 2026-08-26** (byte gốc thay vì nén PNG, dọn rò rỉ overlay, pipeline hàng đợi, khoá cổng về localhost) | 2026-08-26 | ⚠️ **CHƯA browser-verify** — xem ngay dưới |
 
 **⚠️ Đợt tối ưu 2026-08-26 — cần một phiên test trình duyệt thật trước khi tin.** Đã kiểm chứng được phần nào bằng máy: 36 test `node --test` + 97 test Pester đều xanh, codec AVIF đã xác nhận decode được qua đúng hàm `to_pil_image()` mà endpoint thật gọi, CORS đã xác nhận cấp header cho `chrome-extension://` và từ chối origin lạ. Nhưng **không có bằng chứng trình duyệt** cho: overlay còn đúng vị trí sau khi bỏ bước nén PNG (ảnh gửi đi giờ là byte gốc), đường lùi `decodeBlobToBitmap` trên Cốc Cốc với AVIF, hành vi của vòng lặp rAF sau khi hạ tần số lúc đứng yên, và việc dọn overlay khi ảnh rời DOM không xoá nhầm overlay đang hiển thị. Theo đúng thông lệ của dự án này (code review là cần nhưng chưa bao giờ đủ cho hành vi phía trình duyệt), hãy chạy thử trên hitomi + 1 webtoon + 1 reader ảo hoá (MangaPlaza) trước khi coi là xong.
