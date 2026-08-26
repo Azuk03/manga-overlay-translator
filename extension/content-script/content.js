@@ -468,10 +468,20 @@
         translator: translatorConfig,
         render: { renderer: 'none' },
       };
-      // Inpaint chi phuc vu render (xoa chu goc) - detect-only khong render nen bo.
-      if (!detectOnly) {
-        config.inpainter = { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE };
-      }
+      // Inpaint chi phuc vu render (xoa chu goc). Probe detect-only khong dung
+      // ket qua inpaint - no chi doc TOA DO vung - nen phai tat han.
+      //
+      // PHAI ghi ro 'none', KHONG duoc bo trong khoa nay: bo trong thi backend
+      // dung MAC DINH cua no, ma mac dinh la `lama_large` chu khong phai
+      // CFG.INPAINTER. Do that tren log mot phien webtoon 180 luot goi: 41 luot
+      // chay [LamaLargeInpainter] - dung bang so luot probe - inpaint xong roi
+      // vut di. Ton 10,3s GPU, nhung dieu dang lo hon la lama_large ngon VRAM
+      // hon lama_mpe (~3,7GB vs ~3,4GB) tren card 4GB.
+      // 'none' khong lam vo to_json.py: NoneInpainter van gan ctx.img_inpainted
+      // (copy anh + to trang vung mask), chi khong chay model.
+      config.inpainter = detectOnly
+        ? { inpainter: 'none' }
+        : { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE };
       const send = async (b) => {
         const body = JSON.stringify({ image: await this.blobToDataURL(b), config });
         return await sendMessageAsync({ type: 'TRANSLATE', body });
