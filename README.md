@@ -138,6 +138,25 @@ Tính năng ngữ cảnh nhân vật/hội thoại (mục "Endpoint mở rộng"
 
 **Đã vá:** `patches/main.py` hàm `_write_series_gpt_config` chạy `_esc_braces()` (`s.replace("{","{{").replace("}","}}")`) lên nội dung tiêm động **TRƯỚC KHI** ghép vào template — áp dụng đúng cho phần tiêm, **không bao giờ** áp dụng cho `{to_lang}` thật của chính template (nếu escape luôn cả `{to_lang}`, `str.format` sẽ không thay thế được nó nữa). Bài học cho bất kỳ code tiêm nội dung động vào prompt sau này: **luôn brace-escape nội dung tiêm trước khi ghép**, không escape phần khung template.
 
+### Bug #6 — hai cách hiểu khác nhau về marker `<|n|>` trong cùng một hàm (2026-08-26, đã vá)
+
+Tìm ra từ log thật, không phải từ đọc code: backend báo `Found indices count (1) does not match expected count (2)` rồi thử lại 3 lần, **trong khi response có đủ cả `<|1|>` lẫn `<|2|>`**. Mỗi lần thử lại GPT trả về một bản dịch khác (`GIẬT MÌNH` → `Rùng mình` → `RỤT RÈ`) và bản thắng cuộc là bản ngẫu nhiên.
+
+Gốc rễ nằm ngay trong `manga_translator/translators/chatgpt.py`, hai bước cạnh nhau hiểu marker khác nhau:
+
+| Bước | Dòng | Biểu thức | Phạm vi |
+|---|---|---|---|
+| **Trích** bản dịch | 319 | `re.split(r'<\|\d+\|>', response_text)` | tìm marker ở **bất kỳ đâu** |
+| **Kiểm tra** định dạng | 380 | `re.match(r'^<\|(\d+)\|>(.*)', line)` | **bắt buộc đầu dòng** |
+
+Nên một response mà bước trích xử lý được hoàn hảo vẫn bị bước kiểm tra bác bỏ, chỉ vì model không xuống dòng trước marker. Đã kiểm chứng bằng chính logic đó: các dạng "không có `\n`", "chỉ có `\r`" và "marker ở cuối dòng" đều cho ra `found 1 / expected 2`.
+
+**Hậu quả đo được** (phiên webtoon 2026-08-26, 180 lượt gọi backend): 3/79 batch dính lỗi → trả tiền GPT gấp 3 cho các batch đó, và vì bản thắng là ngẫu nhiên nên bản dịch lúc VIẾT HOA lúc viết thường ngay trong cùng một chương.
+
+**Đã vá:** `patches/chatgpt.py` cho bước kiểm tra dùng **chung một cách hiểu** với bước trích, qua `patches/gpt_response_parse.py` (`find_marker_indices`, tách riêng để test được độc lập với `openai`/`manga_translator` — cùng lý do `http_retry.py` được tách). Mọi phép kiểm tra khác giữ nguyên ý hệt bản gốc: trùng index, index ngoài phạm vi, thiếu index đều vẫn bị từ chối.
+
+Kiểm chứng trên chính lớp `OpenAITranslator` thật sau khi build lại: response không-xuống-dòng giờ được nhận **ngay lần đầu** (1 lượt gọi thay vì 3), còn ba dạng sai vẫn bị từ chối và thử lại. 15 test cho hàm thuần trong `tests/test_gpt_response_parse.py`.
+
 ### `inpainter` — xóa chữ gốc thật (không chỉ che bằng màu)
 
 Bật `inpainter` để backend **thực sự xóa chữ** bằng AI thay vì chỉ trả bbox. Kết quả: field `background` trong response giờ là ảnh đã xóa chữ (không phải ảnh gốc/placeholder), dùng làm `background-image` cho overlay thay vì tự sample 1 màu phẳng.
@@ -217,6 +236,7 @@ và `patches/main.py` `import pillow_avif` (đăng ký plugin là toàn cục th
 | `patches/gpt_config-vi.yaml` | Prompt dịch tùy chỉnh (La-tinh hóa tên riêng + ngữ cảnh ngôi xưng) — xem mục `gpt_config` |
 | `patches/main.py` | Full-override `server/main.py`: `/fetch-image`, CORS thu hẹp, đăng ký codec AVIF — xem mục "Endpoint mở rộng riêng của bản patch" |
 | `patches/http_retry.py` | Tải ảnh CDN có retry + ép IPv4 (lỗi ~4% khi bật Cloudflare WARP) |
+| `patches/chatgpt.py` + `patches/gpt_response_parse.py` | Vá Bug #6: bước kiểm tra marker `<\|n\|>` không còn bắt buộc đầu dòng |
 | `patches/share.py` + `patches/sent_data_internal.py` | Tối ưu relay 108.5MB → 108KB + buffer O(n) — xem mục "Tối ưu relay giữa 2 tiến trình" |
 | `patches/deepl.py` | Engine DeepL + `VIN` (⚠️ chưa test thật với API key thật — xem `docs.md` mục 8) |
 | `run-backend.ps1` | Script chạy container, đọc `.env` |

@@ -31,6 +31,14 @@ COPY patches/http_retry.py /app/server/http_retry.py
 # docs/superpowers/specs/2026-07-23-translator-engine-picker-design.md muc 3.
 COPY patches/deepl.py /app/manga_translator/translators/deepl.py
 
+# Va bug: buoc KIEM TRA response cua chatgpt.py bat buoc marker <|n|> phai nam dau
+# dong (re.match voi ^), trong khi buoc TRICH ngay tren no lai tim marker o bat ky
+# dau (re.split). Response ma buoc trich xu ly duoc van bi bac bo -> thu lai 3 lan,
+# moi lan mot ban dich khac. Do tren log that: 3/79 batch dinh loi nay.
+# Xem patches/gpt_response_parse.py + tests/test_gpt_response_parse.py.
+COPY patches/gpt_response_parse.py /app/manga_translator/translators/gpt_response_parse.py
+COPY patches/chatgpt.py /app/manga_translator/translators/chatgpt.py
+
 # Toi uu: chuyen to_translation sang chay tren executor de chi truyen JSON nho
 # (~108KB) thay vi pickle ca Context (~108MB) qua ranh gioi tien trinh; kem sua
 # O(n^2) buffer o sent_data_internal. Xem
