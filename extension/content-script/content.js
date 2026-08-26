@@ -275,7 +275,7 @@
   // canvas (giong het imageElementToBlob() da dung on dinh o C2 cho
   // nhanh blob:/data: URL) thay vi createImageBitmap() - dang tin cay hon
   // qua nhieu trinh duyet/dinh dang, khong chi rieng vu AVIF nay.
-  function reencodeToPng(blob) {
+  function decodeBlobToCanvas(blob) {
     return new Promise((resolve, reject) => {
       const objUrl = URL.createObjectURL(blob);
       const img = new Image();
@@ -286,10 +286,7 @@
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
         URL.revokeObjectURL(objUrl);
-        canvas.toBlob((out) => {
-          if (out) resolve(out);
-          else reject(new Error('Khong re-encode duoc anh sang PNG'));
-        }, 'image/png');
+        resolve(canvas);
       };
       img.onerror = () => {
         URL.revokeObjectURL(objUrl);
@@ -297,6 +294,36 @@
       };
       img.src = objUrl;
     });
+  }
+
+  function reencodeToPng(blob) {
+    return decodeBlobToCanvas(blob).then(
+      (canvas) =>
+        new Promise((resolve, reject) => {
+          canvas.toBlob((out) => {
+            if (out) resolve(out);
+            else reject(new Error('Khong re-encode duoc anh sang PNG'));
+          }, 'image/png');
+        })
+    );
+  }
+
+  // Giai ma blob thanh ImageBitmap de cat/ghep bang canvas.
+  //
+  // PHAI di qua ham nay, KHONG goi thang createImageBitmap(blob): tu khi anh
+  // duoc gui THANG byte goc (xem image-format.js) thi blob toi day co the la
+  // AVIF, ma theo ghi chu v0.33 - loi that da gap tren Coc Coc - mot so ban
+  // Chromium co codec AVIF cho <img> nhung KHONG co cho createImageBitmap()
+  // ("InvalidStateError: The source image could not be decoded"). Truoc day moi
+  // blob deu da la PNG nen khong the gap; gio thi co the. Duong lui dung lai
+  // dung <img> + canvas - cach von da chay on dinh cho ca AVIF.
+  async function decodeBlobToBitmap(blob) {
+    try {
+      return await createImageBitmap(blob);
+    } catch (err) {
+      log('createImageBitmap that bai, giai ma lai bang <img>+canvas:', err && err.message);
+      return await createImageBitmap(await decodeBlobToCanvas(blob));
+    }
   }
 
   console.log('[MOT] CFG/ImageFinder/Cache/helpers da nap xong (Task 6).');
@@ -307,13 +334,17 @@
   // trong Manifest V3 - da xac nhan bang test that (res.arrayBuffer den noi
   // nay chi con la {} rong, Blob ket qua chi co 15 byte cua chuoi
   // "[object Object]" bi stringify nham thay vi du lieu nhi phan that).
-  function base64ToBlob(base64, contentType) {
+  function base64ToBytes(base64) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
     }
-    return new Blob([bytes], { type: contentType });
+    return bytes;
+  }
+
+  function base64ToBlob(base64, contentType) {
+    return new Blob([base64ToBytes(base64)], { type: contentType });
   }
 
   // Boc chrome.runtime.sendMessage (callback-style) thanh Promise, kiem tra
@@ -364,6 +395,34 @@
       : result.mot_eager_translate;
   }
 
+  // Blob nao la BYTE GOC gui thang (khong qua nen lai PNG). Dung WeakSet chu
+  // khong doi chu ky ham tra ve, de moi noi goi downloadImageBlob() giu nguyen.
+  // translateImage() tra cuu o day de biet co duoc phep thu lai bang duong nen
+  // PNG khi backend tu choi (vd nguoi dung cap nhat extension nhung chua build
+  // lai image nen chua co pillow-avif-plugin).
+  const passthroughBlobs = new WeakSet();
+
+  // NOI DUY NHAT tai anh tu URL. Truoc day logic nay bi CHEP LAM DOI (mot ban
+  // trong ApiAdapter.downloadImageBlob, mot ban trong downloadBlobFromUrl cho
+  // prefetch) kem mot comment dan "phai mirror dung nhanh non-blob de hash
+  // KHOP" - dung loai rui ro ma viec gop lai nay xoa han: hai ban lech nhau la
+  // hash lech nhau, tuc prefetch ghi vao mot khoa ma luc doc khong bao gio trung.
+  async function downloadBlobFromUrl(url) {
+    const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url });
+    if (!res || !res.ok) {
+      throw new Error((res && res.error) || 'Khong tai duoc anh: ' + url);
+    }
+    const bytes = base64ToBytes(res.base64);
+    if (motShouldReencodeForBackend(res.contentType, bytes)) {
+      // Duong cu: backend khong doc duoc dinh dang nay, hoac anh co EXIF (huong
+      // xoay co the lech giua trinh duyet va Pillow) - xem image-format.js.
+      return await reencodeToPng(new Blob([bytes], { type: res.contentType }));
+    }
+    const blob = new Blob([bytes], { type: res.contentType });
+    passthroughBlobs.add(blob);
+    return blob;
+  }
+
   // ===== ApiAdapter — NOI DUY NHAT BIET SCHEMA BACKEND =====
   const ApiAdapter = {
     async downloadImageBlob(img) {
@@ -374,13 +433,7 @@
         // trinh duyet (xem spec muc 5a diem 1).
         return await imageElementToBlob(img);
       }
-
-      const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url: src });
-      if (!res || !res.ok) {
-        throw new Error((res && res.error) || 'Khong tai duoc anh goc: ' + src);
-      }
-      const rawBlob = base64ToBlob(res.base64, res.contentType);
-      return await reencodeToPng(rawBlob);
+      return await downloadBlobFromUrl(src);
     },
 
     blobToDataURL(blob) {
@@ -397,7 +450,6 @@
     // local). Dung cho gate detect-first cua ghep-bien: biet truoc co vung
     // vat-bien khong ma khong ton 1 luot GPT (xem detectBoundaryRegions()).
     async translateImage(blob, detectOnly = false) {
-      const dataUrl = await this.blobToDataURL(blob);
       const targetLang = await getTargetLang();
       const engine = detectOnly ? 'none' : await getTranslatorEngine();
       const translatorConfig = {
@@ -421,9 +473,24 @@
       if (!detectOnly) {
         config.inpainter = { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE };
       }
-      const body = JSON.stringify({ image: dataUrl, config });
+      const send = async (b) => {
+        const body = JSON.stringify({ image: await this.blobToDataURL(b), config });
+        return await sendMessageAsync({ type: 'TRANSLATE', body });
+      };
 
-      const res = await sendMessageAsync({ type: 'TRANSLATE', body });
+      let res = await send(blob);
+      if ((!res || !res.ok) && passthroughBlobs.has(blob)) {
+        // Blob nay la byte goc gui thang. Backend tu choi co the vi no CHUA co
+        // pillow-avif-plugin (nguoi dung cap nhat extension nhung chua build lai
+        // image). Nen lai thanh PNG va thu dung MOT lan - duong nen PNG la thu
+        // von da chay on dinh tu truoc, nen buoc lui nay luon an toan.
+        log('Backend tu choi byte goc, thu lai bang duong nen PNG:', (res && res.error) || '');
+        try {
+          res = await send(await reencodeToPng(blob));
+        } catch (err) {
+          throw new Error('Backend tu choi ca byte goc lan ban nen PNG: ' + err.message);
+        }
+      }
       if (!res || !res.ok) {
         throw new Error((res && res.error) || 'Loi khong xac dinh khi goi backend');
       }
@@ -468,7 +535,7 @@
 
   // Copy tu manga-overlay-translator.user.js dong 726-772
   async function sliceImageIntoTiles(blob, naturalW, naturalH) {
-    const bitmap = await createImageBitmap(blob);
+    const bitmap = await decodeBlobToBitmap(blob);
     const tiles = [];
     const step = CFG.TILE_MAX_H - CFG.TILE_OVERLAP;
     for (let y = 0; y < naturalH; y += step) {
@@ -1052,7 +1119,7 @@
   // Blob thuan (khong con la <img> song), cat bang canvas moi an toan.
   async function getStripFromNextImage(nextImg, stripHeightPx) {
     const fullBlob = await ApiAdapter.downloadImageBlob(nextImg);
-    const bitmap = await createImageBitmap(fullBlob);
+    const bitmap = await decodeBlobToBitmap(fullBlob);
     const h = Math.min(stripHeightPx, bitmap.height);
     const canvas = document.createElement('canvas');
     canvas.width = bitmap.width;
@@ -1095,8 +1162,8 @@
     let ownStripH;
     try {
       const [currentBitmap, stripBitmap] = await Promise.all([
-        createImageBitmap(blob),
-        createImageBitmap(stripBlob),
+        decodeBlobToBitmap(blob),
+        decodeBlobToBitmap(stripBlob),
       ]);
       ownStripH = Math.min(CFG.BOUNDARY_BORROW_HEIGHT, currentBitmap.height);
       const canvas = document.createElement('canvas');
@@ -1556,17 +1623,9 @@
     }
   }
 
-  // Tai blob tu URL truc tiep (khong qua <img>). Mirror DUNG nhanh non-blob
-  // cua ApiAdapter.downloadImageBlob de hash KHOP hash luc dieu huong (cache
-  // HIT khi nguoi dung lat toi trang).
-  async function downloadBlobFromUrl(url) {
-    const res = await sendMessageAsync({ type: 'DOWNLOAD_IMAGE', url });
-    if (!res || !res.ok) {
-      throw new Error((res && res.error) || 'Khong tai duoc anh: ' + url);
-    }
-    const rawBlob = base64ToBlob(res.base64, res.contentType);
-    return await reencodeToPng(rawBlob);
-  }
+  // (downloadBlobFromUrl da chuyen len canh ApiAdapter - prefetch va duong dich
+  // thuong gio dung CHUNG mot ham, khong con hai ban chep tay phai giu cho khop
+  // hash nhau.)
 
   // Toast tien trinh prefetch: 1 element cap nhat textContent, tai dung style
   // .mot-toast. Khi done == total -> doi text "xong" roi tu an sau 3s.

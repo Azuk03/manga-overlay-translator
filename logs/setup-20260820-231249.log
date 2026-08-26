@@ -1,0 +1,48 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260820231249
+Username: LAPTOP-RVB8BD8V\ACER
+RunAs User: LAPTOP-RVB8BD8V\ACER
+Configuration Name: 
+Machine: LAPTOP-RVB8BD8V (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File setup.ps1 -DryRun
+Process ID: 18932
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+  ⚠ Chế độ thử: sẽ không build, không ghi .env, không tạo shortcut.
+
+[1/8] Kiểm tra máy
+  ✓ Ổ chứa dữ liệu Docker còn trống 113.2 GB (D:\Programs\docker\DockerDesktopWSL\main).
+
+[2/8] Docker Desktop
+  ✓ Docker đang chạy.
+
+[3/8] Kiểm tra GPU
+  ✓ Đã phát hiện GPU NVIDIA (4096 MiB VRAM).
+
+[4/8] Cấu hình khoá API
+  ⚠ Bỏ qua hộp thoại cấu hình (chế độ thử).
+
+[5/8] Build image
+  ⚠ SẼ build image (chế độ thử nên bỏ qua).
+
+[6/8] Khởi động và tự kiểm tra
+  ⚠ SẼ khởi động backend và dịch thử một ảnh (chế độ thử nên bỏ qua).
+
+[7/8] Tạo shortcut
+  ⚠ SẼ tạo shortcut (chế độ thử nên bỏ qua).
+
+[8/8] Nạp extension vào trình duyệt
+  ⚠ SẼ mở hướng dẫn nạp extension (chế độ thử nên bỏ qua).
+  ✓ XONG. Lần sau chỉ cần bấm shortcut "Bật Manga Translator" ngoài Desktop.
+**********************
+Windows PowerShell transcript end
+End time: 20260820231249
+**********************

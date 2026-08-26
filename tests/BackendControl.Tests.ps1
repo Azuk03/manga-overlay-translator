@@ -37,6 +37,22 @@ Describe 'Build-DockerRunArgs' {
         $s = (Build-DockerRunArgs -EnvVars $full -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r') -join ' '
         foreach ($k in $full.Keys) { $s | Should -BeLike "*$k=*" }
     }
+    It 'publishes 5003 on localhost only, never on every interface' {
+        $a = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r'
+        $a | Should -Contain '127.0.0.1:5003:5003'
+        # Backend khong co xac thuc + co /fetch-image nhan URL bat ky: publish
+        # tran ra LAN la mo mot SSRF proxy cho ca mang.
+        $a | Should -Not -Contain '5003:5003'
+    }
+    It 'still listens on 0.0.0.0 inside the container so docker-proxy can reach it' {
+        $a = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r'
+        $a | Should -Contain '--host=0.0.0.0'
+    }
+    It 'does not publish 8000/8001 - nothing listens there in this configuration' {
+        $s = (Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'D:\r') -join ' '
+        $s | Should -Not -BeLike '*8000*'
+        $s | Should -Not -BeLike '*8001*'
+    }
     It 'preserves paths with spaces as single array element' {
         $a = Build-DockerRunArgs -EnvVars $base -HasGpu $false -ContainerName 'c' -ResultDir 'C:\Program Files\r'
         $a | Should -Contain 'C:\Program Files\r:/app/result'

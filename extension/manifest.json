@@ -18,7 +18,11 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content-script/url-cache-key.js", "content-script/content.js"],
+      "js": [
+        "content-script/url-cache-key.js",
+        "content-script/image-format.js",
+        "content-script/content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

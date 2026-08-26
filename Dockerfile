@@ -1,5 +1,13 @@
 FROM zyddnys/manga-image-translator:main
 
+# Pillow 10.2.0 trong image goc doc duoc JPEG/PNG/WebP nhung KHONG doc duoc
+# AVIF (da kiem chung: PIL.features.check('avif') -> False). Hitomi tra ve toan
+# AVIF, nen extension phai giai ma bang trinh duyet roi nen lai thanh PNG - phinh
+# ~7x va ton mot luot nen anh 6 megapixel moi trang. Plugin nay cho backend doc
+# thang AVIF, bo han buoc do. Da kiem chung: cai sach, Pillow van 10.2.0, khong
+# keo theo phu thuoc nao khac. Xem patches/main.py (import pillow_avif).
+RUN pip install --no-cache-dir pillow-avif-plugin==1.6.0
+
 # Va bug: to_translation() trong to_json.py doc nham ctx.translations (rong)
 # thay vi text_region.translation (noi ban dich that su duoc luu).
 # Xem patches/to_json.py va ghi chu trong README de biet chi tiet.

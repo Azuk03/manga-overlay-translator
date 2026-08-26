@@ -12,6 +12,15 @@ from pydantic import BaseModel
 
 from http_retry import fetch_with_retry
 
+# Dang ky codec AVIF cho Pillow. Pillow 10.2.0 doc duoc JPEG/PNG/WebP nhung
+# KHONG doc duoc AVIF - ma hitomi tra ve toan AVIF. Truoc day extension phai
+# giai ma AVIF bang trinh duyet roi nen lai thanh PNG (phinh ~7x) chi de backend
+# doc duoc. Co plugin nay thi gui thang byte goc duoc, khong con buoc nen lai.
+# Phai import TRUOC server.request_extraction (noi goi Image.open) - dang ky
+# plugin la toan cuc theo tien trinh, nen import o day la du cho ca server.
+# import-khong-dung: de dam bao no khong bi cong cu don import xoa nham.
+import pillow_avif  # noqa: F401  (side-effect: dang ky AVIF vao PIL)
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
@@ -34,9 +43,19 @@ BASE_DIR = Path(__file__).resolve().parent
 RESULT_ROOT = (BASE_DIR.parent / "result").resolve()
 RESULT_ROOT.mkdir(parents=True, exist_ok=True)
 
+# allow_origins=["*"] (ban goc upstream) nghia la BAT KY trang web nao nguoi
+# dung ghe tham cung goi duoc backend nay bang JS cua no - ke ca khi cong da
+# chi bind 127.0.0.1, vi trinh duyet van toi duoc localhost. Ma /fetch-image
+# nhan URL bat ky va tra ve noi dung => bat ky website nao cung bien backend
+# thanh SSRF proxy cua rieng no. Thu hep ve dung chrome-extension://.
+#
+# Extension KHONG bi anh huong: moi fetch that su deu nam trong service worker
+# (background.js) hoac trang popup, ca hai deu co host_permissions <all_urls>
+# nen khong bi CORS chan; regex duoi con giu them chrome-extension:// cho chac.
+# Truy cap /docs bang trinh duyet van chay (same-origin, khong qua CORS).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^chrome-extension://[a-p]+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
