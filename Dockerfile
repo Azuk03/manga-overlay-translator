@@ -35,6 +35,12 @@ COPY patches/deepl.py /app/manga_translator/translators/deepl.py
 # nen field khong khai bao se bi bo AM THAM - client gui len cung vo ich.
 COPY patches/request_extraction.py /app/server/request_extraction.py
 
+# Phan biet loi OpenAI VINH VIEN (het credit, khoa sai) voi TAM THOI (qua tan
+# suat). Ban goc thu lai ca hai nhu nhau: do tren log that luc het credit la 33
+# luot goi API va 185 giay cho MOT trang chac chan that bai, roi ve overlay rong
+# ma khong bao gi. Xem patches/gpt_permanent_error.py.
+COPY patches/gpt_permanent_error.py /app/manga_translator/translators/gpt_permanent_error.py
+
 # Va bug: buoc KIEM TRA response cua chatgpt.py bat buoc marker <|n|> phai nam dau
 # dong (re.match voi ^), trong khi buoc TRICH ngay tren no lai tim marker o bat ky
 # dau (re.split). Response ma buoc trich xu ly duoc van bi bac bo -> thu lai 3 lan,

@@ -138,6 +138,26 @@ Tính năng ngữ cảnh nhân vật/hội thoại (mục "Endpoint mở rộng"
 
 **Đã vá:** `patches/main.py` hàm `_write_series_gpt_config` chạy `_esc_braces()` (`s.replace("{","{{").replace("}","}}")`) lên nội dung tiêm động **TRƯỚC KHI** ghép vào template — áp dụng đúng cho phần tiêm, **không bao giờ** áp dụng cho `{to_lang}` thật của chính template (nếu escape luôn cả `{to_lang}`, `str.format` sẽ không thay thế được nó nữa). Bài học cho bất kỳ code tiêm nội dung động vào prompt sau này: **luôn brace-escape nội dung tiêm trước khi ghép**, không escape phần khung template.
 
+### Bug #7 — 429 "hết credit" bị coi là lỗi tạm thời (2026-08-27, đã vá)
+
+OpenAI dùng HTTP 429 cho **hai việc rất khác nhau**: quá tần suất (`rate_limit_exceeded`, tạm thời — đợi rồi thử lại là qua) và **hết credit** (`insufficient_quota`/`credit_balance_exhausted`, vĩnh viễn — thử bao nhiêu lần cũng thế). `chatgpt.py` bắt cả hai bằng một `except openai.RateLimitError` rồi thử lại như nhau.
+
+**Đo trên log thật lúc tài khoản hết credit, cho MỘT trang:**
+
+| | |
+|---|---|
+| Lượt gọi API | **33** |
+| "Max attempts reached" | 11 |
+| Chia nhỏ batch rồi thử lại | 11 |
+| Thời gian riêng bước dịch | **185 giây** |
+| Kết quả | **rỗng** |
+
+Tệ hơn con số: vì bản dịch thất bại nên `dst == src`, rồi bộ lọc "Translation identical to original" xoá sạch mọi vùng → trang trả về **0 vùng kèm HTTP 200**. Extension tưởng là thành công, vẽ overlay rỗng và **không báo lỗi gì**. Ghép với eager mode thì một chương 146 trang mất **hơn 7 tiếng** để "dịch xong" mà không hiện gì.
+
+**Đã vá:** `patches/gpt_permanent_error.py` (`is_permanent_error()`, tách riêng để test độc lập) chặn ở hai tầng trong `patches/chatgpt.py` — tầng HTTP (`except openai.RateLimitError`) và vòng thử-lại của `_translate_batch`. Lỗi vĩnh viễn được **ném thẳng lên**, nên nó đi qua `share.py` thành frame code-2 → `background.js` → `errorLog` của client, tức người dùng **thấy được lỗi** thay vì trang trắng im lặng.
+
+Kiểm chứng trên image đã build: hết credit **1 lượt gọi rồi dừng** (trước 33); lỗi tần suất thật **vẫn thử lại 36 lượt** — hành vi cũ giữ nguyên. 11 test trong `tests/test_gpt_permanent_error.py`.
+
 ### Bug #6 — hai cách hiểu khác nhau về marker `<|n|>` trong cùng một hàm (2026-08-26, đã vá)
 
 Tìm ra từ log thật, không phải từ đọc code: backend báo `Found indices count (1) does not match expected count (2)` rồi thử lại 3 lần, **trong khi response có đủ cả `<|1|>` lẫn `<|2|>`**. Mỗi lần thử lại GPT trả về một bản dịch khác (`GIẬT MÌNH` → `Rùng mình` → `RỤT RÈ`) và bản thắng cuộc là bản ngẫu nhiên.

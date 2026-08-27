@@ -10,6 +10,7 @@ from .. import manga_translator
 from .config_gpt import ConfigGPT
 from .common import CommonTranslator, MissingAPIKeyException, VALID_LANGUAGES
 from .gpt_response_parse import find_marker_indices  # va 2026-08-26, xem file do
+from .gpt_permanent_error import is_permanent_error  # va 2026-08-27, xem file do
 from .keys import OPENAI_API_KEY, OPENAI_HTTP_PROXY, OPENAI_API_BASE, OPENAI_MODEL, OPENAI_GLOSSARY_PATH
 
 # Ngu canh thoai cua RIENG luot dich dang chay. share.py dat truoc khi goi va
@@ -490,6 +491,13 @@ class OpenAITranslator(ConfigGPT, CommonTranslator):
                 return True, partial_results  
 
             except Exception as e:  
+                # Loi vinh vien (het credit, khoa sai...): thu lai va chia nho
+                # deu vo ich, chi ton them thoi gian va tien. Nem len tren de
+                # nguoi dung THAY duoc loi, thay vi tra ve rong roi bi bo loc
+                # "identical to original" xoa sach thanh trang trong khong bao gi.
+                if is_permanent_error(e):
+                    self.logger.error(f"Loi vinh vien, bo qua thu lai va chia nho: {str(e)[:200]}")
+                    raise
                 self.logger.warning(  
                     f"Batch translate attempt {attempt+1}/{max_attempts} failed with error: {str(e)}"  
                 )  
@@ -615,7 +623,14 @@ class OpenAITranslator(ConfigGPT, CommonTranslator):
                     # 如果正常完成了
                     return req_task.result()
 
-            except openai.RateLimitError:
+            except openai.RateLimitError as e:
+                # OpenAI dung HTTP 429 cho CA hai viec: qua tan suat (tam thoi)
+                # va HET CREDIT (vinh vien). Ban goc thu lai ca hai nhu nhau -
+                # do that khi het credit: 33 luot goi API va 185 giay cho MOT
+                # trang chac chan that bai. Xem gpt_permanent_error.py.
+                if is_permanent_error(e):
+                    self.logger.error(f"Loi vinh vien, dung ngay khong thu lai: {str(e)[:200]}")
+                    raise
                 # 限流 => 重试
                 ratelimit_attempt += 1
                 if ratelimit_attempt > self._RATELIMIT_RETRY_ATTEMPTS:
