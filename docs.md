@@ -625,6 +625,10 @@ Khác luồng 7.1 ở đúng 2 điểm: (1) `forceLoadLazyImages()` chạy trư�
 >
 > **Bước đo tiếp theo (chưa chạy):** tải `m2m100` (418M, nhẹ nhất), dịch một trang, đo 3 thứ — tốc độ thật, VRAM có tràn không, và model có nằm lại sau khi dịch xong không. ~500 MB tải về, không tốn credit.
 
+- **Chữ OCR bắt thiếu/dính liền: đã cho LLM tự sửa bằng prompt (2026-08-27), KHÔNG cần gửi ảnh.** Vấn đề: OCR cắt cụt (`EXPECT US TO GIV` → dịch ra "CHÚNG TÔI SẼ GIV"), mất dấu cách (`SINCEISTILLNEED`, `ErkinthePharmacist(PartI)`). Đo trên 8 câu hỏng THẬT lấy từ log, 3 lần mỗi câu: prompt cũ **16/24 = 67%**, thêm quy tắc "OCR DAMAGE REPAIR" vào `gpt_config-vi.yaml` → **21/24 = 88%**. Chi phí thêm: **0** — không ảnh, không thêm lượt gọi, không tiết lưu.
+  Phát hiện phụ đáng chú ý: prompt CŨ làm hỏng tên riêng **3/3 lần** (`A...ANNETTA!` → `A...ANNE!`); bản mới giữ đúng 3/3.
+  Đã thử một bản chỉ dẫn dài hơn (thêm "bỏ mảnh không chắc" + "không rút gọn tên") → **cũng 88%**, không hơn, nên giữ bản ngắn.
+  Ca duy nhất còn hỏng (0/3): `I KNOW THEYRE GETTING A LOT O` để sót chữ `O` lạc. Nhưng bài test khắc nghiệt hơn thực tế — trong log thật câu đó nằm cùng batch với phần tiếp theo ở trang sau.
 - **2,1 giây mỗi trang sau `Running rendering` chưa rõ nguyên nhân (đo 2026-08-27)** — chiếm **28% thời gian executor** (122s/428s), lặp lại đều đặn, không có dòng log nào ở giữa. Ghi chú tối ưu 2026-08-09 đo bước này chỉ **78ms**, nên có thể là hồi quy ~27×. Đã LOẠI TRỪ: mã hoá PNG ảnh nền chỉ tốn ~38ms/trang (đo bằng `cv2.imencode` trên kích thước vùng thực tế). Chưa tách được "backend chậm" với "client đọc stream chậm" — cần một request sạch không qua extension để phân định.
 - **Webtoon tiling >10.000px** — code từ thời userscript, verify tự động (Playwright, mock backend) từ trước khi port; chưa có bằng chứng mới verify lại trên extension với ảnh thật.
 - **Eager mode dồn cả chương vào 1 hàng đợi tuần tự** — ảnh cuối chương chờ 7–16 phút (mục 5.10), chưa có kế hoạch khắc phục cụ thể.

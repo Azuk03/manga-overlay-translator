@@ -159,6 +159,15 @@ chat_system_template: >
         segments un-overlaid).
     (B) If it still carries real meaning (a real word/phrase, even if drawn big
         for emphasis), translate it accurately into {to_lang} like normal text.
+  - OCR DAMAGE REPAIR: the source lines come from OCR of comic lettering and are
+    often CUT OFF at the end, MISSING characters, or have SPACES REMOVED between
+    words (real examples: 'SINCEISTILLNEED', 'EXPECT US TO GIV',
+    'ErkinthePharmacist(PartI)'). Silently repair such damage from context before
+    translating: split run-together words, and complete a word or clause that was
+    clearly cut off. Never leave an untranslated source-language fragment in the
+    output. Do NOT invent new sentences - only restore what the line evidently
+    was. A deliberate stutter like 'A...ANNETTA!' is NOT damage: keep it, and
+    never shorten a character name.
   - A reader who cannot read the source language must fully understand every
     word of your output.
 
