@@ -585,6 +585,47 @@ Khác luồng 7.1 ở đúng 2 điểm: (1) `forceLoadLazyImages()` chạy trư�
 **⚠️ Đợt tối ưu 2026-08-26 — cần một phiên test trình duyệt thật trước khi tin.** Đã kiểm chứng được phần nào bằng máy: 36 test `node --test` + 97 test Pester đều xanh, codec AVIF đã xác nhận decode được qua đúng hàm `to_pil_image()` mà endpoint thật gọi, CORS đã xác nhận cấp header cho `chrome-extension://` và từ chối origin lạ. Nhưng **không có bằng chứng trình duyệt** cho: overlay còn đúng vị trí sau khi bỏ bước nén PNG (ảnh gửi đi giờ là byte gốc), đường lùi `decodeBlobToBitmap` trên Cốc Cốc với AVIF, hành vi của vòng lặp rAF sau khi hạ tần số lúc đứng yên, và việc dọn overlay khi ảnh rời DOM không xoá nhầm overlay đang hiển thị. Theo đúng thông lệ của dự án này (code review là cần nhưng chưa bao giờ đủ cho hành vi phía trình duyệt), hãy chạy thử trên hitomi + 1 webtoon + 1 reader ảo hoá (MangaPlaza) trước khi coi là xong.
 
 **Chưa verify / còn treo:**
+
+> ### 📌 GHI CHÚ ĐỂ XỬ LÝ SAU — dịch bằng model chạy cục bộ (khảo sát 2026-08-27, CHƯA làm gì)
+>
+> Ý định của người dùng: cho **hai lựa chọn trong popup** — chọn LLM (GPT) thì chạy như hiện tại, chọn model cục bộ thì chạy offline. Dưới đây là toàn bộ dữ kiện đã đo/đọc code, để lần sau khỏi dò lại.
+>
+> **Backend chia translator làm HAI HỌ khác hẳn nhau — đây là điều quan trọng nhất:**
+>
+> | Engine | Kế thừa | Đọc `gpt_config`? |
+> |---|---|---|
+> | `nllb`, `nllb_big`, `m2m100`, `m2m100_big`, `mbart50`, `qwen2`, `qwen2_big` | `OfflineTranslator` | **KHÔNG** |
+> | `custom_openai` | **`ConfigGPT`** | **CÓ** |
+>
+> Cả hai họ đều hỗ trợ `VIN`. Nhưng họ `OfflineTranslator` **không có khái niệm prompt**, nên chọn chúng là làm vô hiệu **toàn bộ**: bảng quy tắc ngôi xưng, La-tinh hoá tên riêng, giữ nguyên SFX, chuẩn hoá viết hoa, few-shot, `temperature: 0.15`, **và cửa sổ ngữ cảnh** (mục 5.5). Mô hình dịch máy câu-đơn gặp "you" tiếng Anh gần như luôn ra `bạn` — đúng dạng phẳng mà prompt cấm và đã tốn cả phiên 2026-08-26 để loại bỏ.
+>
+> **Số đo phần cứng (2026-08-27, backend đang chạy):** GPU 4096 MiB tổng, **3404 dùng, chỉ còn 559 MiB trống**. Không nhét được model nào lên GPU cùng lúc với detection/OCR/inpaint.
+>
+> **Cỡ model:** `m2m100` 418M (CTranslate2, nhẹ nhất) · `nllb` 600M · `mbart50` ~610M · `qwen2` 1.5B · `m2m100_big` **12B — bất khả thi**.
+>
+> **Chưa có model nào trong image:** `/app/models` 3.8 GB nhưng không chứa nllb/m2m100/qwen/mbart. Lần đầu chọn sẽ tải 500 MB–2.5 GB **trong lúc request đang chờ**, mà client timeout 180s → **gần như chắc chắn timeout**. Phải tải sẵn lúc build hoặc lúc cài.
+>
+> **Chỗ tốt sẵn có:** khoá cache **đã bao gồm engine** (`mot_cache_v{N}_{engine}_{lang}_{hash}`) nên chuyển qua lại giữa hai engine không trả nhầm bản dịch của nhau. Đây là phần dễ hỏng nhất và nó đã đúng từ hồi làm engine picker.
+>
+> **Ba việc phải làm nếu triển khai:**
+> 1. **Ép model ngoại tuyến chạy CPU.** `translators/__init__.py` gọi `translator.load('auto', tgt_lang, device)` với `device` lấy từ backend (`cuda` vì chạy `--use-gpu`). Với 559 MiB trống sẽ OOM hoặc thrash — và vì dùng **chung một executor**, sự cố đó có thể kéo đổ cả những tab đang dùng GPT. Không có biến môi trường sẵn để ép CPU, phải sửa code.
+> 2. **Siết `gpt_config` và cửa sổ ngữ cảnh về đúng họ GPT.** Điều kiện hiện tại là `engine !== 'deepl'` nên vẫn đính cho engine ngoại tuyến — backend bỏ qua, vô hại nhưng sai ý và tốn bytes.
+> 3. **Thêm option vào `popup.html`** (hiện chỉ có chatgpt/gemini/deepl).
+>
+> **CHƯA XÁC ĐỊNH — cần đo trước khi quyết:** nhánh dispatch đang dùng **không gọi `unload()`** sau khi dịch (chỉ nhánh translator-chain mới gọi). Kết hợp `--models-ttl 0` (nạp rồi không nhả), chưa rõ model ngoại tuyến nằm lại VRAM vĩnh viễn hay bị nạp lại mỗi trang. Hai khả năng cho hậu quả rất khác nhau: chiếm chỗ mãi mãi, hay trả giá nạp model mỗi trang.
+>
+> **Nếu muốn giữ chất lượng ngôi xưng thì đường duy nhất là `custom_openai`** (kế thừa `ConfigGPT`, trỏ vào Ollama). Hai cái bẫy đã đọc ra trong code, không có trong tài liệu nào:
+> - Nó gọi `ConfigGPT.__init__(config_key='ollama')` → tìm prompt ở khoá **`ollama.chat_system_template`**, trong khi `gpt_config-vi.yaml` để `chat_system_template` ở **cấp cao nhất**. Prompt sẽ KHÔNG được nạp; phải lồng lại dưới khoá `ollama:`.
+> - `CUSTOM_OPENAI_API_BASE` mặc định `http://localhost:11434/v1`, nhưng tính từ **bên trong container** đó là localhost của chính container. Phải đổi thành `http://host.docker.internal:11434/v1`.
+> - Đổi lại: LLM 7B trên CPU ước tính **1–2.5 phút/trang** (prompt hệ thống ~1.760 token) so với 1.42s hiện tại — chậm 50–100 lần.
+>
+> **Lý do kinh tế KHÔNG đứng vững:** tính từ log thật, một chương ~61 lượt gọi GPT ≈ **2–3 cent** với `gpt-4o-mini`.
+>
+> **Khuyến nghị đã thống nhất:** đừng dùng để **thay thế**. Cách dùng hợp lý nhất là làm **đường lùi khi API hỏng** — ghép với fail-fast (Bug #7 trong README): phát hiện `insufficient_quota` → dừng ngay → chuyển sang engine ngoại tuyến → báo cho người dùng đang chạy chế độ dự phòng. Khi đó tệ nhất vẫn đọc được truyện thay vì nhìn trang trắng.
+>
+> **Bước đo tiếp theo (chưa chạy):** tải `m2m100` (418M, nhẹ nhất), dịch một trang, đo 3 thứ — tốc độ thật, VRAM có tràn không, và model có nằm lại sau khi dịch xong không. ~500 MB tải về, không tốn credit.
+
+- **2,1 giây mỗi trang sau `Running rendering` chưa rõ nguyên nhân (đo 2026-08-27)** — chiếm **28% thời gian executor** (122s/428s), lặp lại đều đặn, không có dòng log nào ở giữa. Ghi chú tối ưu 2026-08-09 đo bước này chỉ **78ms**, nên có thể là hồi quy ~27×. Đã LOẠI TRỪ: mã hoá PNG ảnh nền chỉ tốn ~38ms/trang (đo bằng `cv2.imencode` trên kích thước vùng thực tế). Chưa tách được "backend chậm" với "client đọc stream chậm" — cần một request sạch không qua extension để phân định.
 - **Webtoon tiling >10.000px** — code từ thời userscript, verify tự động (Playwright, mock backend) từ trước khi port; chưa có bằng chứng mới verify lại trên extension với ảnh thật.
 - **Eager mode dồn cả chương vào 1 hàng đợi tuần tự** — ảnh cuối chương chờ 7–16 phút (mục 5.10), chưa có kế hoạch khắc phục cụ thể.
 - **Detection nondeterministic + non-monotonic theo kích thước chữ** (OPEN PROBLEM 2026-08-11) — không có 1 giá trị `DETECTION_SIZE` nào bắt được mọi trường hợp; cùng 1 ảnh, cùng config, số lượng vùng bắt được dao động giữa các lần chạy. `DETECTION_SIZE=2400` là điểm ngọt tốt nhất đo được, không phải fix triệt để. Hướng khả dĩ (chưa quyết định): multi-scale/2-pass detection.
