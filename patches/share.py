@@ -21,7 +21,11 @@ SAFE_PICKLE_MODULES = frozenset({
     'manga_translator',
     'manga_translator.utils',
     'manga_translator.utils.generic',
-    'manga_translator.config'
+    'manga_translator.config',
+    # Anh AVIF do pillow-avif-plugin giai ma nen tra ve AvifImageFile - lop nay
+    # nam NGOAI namespace 'PIL.' ma nhanh startswith() ben duoi cho qua, nen
+    # thieu dong nay la moi trang AVIF deu bi tu choi o restricted_loads.
+    'pillow_avif.AvifImagePlugin'
 })
 
 class RestrictedUnpickler(pickle.Unpickler):
@@ -159,8 +163,16 @@ class MangaShare:
         async def execute_method(request: Request, method_name: str = Path(...)):
             self.check_nonce(request)
             self.check_lock()
-            method = self.get_fn(method_name)
-            attr = restricted_loads(await request.body())
+            # check_lock() vua gianh khoa doc quyen. Tu day den luc run_method()
+            # nhan quyen so huu, MOI loi deu phai nha khoa lai: khong co try nay
+            # thi mot pickle hong lam ket executor VINH VIEN - moi request sau do
+            # an HTTP 429 cho toi khi restart container.
+            try:
+                method = self.get_fn(method_name)
+                attr = restricted_loads(await request.body())
+            except BaseException:
+                self.lock.release()
+                raise
             try:
                 if asyncio.iscoroutinefunction(method):
                     result = await method(**attr)
@@ -177,15 +189,23 @@ class MangaShare:
         async def execute_method(request: Request, method_name: str = Path(...)):
             self.check_nonce(request)
             self.check_lock()
-            method = self.get_fn(method_name)
-            attr = restricted_loads(await request.body())
+            # Cung ly do nhu /simple_execute o tren: khoa da gianh roi, ma
+            # get_fn va restricted_loads deu co the nem loi.
+            try:
+                method = self.get_fn(method_name)
+                attr = restricted_loads(await request.body())
 
-            # 根据端点类型决定是否使用占位符优化
-            config = attr.get('config')
-            self.manga._is_streaming_mode = getattr(config, '_web_frontend_optimized', False) if config else False
+                # 根据端点类型决定是否使用占位符优化
+                config = attr.get('config')
+                self.manga._is_streaming_mode = getattr(config, '_web_frontend_optimized', False) if config else False
 
-            # streaming response
-            streaming_response = StreamingResponse(self.progress_stream(), media_type="application/octet-stream")
+                # streaming response
+                streaming_response = StreamingResponse(self.progress_stream(), media_type="application/octet-stream")
+            except BaseException:
+                self.lock.release()
+                raise
+
+            # Tu day khoa thuoc ve run_method() - no tu nha trong finally.
             asyncio.create_task(self.run_method(method, **attr))
             return streaming_response
 

@@ -1,0 +1,17 @@
+# Dockerfile chi COPY tu patches/ - moi thu duoi day khong bao gio di vao image,
+# nhung KHONG co file nay thi docker van nen va gui het len daemon lam context.
+# Do that: result/ mot minh da 4.9 GB anh debug (chi sinh ra khi chay --verbose).
+result/
+logs/
+models/
+.git/
+.claude/
+.superpowers/
+.pytest_cache/
+__pycache__/
+*.pyc
+docs/
+tests/
+*.webp
+test-image.png
+test-image.b64
