@@ -77,3 +77,62 @@ Describe 'Hide-Secrets' {
         (Hide-Secrets -Arguments @('run', '--rm', '--name', 'c')) -join ' ' | Should -Be 'run --rm --name c'
     }
 }
+
+Describe 'New-BackendLogPath' {
+    BeforeEach {
+        $script:root = Join-Path ([System.IO.Path]::GetTempPath()) ('mot-log-' + [guid]::NewGuid())
+        New-Item -ItemType Directory $script:root -Force | Out-Null
+        $script:dir = Join-Path $script:root 'logs'
+    }
+    AfterEach {
+        Remove-Item -LiteralPath $script:root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'creates logs/ when it does not exist yet' {
+        New-BackendLogPath -Root $script:root | Out-Null
+        Test-Path $script:dir | Should -BeTrue
+    }
+
+    It 'returns a timestamped backend log path inside logs/' {
+        $p = New-BackendLogPath -Root $script:root
+        Split-Path $p -Parent | Should -Be $script:dir
+        Split-Path $p -Leaf | Should -BeLike 'backend-*.log'
+    }
+
+    It 'gives a different name on a later run so runs never overwrite each other' {
+        $a = New-BackendLogPath -Root $script:root -Stamp '20260904-090128'
+        $b = New-BackendLogPath -Root $script:root -Stamp '20260904-091500'
+        $a | Should -Not -Be $b
+    }
+
+    It 'keeps only the newest N backend logs so they cannot grow without bound' {
+        New-Item -ItemType Directory $script:dir -Force | Out-Null
+        foreach ($i in 1..12) {
+            Set-Content (Join-Path $script:dir ('backend-2026010{0}-000000.log' -f $i)) 'x'
+        }
+        New-BackendLogPath -Root $script:root -Keep 5 | Out-Null
+        # Chua ghi gi vao file cua luot nay, nen tren dia chi con 4 file cu +
+        # cho trong cho luot hien tai = dung 5 khi backend bat dau ghi.
+        (Get-ChildItem $script:dir -Filter 'backend-*.log').Count | Should -Be 4
+    }
+
+    It 'prunes the oldest and keeps the newest' {
+        New-Item -ItemType Directory $script:dir -Force | Out-Null
+        foreach ($i in 1..5) {
+            Set-Content (Join-Path $script:dir ('backend-2026010{0}-000000.log' -f $i)) 'x'
+        }
+        New-BackendLogPath -Root $script:root -Keep 3 | Out-Null
+        Test-Path (Join-Path $script:dir 'backend-20260105-000000.log') | Should -BeTrue
+        Test-Path (Join-Path $script:dir 'backend-20260101-000000.log') | Should -BeFalse
+    }
+
+    It 'never prunes setup transcripts that share the same folder' {
+        New-Item -ItemType Directory $script:dir -Force | Out-Null
+        Set-Content (Join-Path $script:dir 'setup-20260819-171051.log') 'giu lai'
+        foreach ($i in 1..9) {
+            Set-Content (Join-Path $script:dir ('backend-2026010{0}-000000.log' -f $i)) 'x'
+        }
+        New-BackendLogPath -Root $script:root -Keep 2 | Out-Null
+        Test-Path (Join-Path $script:dir 'setup-20260819-171051.log') | Should -BeTrue
+    }
+}

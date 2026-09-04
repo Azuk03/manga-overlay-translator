@@ -61,3 +61,28 @@ function Start-Backend {
     param([string[]]$DockerArgs)
     docker @DockerArgs
 }
+
+function New-BackendLogPath {
+    # Container chay voi --rm, nen khi no dung la ca container LAN log bien mat
+    # - `docker logs` khong con gi de doc. Da mat that mot lan (2026-09-04): may
+    # khoi dong lai, mat sach log cua phien dich hom truoc dang can de tim loi.
+    # Ghi ra file ngay tu dau la cach duy nhat giu duoc.
+    param([string]$Root, [int]$Keep = 10, [string]$Stamp)
+
+    $dir = Join-Path $Root 'logs'
+    New-Item -ItemType Directory $dir -Force | Out-Null
+
+    # Chi dung 'backend-*': setup.ps1 cung ghi transcript vao day, xoa nham la
+    # mat bang chung cua lan cai dat.
+    $old = @(Get-ChildItem $dir -Filter 'backend-*.log' -File -ErrorAction SilentlyContinue |
+             Sort-Object Name -Descending)
+    if ($old.Count -ge $Keep) {
+        # Giu lai $Keep-1 file cu, cho ra dung mot cho cho luot dang chay.
+        $old | Select-Object -Skip ([Math]::Max($Keep - 1, 0)) | ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if (-not $Stamp) { $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss' }
+    return (Join-Path $dir "backend-$Stamp.log")
+}
