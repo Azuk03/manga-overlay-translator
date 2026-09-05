@@ -179,6 +179,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'TRANSLATE_TEXTS') {
+    (async () => {
+      try {
+        const res = await fetch(`${await getBackendUrl()}/translate/texts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: message.body,
+        });
+        if (!res.ok) {
+          sendResponse({ ok: false, error: `Backend tra ve HTTP ${res.status}` });
+          return;
+        }
+        const json = await res.json();
+        sendResponse({ ok: true, translations: json.translations || [] });
+      } catch (e) {
+        sendResponse({ ok: false, error: String((e && e.message) || e) });
+      }
+    })();
+    return true; // giu cong message mo cho luot tra loi bat dong bo
+  }
+
   if (message.type === 'HITOMI_GALLERY_URLS') {
     if (!sender.tab || sender.tab.id == null) {
       sendResponse({ ok: false, error: 'no tab' });
