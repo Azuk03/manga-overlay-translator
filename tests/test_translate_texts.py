@@ -53,9 +53,10 @@ def test_translates_and_preserves_order_and_length():
 def test_does_not_take_the_executor_lock():
     """Ca thiet ke chong len viec nay: pha B chay song song voi pha A duoc."""
     assert not is_locked(), "executor da ket TRUOC khi test chay"
-    post(SERVER + "/translate/texts",
-         {"texts": ["HELLO"], "target_lang": "VIN",
-          "gpt_config": "/app/gpt_config-vi.yaml"})
+    status, body = post(SERVER + "/translate/texts",
+                        {"texts": ["HELLO"], "target_lang": "VIN",
+                         "gpt_config": "/app/gpt_config-vi.yaml"})
+    assert status == 200, (status, body)
     assert not is_locked(), "pha A/B se khong chong lan duoc"
 
 
