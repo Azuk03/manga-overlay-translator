@@ -100,27 +100,14 @@
       return Array.from(document.querySelectorAll('img')).filter((img) => this.isCandidate(img));
     },
     isCandidate(img) {
-      // Nhieu site lazy-load dat src TAM la anh placeholder (thuong la data:
-      // URI - SVG shimmer/"Loading..." dung dung kich thuoc anh that de
-      // tranh layout shift) roi moi thay bang URL that khi cuon toi.
-      // Placeholder loai nay De qua duoc bo loc kich thuoc ben duoi (vi co
-      // width/height khop voi anh that) nhung gui no cho backend se loi
-      // 422 (khong phai anh manga that) - loai tu day, cho src that.
-      const src = img.currentSrc || img.src;
-      if (src.startsWith('data:')) return false;
-      if (!img.naturalWidth || !img.naturalHeight) return false;
-      if (img.naturalWidth < CFG.MIN_NW || img.naturalHeight < CFG.MIN_NH) return false;
-      if (img.clientWidth / window.innerWidth < CFG.MIN_DISPLAY_RATIO) return false;
-      if (img.closest('header, nav, footer, aside')) return false;
-      const idClass = `${img.id} ${img.className}`.toLowerCase();
-      if (/logo|avatar|icon|banner|ad|thumb|sprite/.test(idClass)) return false;
-      // ratio = cao/rong. Nguong duoi 0.4 (thay vi 0.5) de CHAP NHAN trang DOI
-      // nam ngang cua mot so reader (vd MangaPlaza: 1442x688 ~ 0.475, truoc day
-      // bi loai nham). Banner/ad thuong rong hon nhieu (ratio < 0.2) nen van bi
-      // loai. Nguong tren 100 chan anh soc bat thuong.
-      const ratio = img.naturalHeight / img.naturalWidth;
-      if (ratio < 0.4 || ratio > 100) return false;
-      return true;
+      // Logic that nam o image-candidate.js - o trong IIFE nay thi khong test
+      // duoc, xem tests/image-candidate.test.js.
+      return motIsCandidateImage(img, {
+        MIN_NW: CFG.MIN_NW,
+        MIN_NH: CFG.MIN_NH,
+        MIN_DISPLAY_RATIO: CFG.MIN_DISPLAY_RATIO,
+        viewportWidth: window.innerWidth,
+      });
     },
   };
 
