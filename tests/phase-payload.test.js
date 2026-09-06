@@ -46,8 +46,20 @@ test('pha B gui gpt_config khi engine la chatgpt', () => {
   assert.strictEqual(b.gpt_config, '/app/gpt_config-vi.yaml');
 });
 
-test('pha B KHONG gui gpt_config cho engine khac chatgpt', () => {
+test('pha B KHONG gui gpt_config cho deepl (kien truc khac, khong doc gpt_config)', () => {
   const b = motPhaseBBody({ texts: ['A'], targetLang: 'VIN', engine: 'deepl', gptConfigPath: '/app/gpt_config-vi.yaml' });
+  assert.strictEqual(b.gpt_config, undefined);
+});
+
+// Hai truong hop duoi day chot dieu kien gpt_config KHOP voi duong cu trong
+// ApiAdapter.translateImage(): "VIN va khong phai deepl", KHONG phai "la chatgpt".
+test('pha B VAN gui gpt_config cho gemini (cung ho GPT nhu chatgpt)', () => {
+  const b = motPhaseBBody({ texts: ['A'], targetLang: 'VIN', engine: 'gemini', gptConfigPath: '/app/gpt_config-vi.yaml' });
+  assert.strictEqual(b.gpt_config, '/app/gpt_config-vi.yaml');
+});
+
+test('pha B KHONG gui gpt_config khi dich sang ngon ngu khac VIN', () => {
+  const b = motPhaseBBody({ texts: ['A'], targetLang: 'ENG', engine: 'chatgpt', gptConfigPath: '/app/gpt_config-vi.yaml' });
   assert.strictEqual(b.gpt_config, undefined);
 });
 

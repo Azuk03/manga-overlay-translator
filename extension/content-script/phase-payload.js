@@ -25,7 +25,16 @@ function motPhaseBBody({ texts, targetLang, engine, gptConfigPath, context }) {
     translator: engine,
     target_lang: targetLang,
   };
-  if (engine === 'chatgpt' && gptConfigPath) body.gpt_config = gptConfigPath;
+  // DIEU KIEN NAY PHAI GIONG HET ApiAdapter.translateImage() (content.js) va
+  // popup.js: gpt_config la prompt tieng Viet, chi co tac dung voi engine ho GPT
+  // (chatgpt VA gemini - ca hai ke thua CommonGPTTranslator ben backend), va chi
+  // dung khi dich sang VIN. Truoc day o day chi so sanh engine === 'chatgpt',
+  // lech ca hai dau so voi duong cu: gemini+VIN MAT prompt, con chatgpt+ENG lai
+  // BI nhet prompt tieng Viet vao. Ca hai deu hong am tham (van co ban dich, chi
+  // sai giong/sai ngon ngu).
+  if (gptConfigPath && targetLang === 'VIN' && engine !== 'deepl') {
+    body.gpt_config = gptConfigPath;
+  }
   if (context && context.length) body.context = Array.from(context);
   return body;
 }
