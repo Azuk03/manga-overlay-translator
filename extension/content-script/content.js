@@ -1614,13 +1614,7 @@
       // dst==src VA nguon co chu KHONG-Latin (CJK/hangul: SFX goc giu nguyen).
       // KHONG bo khi src la Latin (tranh xoa nham tu hop le/ten rieng model tra
       // trung - da tung lam sot tu). Xem gpt_config quy tac EMPHASIZED text.
-      const _dst = (r.dst || '').trim();
-      const _src = (r.src || '').trim();
-      const _srcNonLatin = /[^\u0020-\u024F\s\d\p{P}]/u.test(_src);
-      if (!_dst) {
-        return false;
-      }
-      if (_dst.toLowerCase() === _src.toLowerCase() && _srcNonLatin) {
+      if (!motShouldRenderRegion(r.src, r.dst)) {
         return false;
       }
       if (isDuplicateOfRendered(img, r)) return false;
