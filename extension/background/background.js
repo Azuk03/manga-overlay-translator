@@ -181,11 +181,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'TRANSLATE_TEXTS') {
     (async () => {
+      // CUNG timeout va CUNG ly do nhu translate() o tren - day la noi duy nhat
+      // goi fetch nen cung la noi duy nhat timeout co hieu luc. BAT BUOC phai co
+      // o duong pha B: worker B cua content-script await luot nay TRONG MOT VONG
+      // LAP, nen mot request treo khong chi mat mot trang ma dung TOAN BO
+      // pipeline mai mai - khong loi, khong toast, khong dau hieu gi.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
       try {
         const res = await fetch(`${await getBackendUrl()}/translate/texts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: message.body,
+          signal: controller.signal,
         });
         if (!res.ok) {
           sendResponse({ ok: false, error: `Backend tra ve HTTP ${res.status}` });
@@ -194,7 +202,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const json = await res.json();
         sendResponse({ ok: true, translations: json.translations || [] });
       } catch (e) {
+        if (e && e.name === 'AbortError') {
+          sendResponse({ ok: false, error: 'Timeout khi goi backend (pha B)' });
+          return;
+        }
         sendResponse({ ok: false, error: String((e && e.message) || e) });
+      } finally {
+        clearTimeout(timeoutId);
       }
     })();
     return true; // giu cong message mo cho luot tra loi bat dong bo
