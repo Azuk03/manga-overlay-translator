@@ -1,6 +1,6 @@
 ﻿# start.ps1
 $root = $PSScriptRoot
-foreach ($m in @('Ui', 'EnvFile', 'BackendControl', 'SelfTest', 'Preflight')) { . (Join-Path $root "lib/$m.ps1") }
+foreach ($m in @('Ui', 'EnvFile', 'BackendControl', 'DockerImage', 'SelfTest', 'Preflight')) { . (Join-Path $root "lib/$m.ps1") }
 Initialize-Ui
 
 Write-Step 'Bật Manga Translator'
@@ -14,6 +14,19 @@ if (-not (Test-DockerDaemonReady)) {
     }
 }
 Write-Ok 'Docker đang chạy.'
+
+# Image co the bien mat sau 'docker system prune -a' hoac khi Docker Desktop bi
+# reset, trong khi .docker-image-hash van con nen nhin vao marker thi thay "on".
+# Khong chan o day thi 'docker run' se di keo image tu Docker Hub - noi khong he
+# co no - roi chet voi 'pull access denied', mot thong bao chang lien quan gi.
+$imageName = 'manga-translator-patched:local'
+if (-not (Test-DockerImageExists -ImageName $imageName)) {
+    Write-Err "Không tìm thấy image '$imageName' trên máy."
+    Write-Err 'Image đã bị xoá, thường là do dọn dẹp Docker hoặc reset Docker Desktop.'
+    Write-Err 'Chạy lại setup.ps1 để build lại image rồi bật lại.'
+    Read-Host 'Enter để đóng'
+    exit 1
+}
 
 $vars = Read-EnvFile -Path (Join-Path $root '.env')
 $resultDir = Join-Path $root 'result'
@@ -54,7 +67,7 @@ $job = Start-Job -ScriptBlock {
     } finally { $sw.Dispose() }
 } -ArgumentList $dockerArgs, $logPath
 Write-Warn 'ĐANG KHỞI ĐỘNG… (lần đầu trong phiên có thể mất 1-2 phút để nạp model)'
-if (Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath (Join-Path $root 'fixtures/cjk_vertical_test.png') -TimeoutSec 600) {
+if (Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath (Join-Path $root 'fixtures/cjk_vertical_test.png') -TimeoutSec 600 -IsAlive { $job.State -eq 'Running' }) {
     Write-Ok 'ĐÃ SẴN SÀNG — vào trang truyện và bấm Alt+D.'
 } else {
     if ($job.State -ne 'Running') {
