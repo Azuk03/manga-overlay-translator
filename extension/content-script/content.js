@@ -114,7 +114,7 @@
   // ===== Cache (hash bytes anh, khong theo URL) =====
   // Khac ban userscript goc: GM_getValue/GM_setValue la dong bo, con
   // chrome.storage.local la bat dong bo - Cache.get()/set() gio la async,
-  // moi noi goi chung (translateAndRenderImage, Task 9) phai await.
+  // moi noi goi chung (runPhaseA/runPhaseB, Task 9) phai await.
   const Cache = {
     async hashBlob(blob) {
       const buf = await blob.arrayBuffer();
@@ -445,23 +445,21 @@
     async translateImage(blob, detectOnly = false) {
       const targetLang = await getTargetLang();
       const engine = detectOnly ? 'none' : await getTranslatorEngine();
-      const translatorConfig = {
-        translator: engine,
-        target_lang: targetLang,
-      };
+      // MOT ban dinh nghia duy nhat cho detector/inpainter/render: lay khung tu
+      // motPhaseAConfig() (phase-payload.js) roi chi doi rieng phan translator.
+      // KHONG chep lai cac khoa do o day - hai ban sao cua cung mot config la
+      // dung loai loi da tung xay ra voi downloadImageBlob (hai ban lech nhau ->
+      // khoa cache lech nhau, im lang).
+      const config = motPhaseAConfig(CFG);
+      config.translator = { translator: engine, target_lang: targetLang };
       // gpt_config (prompt La-tinh hoa ten rieng) chi co tac dung voi engine
       // ho GPT (chatgpt/gemini - ca 2 deu ke thua CommonGPTTranslator ben
       // backend, doc chung 1 co che prompt qua field gpt_config), KHONG co
       // tac dung voi deepl (kien truc khac han, khong doc gpt_config - xem
       // spec 2026-07-23-translator-engine-picker-design.md muc 3/6).
       if (!detectOnly && targetLang === 'VIN' && engine !== 'deepl') {
-        translatorConfig.gpt_config = CFG.GPT_CONFIG_PATH;
+        config.translator.gpt_config = CFG.GPT_CONFIG_PATH;
       }
-      const config = {
-        detector: { detection_size: CFG.DETECTION_SIZE },
-        translator: translatorConfig,
-        render: { renderer: 'none' },
-      };
       // Inpaint chi phuc vu render (xoa chu goc). Probe detect-only khong dung
       // ket qua inpaint - no chi doc TOA DO vung - nen phai tat han.
       //
@@ -473,9 +471,7 @@
       // hon lama_mpe (~3,7GB vs ~3,4GB) tren card 4GB.
       // 'none' khong lam vo to_json.py: NoneInpainter van gan ctx.img_inpainted
       // (copy anh + to trang vung mask), chi khong chay model.
-      config.inpainter = detectOnly
-        ? { inpainter: 'none' }
-        : { inpainter: CFG.INPAINTER, inpainting_size: CFG.INPAINTING_SIZE };
+      if (detectOnly) config.inpainter = { inpainter: 'none' };
       const send = async (b) => {
         const payload = { image: await this.blobToDataURL(b), config };
         // detectOnly chay translator 'none' (khong goi GPT) nen ngu canh vo nghia.
@@ -505,7 +501,58 @@
       return { regions: res.regions };
     },
 
-    async translateImageTiled(blob, naturalW, naturalH, img) {
+    // ===== PHA A: GPU =====
+    // detect + OCR + mask + inpaint, translator 'none' (KHONG goi GPT). Tra ve
+    // vung co TOA DO + text NGUON + anh nen da inpaint; dst luc nay bang src
+    // (backend tra dst||src) - pha B moi dien ban dich that vao.
+    // Dung dung endpoint cu, chi doi translator -> khong can backend moi.
+    async detectAndInpaint(blob) {
+      const config = motPhaseAConfig(CFG);
+      const send = async (b) =>
+        await sendMessageAsync({
+          type: 'TRANSLATE',
+          // Khong gui context: translator 'none' khong goi GPT nen ngu canh vo nghia.
+          body: JSON.stringify({ image: await this.blobToDataURL(b), config }),
+        });
+      let res = await send(blob);
+      if ((!res || !res.ok) && passthroughBlobs.has(blob)) {
+        // Cung buoc lui nhu translateImage(): byte goc bi tu choi (backend chua
+        // co pillow-avif-plugin) -> nen PNG, thu dung MOT lan.
+        log('Backend tu choi byte goc o pha A, thu lai bang duong nen PNG:', (res && res.error) || '');
+        try {
+          res = await send(await reencodeToPng(blob));
+        } catch (err) {
+          throw new Error('Backend tu choi ca byte goc lan ban nen PNG: ' + err.message);
+        }
+      }
+      if (!res || !res.ok) throw new Error((res && res.error) || 'Pha A that bai');
+      return res.regions || [];
+    },
+
+    // ===== PHA B: MANG =====
+    // Chi dich chuoi qua /translate/texts - KHONG cham GPU, KHONG giu khoa
+    // executor. Nho vay pha A cua trang KE TIEP chay chong len luot GPT nay.
+    // Tra ve mang ban dich CUNG THU TU, CUNG DO DAI voi `texts`.
+    async translateTexts(texts, dialogueWin) {
+      if (!texts.length) return [];
+      const body = motPhaseBBody({
+        texts,
+        targetLang: await getTargetLang(),
+        engine: await getTranslatorEngine(),
+        gptConfigPath: CFG.GPT_CONFIG_PATH,
+        context: motContextPayload(dialogueWin),
+      });
+      const res = await sendMessageAsync({ type: 'TRANSLATE_TEXTS', body: JSON.stringify(body) });
+      if (!res || !res.ok) throw new Error((res && res.error) || 'Pha B that bai');
+      return res.translations || [];
+    },
+
+    // Ban PHA A cua duong lat (webtoon dai). Tra ve vung chinh va vung ghep-bien
+    // TACH RIENG: mergeBoundaryRegions() so sanh do dai `dst`, nen chi duoc chay
+    // SAU khi pha B da dien ban dich vao vung chinh - neu gop o day thi phep so
+    // sanh la "src tieng Anh" vs "dst tieng Viet", tuc so sanh vo nghia (xem
+    // runPhaseB).
+    async detectAndInpaintTiled(blob, naturalW, naturalH, img) {
       const tiles = await sliceImageIntoTiles(blob, naturalW, naturalH);
       log(
         'Webtoon dai (' + naturalH + 'px > TILE_MAX_H ' + CFG.TILE_MAX_H + 'px) - cat thanh',
@@ -518,8 +565,8 @@
       let boundaryRegions = [];
       for (let i = 0; i < tiles.length; i++) {
         const tile = tiles[i];
-        const result = await this.translateImage(tile.blob);
-        for (const r of result.regions) {
+        const tileRegions = await this.detectAndInpaint(tile.blob);
+        for (const r of tileRegions) {
           allRegions.push({ ...r, y: r.y + tile.yOffset });
         }
         // Chi lat CUOI CUNG moi thuc su giap ranh gioi voi anh ke tiep tren
@@ -537,7 +584,7 @@
           boundaryRegions = await detectBoundaryRegions(img, tile.blob);
         }
       }
-      return { regions: mergeBoundaryRegions(dedupeRegions(allRegions), boundaryRegions) };
+      return { regions: dedupeRegions(allRegions), boundaryRegions };
     },
   };
 
@@ -1451,114 +1498,205 @@
     return await entry.promise;
   }
 
-  async function translateAndRenderImage(img) {
-    if (imgLayers.has(img)) return;
+  // ===== PHA A: tai anh + tra cache + (detect/OCR/inpaint tren GPU) =====
+  // KHONG ve gi ca, KHONG dong vao dialogueWindow, KHONG dang ky vung da ve -
+  // nho vay pha A duoc phep chay TRUOC pha B cua trang lien truoc ma khong pha
+  // vo thu tu doc (xem Queue._drain).
+  // Tra ve job cho pha B, hoac null neu khong con gi de lam.
+  async function runPhaseA(img) {
+    if (imgLayers.has(img)) return null;
     const tStart = performance.now();
-    try {
-      const targetLang = await getTargetLang();
-      const engine = await getTranslatorEngine();
-      const url = img.currentSrc || img.src;
-      const urlCacheable = !!url && !url.startsWith('blob:') && !url.startsWith('data:');
-      let result = null;
+    const targetLang = await getTargetLang();
+    const engine = await getTranslatorEngine();
+    const url = img.currentSrc || img.src;
+    const urlCacheable = !!url && !url.startsWith('blob:') && !url.startsWith('data:');
+    const job = { img, url, targetLang, engine, tStart, cached: false, regions: [], boundaryRegions: [], hash: null };
 
-      // FAST PATH: tra cache theo URL -> hash -> ket qua, KHONG tai anh (bo qua
-      // ~3.4s tai + hash). Chi trung khi da tung dich URL nay o dung lang/engine.
-      if (urlCacheable) {
-        const knownHash = await Cache.getHashByUrl(url);
-        if (knownHash) {
-          result = await Cache.get(knownHash, targetLang, engine);
-          if (result) log('Cache HIT (URL, khong tai anh):', targetLang, engine, url);
+    // FAST PATH: tra cache theo URL -> hash -> ket qua, KHONG tai anh (bo qua
+    // ~3.4s tai + hash). Chi trung khi da tung dich URL nay o dung lang/engine.
+    // Trung cache la duong ~252ms, KHONG goi mang lan nao: job.cached bao cho
+    // pha B bo qua han luot dich, chi ve.
+    if (urlCacheable) {
+      const knownHash = await Cache.getHashByUrl(url);
+      if (knownHash) {
+        const hit = await Cache.get(knownHash, targetLang, engine);
+        if (hit) {
+          log('Cache HIT (URL, khong tai anh):', targetLang, engine, url);
+          job.hash = knownHash;
+          job.cached = true;
+          job.regions = hit.regions || [];
+          return job;
         }
       }
-
-      // SLOW PATH: tai anh + hash + tra hash-cache + (dich backend). Luu chi muc
-      // URL->hash de lan sau vao fast-path.
-      if (!result) {
-        // Anh nay co the da duoc tai san trong luc backend dich anh truoc do
-        // (xem startPrefetchBlob trong Queue._drain) - luc do buoc tai ~3s o
-        // day bien mat hoan toan.
-        const blob = (await takePrefetchedBlob(img, url)) || (await ApiAdapter.downloadImageBlob(img));
-        const hash = await Cache.hashBlob(blob);
-        result = await Cache.get(hash, targetLang, engine);
-        if (result) {
-          log('Cache HIT (hash):', hash, targetLang, engine, url);
-        } else {
-          log('Cache MISS, goi backend:', hash, targetLang, engine, url);
-          if (img.naturalHeight > CFG.TILE_MAX_H) {
-            result = await ApiAdapter.translateImageTiled(blob, img.naturalWidth, img.naturalHeight, img);
-          } else {
-            result = await ApiAdapter.translateImage(blob);
-            const boundaryRegions = await detectBoundaryRegions(img, blob);
-            result.regions = mergeBoundaryRegions(result.regions, boundaryRegions);
-          }
-          await Cache.set(hash, targetLang, engine, result);
-        }
-        if (urlCacheable) await Cache.setUrlHash(url, hash);
-      }
-      // Loc bo vung chu da duoc anh TRUOC ve roi (qua ghep-bien muon dai
-      // tren cua anh nay) - tranh ve trung 2 lan cung 1 noi dung (xem spec
-      // 2026-07-23-cross-image-boundary-stitching-design.md muc 6).
-      result.regions = result.regions.filter((r) => {
-        // Case A (chu nhan manh giu nguyen: SFX/tieng cuoi) - prompt tra dst==src.
-        // Bo render de GIU art goc. NHUNG chi bo khi: (1) dst rong, HOAC (2)
-        // dst==src VA nguon co chu KHONG-Latin (CJK/hangul: SFX goc giu nguyen).
-        // KHONG bo khi src la Latin (tranh xoa nham tu hop le/ten rieng model tra
-        // trung - da tung lam sot tu). Xem gpt_config quy tac EMPHASIZED text.
-        const _dst = (r.dst || '').trim();
-        const _src = (r.src || '').trim();
-        const _srcNonLatin = /[^\u0020-\u024F\s\d\p{P}]/u.test(_src);
-        if (!_dst) {
-          return false;
-        }
-        if (_dst.toLowerCase() === _src.toLowerCase() && _srcNonLatin) {
-          return false;
-        }
-        if (isDuplicateOfRendered(img, r)) return false;
-        // Chi dang ky vao registry chong-trung nhung vung NAM TRONG DAI BIEN da
-        // muon cua anh ke tiep (y+h > chieu cao THAT cua anh) - tuc noi dung
-        // THUOC anh ke tiep ma anh nay ve ho qua ghep-bien. Vung noi dung cua
-        // CHINH anh (y+h <= naturalHeight) khong bao gio bi anh khac phat hien
-        // lai trong webtoon xep doc, nen KHONG dang ky - neu dang ky, viewer
-        // CHUYEN TRANG (chong cac anh len cung toa do) se so trung nham va xoa
-        // cac vung dau trang sau (bug da xac nhan + fix 2026-08-03).
-        if (r.y + r.h > img.naturalHeight) {
-          registerRenderedRegion(img, r);
-        }
-        return true;
-      });
-      // Nap thoai cua trang nay vao cua so cho trang sau. Dat SAU bo loc de
-      // khong nap nham vung da bi loai, va chay ca khi trung cache - nho vay
-      // trang da cache khong lam thung cua so.
-      for (const r of result.regions) {
-        motPushContext(dialogueWindow, r.src, r.dst);
-      }
-      const busyFlags = await computeRegionComplexity(result.regions);
-      result.regions.forEach((r, i) => {
-        r.busy = busyFlags[i];
-      });
-      await OverlayRenderer.render(img, result.regions);
-      // Ghi lai src da render de phat hien reader TAI DUNG <img> voi blob khac
-      // (virtual list, vd MangaPlaza) -> khi src doi se dich lai (xem invalidateImg).
-      img.__motRenderedSrc = img.currentSrc || img.src || '';
-      log('Da ve overlay:', result.regions.length, 'vung chu, tong', (performance.now() - tStart).toFixed(0), 'ms');
-      state.done++;
-    } catch (err) {
-      console.error('[MOT] Loi dich anh:', img.currentSrc || img.src, err);
-      state.errors++;
-      errorLog.push({ src: img.currentSrc || img.src, message: err.message });
-      // showErrorSummary() do het vao mot alert() - de danh sach lon vo han thi
-      // vua ton bo nho, vua dung mot hop thoai khong the doc noi. state.errors
-      // van dem du tong so that.
-      if (errorLog.length > 50) errorLog.splice(0, errorLog.length - 50);
     }
+
+    // SLOW PATH: tai anh + hash + tra hash-cache + (pha A tren backend). Luu chi
+    // muc URL->hash de lan sau vao fast-path.
+    // Anh nay co the da duoc tai san trong luc backend xu ly anh truoc do
+    // (xem startPrefetchBlob trong Queue._drain) - luc do buoc tai ~3s o
+    // day bien mat hoan toan.
+    const blob = (await takePrefetchedBlob(img, url)) || (await ApiAdapter.downloadImageBlob(img));
+    const hash = await Cache.hashBlob(blob);
+    job.hash = hash;
+    if (urlCacheable) await Cache.setUrlHash(url, hash);
+    const hit = await Cache.get(hash, targetLang, engine);
+    if (hit) {
+      log('Cache HIT (hash):', hash, targetLang, engine, url);
+      job.cached = true;
+      job.regions = hit.regions || [];
+      return job;
+    }
+
+    log('Cache MISS, goi backend:', hash, targetLang, engine, url);
+    if (img.naturalHeight > CFG.TILE_MAX_H) {
+      const tiled = await ApiAdapter.detectAndInpaintTiled(blob, img.naturalWidth, img.naturalHeight, img);
+      job.regions = tiled.regions;
+      job.boundaryRegions = tiled.boundaryRegions;
+    } else {
+      job.regions = await ApiAdapter.detectAndInpaint(blob);
+      job.boundaryRegions = await detectBoundaryRegions(img, blob);
+    }
+    log(
+      'Pha A xong:',
+      job.regions.length,
+      'vung,',
+      (performance.now() - tStart).toFixed(0),
+      'ms -',
+      url
+    );
+    return job;
+  }
+
+  // ===== PHA B: dich chuoi (mang) + ve overlay =====
+  // CHAY TUAN TU, DUNG THU TU DOC, MOT TRANG MOT LUC. Ba thu phu thuoc vao dieu
+  // do va deu hong AM THAM neu chay song song:
+  //  1. dialogueWindow: dst cua trang N la ngu canh cho prompt cua trang N+1;
+  //  2. registerRenderedRegion: anh truoc phai dang ky vung DA VE truoc khi anh
+  //     sau chay bo loc isDuplicateOfRendered;
+  //  3. backend /translate/texts goi parse_args() tren INSTANCE translator DUNG
+  //     CHUNG - hai luot dich chong nhau sinh gpt_config sai, khong bao loi.
+  async function runPhaseB(job) {
+    const { img, targetLang, engine, hash, tStart } = job;
+    if (imgLayers.has(img)) return; // da co overlay (duong khac da ve) - khong ve chong
+    const result = { regions: job.regions || [] };
+
+    if (!job.cached) {
+      // Chi gui nhung vung THUC SU co chu, va nho lai vi tri de ghi nguoc ban
+      // dich vao dung vung: gui ca chuoi rong lam lech cap chi so tra ve.
+      const idxs = [];
+      const texts = [];
+      result.regions.forEach((r, i) => {
+        if ((r.src || '').trim()) {
+          idxs.push(i);
+          texts.push(r.src);
+        }
+      });
+      const translations = await ApiAdapter.translateTexts(texts, dialogueWindow);
+      if (translations.length !== texts.length) {
+        log('CANH BAO: pha B tra ve', translations.length, 'ban dich cho', texts.length, 'chuoi.');
+      }
+      idxs.forEach((regionIdx, i) => {
+        const dst = translations[i];
+        // Giong normalizeResponse() duong cu: dst rong -> giu nguyen src.
+        result.regions[regionIdx].dst = typeof dst === 'string' && dst ? dst : result.regions[regionIdx].src;
+      });
+      // Gop vung ghep-bien SAU khi da co ban dich: mergeBoundaryRegions() chon
+      // ben nao co `dst` DAI HON, nen ca hai ben phai cung o khong gian ban dich.
+      result.regions = mergeBoundaryRegions(result.regions, job.boundaryRegions || []);
+      await Cache.set(hash, targetLang, engine, result);
+    }
+    // Loc bo vung chu da duoc anh TRUOC ve roi (qua ghep-bien muon dai
+    // tren cua anh nay) - tranh ve trung 2 lan cung 1 noi dung (xem spec
+    // 2026-07-23-cross-image-boundary-stitching-design.md muc 6).
+    result.regions = result.regions.filter((r) => {
+      // Case A (chu nhan manh giu nguyen: SFX/tieng cuoi) - prompt tra dst==src.
+      // Bo render de GIU art goc. NHUNG chi bo khi: (1) dst rong, HOAC (2)
+      // dst==src VA nguon co chu KHONG-Latin (CJK/hangul: SFX goc giu nguyen).
+      // KHONG bo khi src la Latin (tranh xoa nham tu hop le/ten rieng model tra
+      // trung - da tung lam sot tu). Xem gpt_config quy tac EMPHASIZED text.
+      if (!motShouldRenderRegion(r.src, r.dst)) {
+        return false;
+      }
+      if (isDuplicateOfRendered(img, r)) return false;
+      // Chi dang ky vao registry chong-trung nhung vung NAM TRONG DAI BIEN da
+      // muon cua anh ke tiep (y+h > chieu cao THAT cua anh) - tuc noi dung
+      // THUOC anh ke tiep ma anh nay ve ho qua ghep-bien. Vung noi dung cua
+      // CHINH anh (y+h <= naturalHeight) khong bao gio bi anh khac phat hien
+      // lai trong webtoon xep doc, nen KHONG dang ky - neu dang ky, viewer
+      // CHUYEN TRANG (chong cac anh len cung toa do) se so trung nham va xoa
+      // cac vung dau trang sau (bug da xac nhan + fix 2026-08-03).
+      if (r.y + r.h > img.naturalHeight) {
+        registerRenderedRegion(img, r);
+      }
+      return true;
+    });
+    // Nap thoai cua trang nay vao cua so cho trang sau. Dat SAU bo loc de
+    // khong nap nham vung da bi loai, va chay ca khi trung cache - nho vay
+    // trang da cache khong lam thung cua so.
+    for (const r of result.regions) {
+      motPushContext(dialogueWindow, r.src, r.dst);
+    }
+    const busyFlags = await computeRegionComplexity(result.regions);
+    result.regions.forEach((r, i) => {
+      r.busy = busyFlags[i];
+    });
+    await OverlayRenderer.render(img, result.regions);
+    // Ghi lai src da render de phat hien reader TAI DUNG <img> voi blob khac
+    // (virtual list, vd MangaPlaza) -> khi src doi se dich lai (xem invalidateImg).
+    img.__motRenderedSrc = img.currentSrc || img.src || '';
+    log('Da ve overlay:', result.regions.length, 'vung chu, tong', (performance.now() - tStart).toFixed(0), 'ms');
+    state.done++;
+  }
+
+  // MOT noi duy nhat ghi nhan loi cua ca hai pha (truoc day nam trong
+  // translateAndRenderImage) - hai worker deu goi vao day.
+  function recordJobError(img, err) {
+    console.error('[MOT] Loi dich anh:', img.currentSrc || img.src, err);
+    state.errors++;
+    errorLog.push({ src: img.currentSrc || img.src, message: (err && err.message) || String(err) });
+    // showErrorSummary() do het vao mot alert() - de danh sach lon vo han thi
+    // vua ton bo nho, vua dung mot hop thoai khong the doc noi. state.errors
+    // van dem du tong so that.
+    if (errorLog.length > 50) errorLog.splice(0, errorLog.length - 50);
   }
 
   // ===== Queue — gioi han CONCURRENCY, uu tien anh dang gan khung nhin =====
   const Queue = {
     _pending: [], // danh sach <img> dang cho, FIFO (IntersectionObserver da
     // uu tien theo khoang cach toi khung nhin qua PREFETCH_MARGIN)
-    _active: 0,
+    _active: 0, // so job dang chay PHA A (gioi han boi CFG.CONCURRENCY)
     _queued: new Set(), // tranh enqueue trung 1 anh 2 lan
+    // Bo dem A -> B. Chan tren 2: ket qua pha A mang theo anh nen tung vung
+    // (vai MB/trang) nen khong duoc de A chay xa tuy y (xem handoff-buffer.js).
+    _handoff: motCreateHandoff(2),
+    _bWorkerRunning: false, // vong lap pha B da khoi dong chua
+    _bBusy: false, // dang o giua mot luot pha B
+
+    // Con viec khong - TINH CA pha B va bo dem. prefetchHitomiGallery() nhuong
+    // duong theo co nay; truoc khi tach pha, mot anh chiem _active tu luc bat
+    // dau den luc ve xong nen chi can _active/_pending la du. Gio pha A nha
+    // _active ngay khi day job sang B, nen thieu hai ve kia thi prefetch se
+    // chen ngang giua chung mot trang dang dich.
+    isBusy() {
+      return this._active > 0 || this._pending.length > 0 || this._handoff.size() > 0 || this._bBusy;
+    },
+
+    // Hoan tat CA CHUONG = khong con anh cho, khong con pha A chay, bo dem rong
+    // VA pha B dang ranh. Goi tu ca hai worker (xem hai noi goi): thuong la
+    // worker B bao - nhung neu trang cuoi khong bao gio toi duoc pha B (loi pha
+    // A, hoac anh da co overlay san) thi worker A phai bao thay, nếu khong se
+    // khong con ai bao ca.
+    _maybeCompletionToast() {
+      if (
+        eagerModeActive &&
+        this._pending.length === 0 &&
+        this._active === 0 &&
+        this._handoff.size() === 0 &&
+        !this._bBusy
+      ) {
+        showCompletionToast();
+      }
+    },
 
     enqueue(img) {
       if (this._queued.has(img)) return;
@@ -1589,6 +1727,9 @@
     },
 
     async _drain() {
+      // Dam bao worker B luon song: no la ben DUY NHAT ve overlay, va no chi
+      // thoat khi bo dem dong. Goi TRUOC canh gac CONCURRENCY ben duoi.
+      this._startBWorker();
       if (this._active >= CFG.CONCURRENCY) return;
       // Sap xep lai theo vi tri Y tren trang - KHONG dua vao thu tu
       // IntersectionObserver bao ve trong entries[], da xac nhan thuc te
@@ -1602,7 +1743,7 @@
       // THU TU NAY LA DIEU KIEN DUNG DAN, KHONG PHAI SO THICH - dung doi sang
       // "uu tien anh gan khung nhin nhat" du nghe hop ly hon: dedup xuyen-anh
       // dua vao viec anh TRUOC luon dang ky vung da ve TRUOC anh sau (xem
-      // registerRenderedRegion + ghi chu 2026-08-03 o translateAndRenderImage).
+      // registerRenderedRegion + ghi chu 2026-08-03 o runPhaseB).
       // Xu ly khong theo thu tu trang lam vo dung gia dinh do va bong bong vat
       // bien bi ve hai lan - dung bug da mat hai vong go roi truc tiep tren
       // trinh duyet moi tim ra.
@@ -1629,29 +1770,86 @@
       // doi nay - tuc moi site khong phai hitomi deu dang chay tuan tu cung.
       startPrefetchBlob(this._pending[0]);
       // v0.39: log THOI GIAN CHO trong hang doi (khac thoi gian XU LY that
-      // trong translateAndRenderImage) + so anh KHAC con dang cho phia sau -
+      // trong runPhaseA/runPhaseB) + so anh KHAC con dang cho phia sau -
       // giup phan biet "cham vi phai xep hang sau anh khac" (co the cai
       // thien: tang PREFETCH_MARGIN, danh dau anh som hon) voi "cham vi
       // chinh no dang xu ly AI that" (khong sua duoc, xem log timing trong
-      // translateAndRenderImage).
+      // runPhaseA).
       const queueWaitMs = img.__motEnqueuedAt ? performance.now() - img.__motEnqueuedAt : 0;
       log(
         `DEBUG queue: cho ${queueWaitMs.toFixed(0)}ms truoc khi bat dau xu ly, con ${this._pending.length} anh khac dang xep hang phia sau`,
         img.currentSrc || img.src
       );
+      // Worker A: chi lam phan GPU roi day sang bo dem. KHONG ve gi, KHONG dong
+      // vao dialogueWindow - nho vay no duoc phep chay TRUOC pha B cua trang lien
+      // truoc (do chinh la toan bo muc dich cua viec tach pha).
+      let handedOff = false;
       try {
-        await translateAndRenderImage(img);
-      } finally {
-        this._queued.delete(img);
-        this._active--;
-        // Hang doi vua rong VA eager mode dang bat -> bao hoan tat. Kiem tra
-        // TRUOC khi goi _drain() lai (ben duoi) de tranh doc nham trang thai
-        // sau khi _drain() co the da lay job moi ra khoi _pending.
-        if (eagerModeActive && this._pending.length === 0 && this._active === 0) {
-          showCompletionToast();
+        // Cho toi khi bo dem con cho. `while` (khong phai `if`) chi la phong thu:
+        // voi CONCURRENCY 1 chi co mot worker A, nen khong ai cuop cho o giua.
+        while (this._handoff.isFull() && !this._handoff.isClosed()) {
+          await this._handoff.waitForSpace();
         }
-        this._drain(); // xu ly tiep job ke tiep trong hang doi (neu co)
+        const job = await runPhaseA(img);
+        if (job) {
+          // push() tra false = bo dem DA DONG (dang tat pipeline). Do la tin
+          // hieu dung binh thuong, KHONG phai loi: dung im lang, dung nem.
+          handedOff = this._handoff.push(job);
+          if (!handedOff) log('Bo dem A->B da dong, bo qua job pha A:', img.currentSrc || img.src);
+        }
+      } catch (err) {
+        recordJobError(img, err);
+      } finally {
+        // _queued CHI duoc go khi trang da di het ca hai pha (worker B go o
+        // duoi). Go ngay o day thi anh dang nam trong bo dem co the bi enqueue
+        // lai lan hai -> dich va ve hai lan.
+        if (!handedOff) this._queued.delete(img);
+        this._active--;
+        // Job nay khong sang duoc pha B (loi, hoac anh da co overlay) -> pha B
+        // se khong bao gio bao hoan tat ho no. Kiem TRUOC khi _drain() lay job
+        // moi ra khoi _pending (tranh doc nham trang thai).
+        if (!handedOff) this._maybeCompletionToast();
+        this._startBWorker(); // co job moi trong bo dem (hoac chi de chac chan)
+        this._drain(); // chay tiep pha A cho anh ke tiep, KHONG doi pha B
       }
+    },
+
+    // Worker B: MOT vong lap duy nhat cho ca phien -> pha B luon tuan tu, dung
+    // thu tu doc. Xem ghi chu dau runPhaseB() ve ba thu hong am tham neu chay
+    // song song.
+    _startBWorker() {
+      if (this._bWorkerRunning) return;
+      this._bWorkerRunning = true;
+      (async () => {
+        try {
+          for (;;) {
+            await this._handoff.waitForItem();
+            const job = this._handoff.take();
+            if (!job) {
+              // waitForItem() chi tra ve ngay khi CO job hoac bo dem DA DONG,
+              // nen khong co job nghia la da dong -> dung han. (Truong hop con
+              // lai chi ve mat ly thuyet: quay lai await, khong quay vong nong.)
+              if (this._handoff.isClosed()) break;
+              continue;
+            }
+            this._bBusy = true;
+            try {
+              await runPhaseB(job);
+            } catch (err) {
+              recordJobError(job.img, err);
+            } finally {
+              this._bBusy = false;
+              this._queued.delete(job.img);
+            }
+            // Bao hoan tat o day (khong phai o worker A) vi pha A xong truoc pha
+            // B ca vai giay - bao ben do la bao som, luc chua ve xong.
+            this._maybeCompletionToast();
+            this._drain(); // bo dem vua co cho -> pha A chay tiep duoc
+          }
+        } finally {
+          this._bWorkerRunning = false;
+        }
+      })();
     },
   };
 
@@ -1892,7 +2090,7 @@
       // hang doi anh (dich trang dang xem de ve overlay) dap cung luc thi
       // trang dang xem bi ket sau prefetch (~22s thay vi ~12s). Tam dung
       // prefetch khi img-Queue con viec (xem bug tranh chap 2026-08-08).
-      while (Queue._active > 0 || Queue._pending.length > 0) {
+      while (Queue.isBusy()) {
         await new Promise((r) => setTimeout(r, 300));
       }
       const url = urls[i];
@@ -1917,7 +2115,7 @@
             // chi co 1 executor -> trang dang xem phai xep hang sau tron mot
             // luot dich prefetch (~7-16s). Do chinh la trieu chung "lat nhanh
             // thi overlay do mot luc moi hien".
-            while (Queue._active > 0 || Queue._pending.length > 0) {
+            while (Queue.isBusy()) {
               await new Promise((r) => setTimeout(r, 300));
             }
             // Trong luc cho o tren, chinh trang dang xem co the da dich xong

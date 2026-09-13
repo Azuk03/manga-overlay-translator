@@ -23,6 +23,9 @@
         "content-script/image-format.js",
         "content-script/image-candidate.js",
         "content-script/dialogue-context.js",
+        "content-script/phase-payload.js",
+        "content-script/handoff-buffer.js",
+        "content-script/region-filter.js",
         "content-script/content.js"
       ],
       "run_at": "document_idle"

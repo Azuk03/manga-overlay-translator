@@ -416,6 +416,68 @@ async def delete_result(folder_name: str):
     except Exception as e:
         raise HTTPException(500, detail=f"Error deleting result: {str(e)}")
 
+# Pha B tu no da tuan tu TRONG MOT TAB, nhung HAI TAB la HAI B-worker doc lap,
+# va pha B co y KHONG di qua khoa executor (do la ly do no ton tai). Khoa nay
+# la thu duy nhat con lai bao ve state dung chung ben duoi: instance translator
+# co cache va bien toan cuc REQUEST_CONTEXT. Khong co no, hai tab doc cung luc
+# se ghi de gpt_config / ngu canh thoai cua nhau - SAI ma KHONG BAO LOI.
+# Re thoi: pha B von da duoc thiet ke de chay tuan tu.
+_PHASE_B_LOCK = asyncio.Lock()
+
+class TranslateTextsRequest(BaseModel):
+    """Pha B: dich CHUOI, khong co anh.
+
+    Diem cot loi: endpoint nay chay trong TIEN TRINH SERVER va KHONG di qua
+    executor, nen khong giu khoa GPU. Nho vay pha A cua trang sau chay chong
+    len pha B cua trang truoc - GPU von nam khong 3-5s moi trang trong luc doi
+    GPT (do 2026-09-05). Vi cung ly do do, endpoint nay TUYET DOI khong duoc
+    dung toi GPU hay state cua MangaTranslator.
+    """
+    texts: list[str]
+    translator: str = "chatgpt"
+    target_lang: str = "VIN"
+    source_lang: str = "auto"
+    gpt_config: str | None = None
+    context: list[str] | None = None
+
+
+@app.post("/translate/texts", tags=["internal-api"])
+async def translate_texts(data: TranslateTextsRequest):
+    if not data.texts:
+        return {"translations": []}
+
+    from manga_translator.config import Translator as TranslatorEnum, TranslatorConfig
+    from manga_translator.translators import get_translator
+    from manga_translator.translators import chatgpt as _mot_chatgpt
+
+    async with _PHASE_B_LOCK:
+        key = TranslatorEnum(data.translator)
+        tr = get_translator(key)
+        # parse_args() moi la duong ap gpt_config that su: no gan
+        # self.config = args.chatgpt_config (patches/chatgpt.py:96-98). KHONG co
+        # set_gpt_config() - da kiem chung tren image that.
+        #
+        # get_translator() tra ve INSTANCE DUNG CHUNG, cache theo key
+        # (translators/__init__.py:71-77: `if not translator_cache.get(key):
+        # translator_cache[key] = translator(...)`). Goi parse_args() o day sua
+        # doi state CHIA SE giua MOI request trong tien trinh server. Day la
+        # LY DO THU HAI (ngoai viec pha B cua trang N phai chay xong truoc khi
+        # dung ket qua lam prompt cho trang N+1) vi sao pha B TUYET DOI KHONG
+        # DUOC chay song song voi chinh no - chay song song se sinh ra
+        # gpt_config SAI ma KHONG CO LOI BAO nao ca.
+        tr.parse_args(TranslatorConfig(translator=key, target_lang=data.target_lang,
+                                       gpt_config=data.gpt_config))
+
+        # Cung co che ma share.py dung cho duong cu. An toan vi pha B tuan tu theo
+        # dung thu tu doc (mot writer duy nhat) - xem Global Constraints.
+        _mot_chatgpt.REQUEST_CONTEXT = list(data.context or [])
+        try:
+            out = await tr.translate(data.source_lang, data.target_lang, list(data.texts))
+        finally:
+            _mot_chatgpt.REQUEST_CONTEXT = []
+
+    return {"translations": [("" if s is None else str(s)) for s in out]}
+
 class FetchImageRequest(BaseModel):
     """Request cho extension: tai ho 1 anh kem header Referer (trinh duyet
     khong tu dat duoc Referer tuy y trong Manifest V3, xem
