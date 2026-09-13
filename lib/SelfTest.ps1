@@ -58,12 +58,17 @@ function Invoke-TranslateProbe {
 }
 
 function Wait-BackendReady {
-    param([string]$BaseUrl, [string]$ImagePath, [int]$TimeoutSec = 300)
+    param([string]$BaseUrl, [string]$ImagePath, [int]$TimeoutSec = 300, [scriptblock]$IsAlive)
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
         $bytes = Invoke-TranslateProbe -BaseUrl $BaseUrl -ImagePath $ImagePath -DetectOnly $true
         $result = Get-ResultFrame -Frames (Read-StreamFrames -Bytes $bytes)
         if ($null -ne $result) { return $true }
+        # Container chet roi thi cho tiep den het TimeoutSec la vo ich, va con
+        # giau mat ly do that: "docker run" hong (thieu image, sai co, het cho)
+        # thoat sau vai giay, nhung nguoi dung van nhin "DANG KHOI DONG..."
+        # dung im 10 phut. Thoat ngay de start.ps1 kip in loi that ra man hinh.
+        if ($IsAlive -and -not (& $IsAlive)) { return $false }
         Start-Sleep -Seconds 5
     }
     return $false

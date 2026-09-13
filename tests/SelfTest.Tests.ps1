@@ -55,3 +55,41 @@ Describe 'Get-ResultFrame' {
         Get-ResultFrame -Frames $frames | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Wait-BackendReady' {
+    BeforeEach {
+        # Probe luon that bai: backend khong bao gio san sang trong cac test nay.
+        Mock Invoke-TranslateProbe { return [byte[]]@() }
+    }
+
+    It 'thoat ngay khi tien trinh docker da chet, khong doi het timeout' {
+        $r = Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath 'x.png' `
+            -TimeoutSec 6 -IsAlive { $false }
+        $r | Should -BeFalse
+        # Neu van lap cho, timeout 6s + sleep 5s se cho it nhat 2 lan probe.
+        Should -Invoke Invoke-TranslateProbe -Times 1 -Exactly
+    }
+
+    It 'van cho het timeout khi tien trinh docker con song' {
+        $r = Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath 'x.png' `
+            -TimeoutSec 6 -IsAlive { $true }
+        $r | Should -BeFalse
+        Should -Invoke Invoke-TranslateProbe -Times 2
+    }
+
+    It 'bao san sang khi probe tra ve frame ket qua' {
+        Mock Invoke-TranslateProbe {
+            $data = [System.Text.Encoding]::UTF8.GetBytes('{"ok":1}')
+            $len = [BitConverter]::GetBytes([int]$data.Length)
+            if ([BitConverter]::IsLittleEndian) { [array]::Reverse($len) }
+            return [byte[]](@([byte]0) + $len + $data)
+        }
+        Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath 'x.png' `
+            -TimeoutSec 6 -IsAlive { $true } | Should -BeTrue
+    }
+
+    It 'chay binh thuong khi khong truyen -IsAlive' {
+        Wait-BackendReady -BaseUrl 'http://127.0.0.1:5003' -ImagePath 'x.png' `
+            -TimeoutSec 6 | Should -BeFalse
+    }
+}
